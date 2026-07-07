@@ -16,6 +16,7 @@ face = [
   "opencv-python>=4.8",
 ]
 background = [
+  "numba>=0.60",
   "rembg[cpu]>=2.0",
 ]
 

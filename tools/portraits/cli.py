@@ -156,7 +156,14 @@ def cmd_background(args: argparse.Namespace) -> int:
             Path(args.palette) if args.palette else None,
         )
         entry["detected_face_box"] = face_box
-        entry["background_benchmarks"] = [asdict(result) for result in results]
+        existing = {
+            benchmark.get("mode"): benchmark
+            for benchmark in entry.get("background_benchmarks", [])
+            if benchmark.get("mode")
+        }
+        for result in results:
+            existing[result.mode] = asdict(result)
+        entry["background_benchmarks"] = [existing[mode] for mode in sorted(existing)]
         entry["processing_status"] = "background-benchmarked"
     save_manifest(library_dir, manifest)
     print(f"Generated background benchmark artifacts in {library_dir}")

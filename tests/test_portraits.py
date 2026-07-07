@@ -7,7 +7,7 @@ from pathlib import Path
 
 from PIL import Image, ImageDraw
 
-from tools.portraits.cli import load_env_file, load_env_files
+from tools.portraits.cli import cmd_background, load_env_file, load_env_files
 from tools.portraits.imaging import (
     benchmark_background_source,
     classical_background_mask,
@@ -176,6 +176,49 @@ def test_classical_mask_is_deterministic(tmp_path: Path) -> None:
     first.save(first_path)
     second.save(second_path)
     assert digest(first_path) == digest(second_path)
+
+
+def test_background_command_merges_existing_modes(tmp_path: Path) -> None:
+    library = tmp_path / "portrait-library"
+    source_dir = library / "sources"
+    source_dir.mkdir(parents=True)
+    make_fixture_image(source_dir / "pexels-123-original.jpg")
+    save_manifest(
+        library,
+        {
+            "version": 1,
+            "sources": [
+                {
+                    "pexels_photo_id": 123,
+                    "local_source_filename": "pexels-123-original.jpg",
+                    "background_benchmarks": [{"mode": "classical", "elapsed_seconds": 0.1}],
+                }
+            ],
+        },
+    )
+    args = type(
+        "Args",
+        (),
+        {
+            "input": str(source_dir),
+            "output": None,
+            "variants": "clean16",
+            "modes": "none",
+            "size": 48,
+            "review_scale": 2,
+            "contrast": 1.08,
+            "saturation": 0.95,
+            "sharpness": 1.05,
+            "crop_padding": 1.9,
+            "palette": None,
+            "photo_id": [],
+        },
+    )()
+
+    cmd_background(args)
+
+    entry = load_manifest(library)["sources"][0]
+    assert [benchmark["mode"] for benchmark in entry["background_benchmarks"]] == ["classical", "none"]
 
 
 def test_lookbook_generation_includes_failed_and_selected_entries(tmp_path: Path) -> None:
