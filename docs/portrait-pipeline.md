@@ -32,6 +32,14 @@ export PEXELS_API_KEY="..."
 
 The key is read only from `PEXELS_API_KEY`. Do not commit `.env` or the key. `.env.example` documents the variable name, but this project does not require a dotenv dependency.
 
+Alternatively, put the same assignment in `~/.env` or a local ignored `.env` file in the repository root:
+
+```bash
+PEXELS_API_KEY="..."
+```
+
+If both files exist, the repo-local `.env` wins. An already exported shell variable wins over both files.
+
 ## Fetch Sources
 
 ```bash

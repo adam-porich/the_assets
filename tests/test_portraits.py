@@ -2,10 +2,12 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 from pathlib import Path
 
 from PIL import Image, ImageDraw
 
+from tools.portraits.cli import load_env_file
 from tools.portraits.imaging import palette_color_count, process_source, square_crop_box
 from tools.portraits.lookbook import generate_lookbook
 from tools.portraits.manifest import (
@@ -186,3 +188,14 @@ def test_lookbook_generation_includes_failed_and_selected_entries(tmp_path: Path
     assert "audit" in text
     assert "Failed: bad image" in text
 
+
+def test_env_loader_does_not_override_exported_values(tmp_path: Path, monkeypatch) -> None:
+    env_file = tmp_path / ".env"
+    env_file.write_text('PEXELS_API_KEY="from-file"\nOTHER=value\n', encoding="utf-8")
+    monkeypatch.setenv("PEXELS_API_KEY", "from-shell")
+    os.environ.pop("OTHER", None)
+
+    load_env_file(env_file)
+
+    assert os.environ["PEXELS_API_KEY"] == "from-shell"
+    assert os.environ["OTHER"] == "value"
