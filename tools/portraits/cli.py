@@ -18,6 +18,7 @@ from .manifest import (
     update_selection,
 )
 from .pexels import download_candidate, is_plausible_portrait, search_pexels
+from .review_server import run_review_server
 
 
 def load_env_file(path: Path, protected_keys: set[str] | None = None, override: bool = False) -> None:
@@ -288,6 +289,11 @@ def cmd_review(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_review_server(args: argparse.Namespace) -> int:
+    run_review_server(args.host, args.port, Path(args.input))
+    return 0
+
+
 def cmd_harvest(args: argparse.Namespace) -> int:
     cmd_fetch(args)
     if args.process:
@@ -395,6 +401,12 @@ def build_parser() -> argparse.ArgumentParser:
         alias.add_argument("--photo-id", required=True)
         alias.add_argument("--note")
         alias.set_defaults(func=cmd_review, status=status)
+
+    review_server = sub.add_parser("review-server")
+    review_server.add_argument("--input", default="portrait-library")
+    review_server.add_argument("--host", default="127.0.0.1")
+    review_server.add_argument("--port", type=int, default=8765)
+    review_server.set_defaults(func=cmd_review_server)
 
     harvest = sub.add_parser("harvest")
     add_fetch_options(harvest)

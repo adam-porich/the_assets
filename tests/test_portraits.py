@@ -28,6 +28,7 @@ from tools.portraits.manifest import (
     update_selection,
 )
 from tools.portraits.pexels import parse_search_response
+from tools.portraits.review_server import build_library_payload, load_review, save_review, select_candidate_in_review
 
 
 def make_fixture_image(path: Path) -> None:
@@ -624,3 +625,70 @@ def test_repo_env_overrides_home_env_but_not_shell(tmp_path: Path, monkeypatch) 
 
     assert os.environ["PEXELS_API_KEY"] == "from-repo"
     assert os.environ["OTHER"] == "from-shell"
+
+
+def test_review_payload_uses_tree_review_metadata(tmp_path: Path) -> None:
+    library = tmp_path / "portrait-library"
+    review_path = tmp_path / "portrait-review" / "review.json"
+    (library / "sources").mkdir(parents=True)
+    (library / "stylized").mkdir()
+    make_fixture_image(library / "sources" / "pexels-123-original.jpg")
+    make_fixture_image(library / "stylized" / "candidate-final.png")
+    save_manifest(
+        library,
+        {
+            "version": 1,
+            "sources": [
+                {
+                    "pexels_photo_id": 123,
+                    "local_source_filename": "pexels-123-original.jpg",
+                    "stylization_prep": {
+                        "mask_path": "masks/pexels-123-rembg-mask.png",
+                        "composite_path": "composites/pexels-123-neutral-dark-composite.png",
+                    },
+                    "stylized_candidates": [
+                        {
+                            "candidate_id": "estate-pixel-claimant-v1:42",
+                            "final_output_path": "stylized/candidate-final.png",
+                            "backend": "openrouter",
+                            "model": "openai/gpt-image-1-mini",
+                        }
+                    ],
+                }
+            ],
+        },
+    )
+    save_review(
+        {
+            "version": 1,
+            "sources": {
+                "123": {
+                    "status": "favorite",
+                    "selected_candidate": "estate-pixel-claimant-v1:42",
+                    "tags": ["claimant"],
+                }
+            },
+            "candidates": {"estate-pixel-claimant-v1:42": {"status": "add", "note": "strong"}},
+        },
+        review_path,
+    )
+
+    payload = build_library_payload(library, review_path)
+
+    source = payload["sources"][0]
+    assert source["review"]["status"] == "favorite"
+    assert source["selected"]["variant"] == "estate-pixel-claimant-v1:42"
+    assert source["selected"]["tags"] == ["claimant"]
+    assert source["source_url"] == "/asset/sources/pexels-123-original.jpg"
+    assert source["candidates"][0]["review"]["note"] == "strong"
+    assert source["candidates"][0]["final_url"] == "/asset/stylized/candidate-final.png"
+
+
+def test_select_candidate_in_review_tracks_metadata_in_tree() -> None:
+    review = {"version": 1, "sources": {}, "candidates": {}}
+
+    select_candidate_in_review(review, "123", "estate-pixel-claimant-v1:42", ["audit", "claimant", "audit"])
+
+    assert review["sources"]["123"]["selected_candidate"] == "estate-pixel-claimant-v1:42"
+    assert review["sources"]["123"]["tags"] == ["audit", "claimant"]
+    assert review["candidates"]["estate-pixel-claimant-v1:42"]["status"] == "favorite"

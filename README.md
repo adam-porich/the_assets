@@ -14,5 +14,13 @@ uv run python -m tools.portraits lookbook --input portrait-library
 ```
 
 Generated data lives in `portrait-library/` and is ignored by git by default.
+Durable review decisions live in `portrait-review/review.json` and are tracked.
+
+Run the React review app:
+
+```bash
+uv run python -m tools.portraits review-server
+npm run dev
+```
 
 See [docs/portrait-pipeline.md](docs/portrait-pipeline.md) for setup, usage, and provenance notes.

@@ -12,6 +12,7 @@ Run the repository from the WSL filesystem, not `/mnt/c`, for better filesystem 
 mkdir -p ~/src
 cd ~/src/the_assets
 uv sync --extra dev
+npm install
 ```
 
 Optional face detection uses OpenCV. The pipeline still works without it by using deterministic centre crops.
@@ -287,6 +288,47 @@ explorer.exe "$(wslpath -w portrait-library/lookbook/index.html)"
 ```
 
 ## Lookbook
+
+The primary review surface is now the React review app. The static HTML lookbook remains available as a generated fallback.
+
+Run the review API and Vite app in two shells:
+
+```bash
+uv run python -m tools.portraits review-server
+npm run dev
+```
+
+The Vite app follows the same hosting pattern as `the_estate_agent`: fixed port, no browser auto-open, and Tailnet host allow-list. It runs on:
+
+```text
+http://127.0.0.1:5182/butler/assets/
+```
+
+The API runs on:
+
+```text
+http://127.0.0.1:8765
+```
+
+The app shows the focused track:
+
+```text
+Original source
+-> crop
+-> rembg mask and controlled composite
+-> stylized raw
+-> final review/export image
+```
+
+Review actions for source images and candidates are persisted in:
+
+```text
+portrait-review/review.json
+```
+
+Generated images and transient library metadata stay in ignored `portrait-library/`.
+
+Static fallback:
 
 ```bash
 uv run python -m tools.portraits lookbook --input portrait-library
