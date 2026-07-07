@@ -5,6 +5,7 @@ import os
 from dataclasses import asdict
 from pathlib import Path
 
+from .img2img import ExternalCommandBackend, load_preset, stylize_source
 from .imaging import benchmark_background_source, process_source
 from .lookbook import generate_lookbook
 from .manifest import (
@@ -41,7 +42,7 @@ def load_env_files() -> None:
 
 
 def library_dirs(root: Path) -> None:
-    for name in ("sources", "crops", "candidates", "lookbook", "masks", "foregrounds", "backgrounds"):
+    for name in ("sources", "crops", "candidates", "lookbook", "masks", "foregrounds", "backgrounds", "composites", "stylized"):
         (root / name).mkdir(parents=True, exist_ok=True)
 
 
@@ -129,7 +130,7 @@ def cmd_background(args: argparse.Namespace) -> int:
     manifest = load_manifest(library_dir)
     variants = parse_variants(args.variants)
     modes = [mode.strip() for mode in args.modes.split(",") if mode.strip()]
-    unknown_modes = [mode for mode in modes if mode not in {"none", "classical", "model"}]
+    unknown_modes = [mode for mode in modes if mode not in {"none", "model"}]
     if unknown_modes:
         raise SystemExit(f"Unknown background modes: {', '.join(unknown_modes)}")
     settings = CandidateSettings(
@@ -168,6 +169,73 @@ def cmd_background(args: argparse.Namespace) -> int:
         entry["processing_status"] = "background-benchmarked"
     save_manifest(library_dir, manifest)
     print(f"Generated background benchmark artifacts in {library_dir}")
+    return 0
+
+
+def should_stylize_entry(entry: dict, args: argparse.Namespace) -> bool:
+    if args.photo_id and int(entry.get("pexels_photo_id")) not in {int(photo_id) for photo_id in args.photo_id}:
+        return False
+    if args.selected_only and not entry.get("selected"):
+        return False
+    if args.review_status:
+        status = (entry.get("review") or {}).get("status")
+        if args.review_status == "unreviewed":
+            return status is None
+        if status != args.review_status:
+            return False
+    return True
+
+
+def merge_stylized_candidates(entry: dict, new_records: list[dict]) -> None:
+    existing = {
+        record.get("candidate_id"): record
+        for record in entry.get("stylized_candidates", [])
+        if record.get("candidate_id")
+    }
+    for record in new_records:
+        existing[record["candidate_id"]] = record
+    entry["stylized_candidates"] = sorted(existing.values(), key=lambda item: (item.get("preset", ""), item.get("seed", 0)))
+
+
+def cmd_stylize(args: argparse.Namespace) -> int:
+    library_dir = Path(args.input)
+    library_dirs(library_dir)
+    manifest = load_manifest(library_dir)
+    preset = load_preset(args.preset)
+    if args.backend != "external":
+        raise SystemExit(f"Unknown img2img backend: {args.backend}")
+    try:
+        backend = ExternalCommandBackend()
+    except RuntimeError as exc:
+        raise SystemExit(str(exc)) from exc
+    processed = 0
+    for entry, source_path in source_entries(manifest, library_dir, library_dir):
+        if not should_stylize_entry(entry, args):
+            continue
+        if args.limit is not None and processed >= args.limit:
+            break
+        photo_id = int(entry["pexels_photo_id"])
+        try:
+            prep, records = stylize_source(
+                source_path,
+                photo_id,
+                library_dir,
+                preset,
+                backend,
+                crop_padding=args.crop_padding,
+                seed=args.seed,
+                count=args.count,
+            )
+            entry["stylization_prep"] = prep
+            merge_stylized_candidates(entry, records)
+            entry["processing_status"] = "stylized"
+            entry.pop("stylization_error", None)
+            processed += 1
+        except Exception as exc:
+            entry["processing_status"] = "stylize-failed"
+            entry["stylization_error"] = str(exc)
+    save_manifest(library_dir, manifest)
+    print(f"Stylized {processed} source images")
     return 0
 
 
@@ -263,7 +331,7 @@ def build_parser() -> argparse.ArgumentParser:
     background.add_argument("--input", required=True)
     background.add_argument("--output")
     background.add_argument("--photo-id", action="append", default=[])
-    background.add_argument("--modes", default="none,classical")
+    background.add_argument("--modes", default="model")
     background.add_argument("--size", type=int, choices=[48, 64, 96], default=64)
     background.add_argument("--variants", default="clean16,clean24,dither24,edge24")
     background.add_argument("--review-scale", type=int, default=4)
@@ -273,6 +341,19 @@ def build_parser() -> argparse.ArgumentParser:
     background.add_argument("--crop-padding", type=float, default=1.9)
     background.add_argument("--palette")
     background.set_defaults(func=cmd_background)
+
+    stylize = sub.add_parser("stylize")
+    stylize.add_argument("--input", default="portrait-library")
+    stylize.add_argument("--preset", required=True)
+    stylize.add_argument("--backend", default="external")
+    stylize.add_argument("--photo-id", action="append", default=[])
+    stylize.add_argument("--selected-only", action="store_true")
+    stylize.add_argument("--review-status", choices=["favorite", "add", "reject", "unreviewed"])
+    stylize.add_argument("--limit", type=int, default=3)
+    stylize.add_argument("--count", type=int)
+    stylize.add_argument("--seed", type=int)
+    stylize.add_argument("--crop-padding", type=float, default=1.9)
+    stylize.set_defaults(func=cmd_stylize)
 
     lookbook = sub.add_parser("lookbook")
     lookbook.add_argument("--input", default="portrait-library")
@@ -288,7 +369,7 @@ def build_parser() -> argparse.ArgumentParser:
     score = sub.add_parser("score")
     score.add_argument("--input", default="portrait-library")
     score.add_argument("--photo-id", required=True)
-    score.add_argument("--pipeline", required=True, help="Variant or benchmark label, e.g. classical/edge24")
+    score.add_argument("--pipeline", required=True, help="Candidate or pipeline label, e.g. estate-pixel-claimant-v1:12345")
     score.add_argument("--likeness", type=int, choices=range(1, 6), required=True)
     score.add_argument("--silhouette", type=int, choices=range(1, 6), required=True)
     score.add_argument("--pixel-art-quality", type=int, choices=range(1, 6), required=True)

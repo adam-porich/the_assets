@@ -1,6 +1,6 @@
 # Portrait Candidate Pipeline
 
-This is an experimental claimant portrait source and pixel-art-style candidate pipeline. It searches Pexels through the official API, downloads selected portrait candidates with provenance metadata, produces deterministic low-resolution review images, and generates a static HTML lookbook.
+This is an experimental claimant portrait source and img2img stylization pipeline. It searches Pexels through the official API, downloads selected portrait candidates with provenance metadata, prepares crops with `rembg`, sends controlled composites to a pluggable img2img backend, and generates a static HTML lookbook.
 
 It does not integrate portraits into any game.
 
@@ -26,7 +26,7 @@ Optional model-based background removal uses `rembg` as a separate extra. Do not
 uv sync --extra dev --extra background
 ```
 
-Do not install CUDA, PyTorch, Stable Diffusion, or ComfyUI for this pipeline. The target machine is an old i7-3770K / GTX 680 Windows host running primarily in WSL2, so this tool intentionally keeps the base path CPU-friendly and Pillow-first.
+Do not install CUDA, PyTorch, Stable Diffusion, or ComfyUI as base dependencies for this repository. The target machine is an old i7-3770K / GTX 680 Windows host running primarily in WSL2, so experiments must stay short. The default claimant preset uses 384x384, 6 steps, 1 candidate per source, and the `stylize` command defaults to `--limit 3`.
 
 ## Pexels API Key
 
@@ -68,6 +68,8 @@ The fetch command uses the official Pexels API. It does not scrape the Pexels we
 
 ## Process Candidates
 
+This legacy command remains available for cheap deterministic checks, but it is no longer the primary evaluation path.
+
 ```bash
 uv run python -m tools.portraits process \
   --input portrait-library/sources \
@@ -103,29 +105,26 @@ Default outputs are deterministic for the same source file and settings.
 
 ## Background Benchmark
 
-Run a controlled background-removal comparison before deciding whether heavier processing is worth it:
+Run rembg preparation directly. Classical background removal was too noisy on real portrait inputs and is no longer part of the normal CLI workflow.
 
 ```bash
-uv run python -m tools.portraits background \
+uv run --extra background python -m tools.portraits background \
   --input portrait-library/sources \
-  --modes none,classical \
+  --modes model \
   --size 64
 ```
 
 Available modes:
 
 ```text
-none       no removal; records a full white mask and neutral composite baseline
-classical  deterministic corner-colour edge flood mask with feathering
-model      optional rembg mask; requires uv sync --extra background
+model      rembg mask; requires uv sync --extra background
+none       debugging baseline only
 ```
 
-Model mode is intentionally opt-in:
+The primary preparation path is:
 
-```bash
-uv run python -m tools.portraits background \
-  --input portrait-library/sources \
-  --modes none,classical,model
+```text
+crop -> rembg mask -> transparent foreground -> controlled RGB composite
 ```
 
 For each source and mode, the benchmark writes:
@@ -138,7 +137,99 @@ portrait-library/
   candidates/
 ```
 
-The lookbook shows the mask itself, the transparent foreground, the neutral-background composite, pixel variants derived from that composite, duration, and any mode error. Inspecting the mask is the point of this benchmark; otherwise it is hard to tell whether a bad portrait came from segmentation or later stylisation.
+The lookbook shows the mask itself, the transparent foreground, the controlled composite, duration, and any mode error. Inspecting the mask is still useful, but the main experiment is now whether img2img improves claimant portraits enough to justify its cost.
+
+## Img2img Stylization
+
+Stylization uses a pluggable backend. The active backend in this repository is `external`: the portrait tool writes an img2img request JSON file and calls a configured command. That command can wrap OpenVINO, ComfyUI, Automatic1111, a cloud runner, or any later backend without changing the manifest shape.
+
+Configure the command in the shell or `~/.env`:
+
+```bash
+export PORTRAIT_IMG2IMG_COMMAND="/path/to/img2img-wrapper"
+```
+
+The wrapper receives the request JSON path as its final argument and must print JSON to stdout:
+
+```json
+{
+  "results": [
+    {
+      "image_path": "portrait-library/stylized/pexels-123-estate-pixel-claimant-v1-42-raw.png",
+      "backend": "external",
+      "model": "your-model-name",
+      "seed": 42,
+      "strength": 0.45,
+      "steps": 6,
+      "guidance": 6,
+      "prompt": "...",
+      "negative_prompt": "...",
+      "elapsed_seconds": 8.4
+    }
+  ]
+}
+```
+
+Run one source:
+
+```bash
+uv run --extra background python -m tools.portraits stylize \
+  --input portrait-library \
+  --preset estate-pixel-claimant-v1 \
+  --photo-id 123
+```
+
+Run a short batch. The default limit is already 3 to avoid accidental long CPU jobs:
+
+```bash
+uv run --extra background python -m tools.portraits stylize \
+  --input portrait-library \
+  --preset estate-pixel-claimant-v1 \
+  --review-status add
+```
+
+Override carefully:
+
+```bash
+uv run --extra background python -m tools.portraits stylize \
+  --input portrait-library \
+  --preset estate-pixel-claimant-v1 \
+  --limit 3 \
+  --count 1
+```
+
+Prompt presets live in:
+
+```text
+tools/portraits/presets/
+  estate-pixel-claimant-v1.json
+```
+
+The current preset is intentionally conservative for CPU experiments: 384x384, 6 steps, 1 candidate per source.
+
+Each stylized candidate records:
+
+```json
+{
+  "source_photo_id": 123,
+  "background_mode": "neutral-dark",
+  "mask_mode": "rembg",
+  "preset": "estate-pixel-claimant-v1",
+  "backend": "external",
+  "model": "...",
+  "prompt": "...",
+  "negative_prompt": "...",
+  "seed": 12345,
+  "strength": 0.45,
+  "steps": 6,
+  "guidance": 6,
+  "elapsed_seconds": 8.4,
+  "created_at": "...",
+  "input_composite_path": "...",
+  "output_path": "...",
+  "final_output_path": "..."
+}
+```
 
 ## Harvest
 
@@ -162,10 +253,12 @@ portrait-library/
   crops/
     pexels-123-crop.png
   candidates/
-    pexels-123-clean16-64.png
-    pexels-123-clean24-64.png
-    pexels-123-dither24-64.png
-    pexels-123-edge24-64.png
+  masks/
+  foregrounds/
+  composites/
+  stylized/
+    pexels-123-estate-pixel-claimant-v1-42-raw.png
+    pexels-123-estate-pixel-claimant-v1-42-final.png
   lookbook/
     index.html
     thumbnails/
@@ -184,9 +277,9 @@ explorer.exe "$(wslpath -w portrait-library/lookbook/index.html)"
 uv run python -m tools.portraits lookbook --input portrait-library
 ```
 
-The lookbook groups each source with its crop and processed variants, showing photographer, Pexels ID, query, dimensions, status, links, candidate filenames, and selected/tagged candidates.
+The lookbook groups each source with its crop, rembg preparation, img2img candidates, and selected/tagged candidates.
 
-If background benchmarks exist, they are shown below each source with mask previews and timings.
+If legacy background benchmarks or deterministic variants exist, they are shown below the primary img2img review area.
 
 The top of the lookbook has a sticky horizontal picker for jumping between source images, plus filters for:
 
@@ -223,8 +316,8 @@ The intended workflow is:
 
 ```text
 1. Source review: favorite / reject / add
-2. Background removal: compare none / classical / model masks
-3. Filter review: compare low-resolution variants from the best source or background mode
+2. Rembg preparation: inspect mask and controlled composite
+3. Img2img review: choose whether a generated claimant candidate is good enough to keep
 ```
 
 ## Manual Selection
@@ -232,7 +325,7 @@ The intended workflow is:
 ```bash
 uv run python -m tools.portraits select \
   --photo-id 123 \
-  --variant edge24 \
+  --variant estate-pixel-claimant-v1:12345 \
   --tag audit \
   --tag claimant
 ```
@@ -250,7 +343,7 @@ Record comparison scores in `manifest.json`:
 ```bash
 uv run python -m tools.portraits score \
   --photo-id 123 \
-  --pipeline classical/edge24 \
+  --pipeline estate-pixel-claimant-v1:12345 \
   --likeness 4 \
   --silhouette 3 \
   --pixel-art-quality 4 \

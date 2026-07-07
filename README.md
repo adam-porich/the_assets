@@ -8,8 +8,8 @@ This repository contains a small CPU-friendly portrait harvesting and processing
 
 ```bash
 uv run python -m tools.portraits fetch --query "eccentric portrait hat" --count 20
-uv run python -m tools.portraits process --input portrait-library/sources --size 64
-uv run python -m tools.portraits background --input portrait-library/sources --modes none,classical
+uv run --extra background python -m tools.portraits background --input portrait-library/sources --modes model
+uv run --extra background python -m tools.portraits stylize --input portrait-library --preset estate-pixel-claimant-v1 --limit 3
 uv run python -m tools.portraits lookbook --input portrait-library
 ```
 

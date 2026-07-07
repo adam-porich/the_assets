@@ -45,12 +45,17 @@ def _copy_button(label: str, command: str, css_class: str = "") -> str:
     klass = f"copy-command {css_class}".strip()
     return (
         f'<button class="{html.escape(klass)}" type="button" '
+        f'data-label="{html.escape(label, quote=True)}" '
         f'data-command="{html.escape(command, quote=True)}">{html.escape(label)}</button>'
     )
 
 
 def _review_command(photo_id: int | str, status: str) -> str:
     return f"uv run python -m tools.portraits {status} --photo-id {photo_id}"
+
+
+def _stylize_command(photo_id: int | str) -> str:
+    return f"uv run --extra background python -m tools.portraits stylize --input portrait-library --preset estate-pixel-claimant-v1 --photo-id {photo_id}"
 
 
 def _review_status(entry: dict[str, Any]) -> str:
@@ -129,6 +134,7 @@ def generate_lookbook(library_dir: Path) -> Path:
             + _copy_button("Favorite", _review_command(photo_id, "favorite"), "favorite")
             + _copy_button("Reject", _review_command(photo_id, "reject"), "reject")
             + _copy_button("Add", _review_command(photo_id, "add"), "add")
+            + _copy_button("Stylize", _stylize_command(photo_id), "stylize")
             + _copy_button("Lookbook", "uv run python -m tools.portraits lookbook --input portrait-library")
             + "</div>"
         )
@@ -160,6 +166,34 @@ def generate_lookbook(library_dir: Path) -> Path:
                 """
             )
         scores = _score_table(entry.get("scores", {}))
+        prep = entry.get("stylization_prep") or {}
+        prep_images = (
+            _figure(prep.get("mask_path"), "rembg mask", "mask")
+            + _figure(prep.get("transparent_foreground_path"), "transparent foreground")
+            + _figure(prep.get("composite_path"), f"{prep.get('background_mode', 'controlled')} composite")
+        )
+        stylized = []
+        for candidate in entry.get("stylized_candidates", []):
+            candidate_id = candidate.get("candidate_id")
+            klass = "candidate selected" if candidate_id == selected_variant else "candidate"
+            metadata = (
+                f"preset: {candidate.get('preset')}<br>"
+                f"backend/model: {candidate.get('backend')} / {candidate.get('model')}<br>"
+                f"seed: {candidate.get('seed')} strength: {candidate.get('strength')} steps: {candidate.get('steps')} guidance: {candidate.get('guidance')}<br>"
+                f"elapsed: {candidate.get('elapsed_seconds')}s<br>"
+                f"background: {candidate.get('background_mode')} mask: {candidate.get('mask_mode')}"
+            )
+            stylized.append(
+                f"""
+                <div class="stylized-card {klass}">
+                  <div class="images">
+                    {_figure(candidate.get('output_path'), 'stylized raw')}
+                    {_figure(candidate.get('final_output_path'), 'stylized final')}
+                  </div>
+                  <p class="candidate-meta">{metadata}</p>
+                </div>
+                """
+            )
         rows.append(
             f"""
             <section id="photo-{photo_id}" class="source status-{html.escape(review_status)} {'is-selected' if selected else ''}" data-status="{html.escape(review_status)}">
@@ -183,14 +217,24 @@ def generate_lookbook(library_dir: Path) -> Path:
                   <figure>{crop_img}<figcaption>crop</figcaption></figure>
                 </div>
               </div>
-              <div class="stage stage-filter">
-                <h3>3. Existing Filters</h3>
+              <div class="stage stage-prep">
+                <h3>2. Rembg Prep</h3>
+                <div class="images">
+                  {prep_images}
+                </div>
+              </div>
+              <div class="stage stage-stylized">
+                <h3>3. Img2img Candidates</h3>
+                {''.join(stylized) or '<p class="note">No img2img candidates yet.</p>'}
+              </div>
+              <details class="legacy">
+                <summary>Legacy deterministic filter outputs</summary>
                 <div class="images">
                   {''.join(candidates)}
                 </div>
-              </div>
+              </details>
               <div class="benchmarks">
-                <h3>2. Background Removal, Then Derived Filters</h3>
+                <h3>Legacy background benchmark outputs</h3>
                 {''.join(benchmarks)}
               </div>
             </section>
@@ -220,6 +264,7 @@ button:hover, button.is-active {{ background: #2f2a27; color: #fff8ee; }}
 .commands .favorite {{ border-color: #997400; }}
 .commands .reject {{ border-color: #9b241d; }}
 .commands .add {{ border-color: #356b37; }}
+.commands .stylize {{ border-color: #4f3d57; }}
 .badge {{ display: inline-block; font-size: 12px; font-weight: 700; border-radius: 999px; padding: 2px 7px; background: #d8cbbd; color: #211c18; vertical-align: middle; }}
 .badge-favorite {{ background: #ffe18a; }}
 .badge-reject {{ background: #e7aaa2; }}
@@ -228,6 +273,11 @@ button:hover, button.is-active {{ background: #2f2a27; color: #fff8ee; }}
 .status-reject {{ opacity: 0.72; }}
 .images {{ display: flex; gap: 12px; flex-wrap: wrap; align-items: flex-start; }}
 .stage h3, .benchmarks > h3 {{ margin: 0 0 8px; }}
+.stage-stylized {{ grid-column: 1 / -1; }}
+.stylized-card {{ border: 1px solid #c8b9a8; border-radius: 6px; padding: 10px; margin: 0 0 12px; background: #fff8ee; }}
+.candidate-meta {{ font-size: 12px; color: #4f473f; }}
+.legacy {{ grid-column: 1 / -1; margin-top: 8px; }}
+.legacy summary {{ cursor: pointer; color: #64594f; }}
 .benchmarks {{ grid-column: 1 / -1; }}
 .benchmark {{ margin-top: 14px; padding-top: 10px; border-top: 1px dashed #c8b9a8; }}
 .benchmark h3 {{ margin: 0 0 4px; }}
@@ -272,7 +322,7 @@ for (const button of document.querySelectorAll('.copy-command')) {{
     try {{
       await navigator.clipboard.writeText(command);
       button.textContent = 'Copied';
-      window.setTimeout(() => button.textContent = button.dataset.command.includes('favorite') ? 'Favorite' : button.dataset.command.includes('reject') ? 'Reject' : button.dataset.command.includes(' add ') ? 'Add' : 'Lookbook', 900);
+      window.setTimeout(() => button.textContent = button.dataset.label, 900);
     }} catch (error) {{
       window.prompt('Copy command', command);
     }}
