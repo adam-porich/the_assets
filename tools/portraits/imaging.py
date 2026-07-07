@@ -2,16 +2,21 @@ from __future__ import annotations
 
 import json
 import math
+import time
+from collections import deque
 from pathlib import Path
 from typing import Any
 
-from PIL import Image, ImageChops, ImageEnhance, ImageFilter, ImageOps
+from PIL import Image, ImageEnhance, ImageFilter, ImageOps
 
 from .manifest import (
+    BackgroundResult,
     DEFAULT_VARIANTS,
     CandidateSettings,
     ProcessResult,
     VariantConfig,
+    deterministic_background_candidate_filename,
+    deterministic_background_filename,
     deterministic_candidate_filename,
     deterministic_crop_filename,
 )
@@ -136,6 +141,109 @@ def prepare_crop(source_path: Path, crop_path: Path, settings: CandidateSettings
     return crop, face_box
 
 
+def prepare_raw_crop(source_path: Path, crop_path: Path, settings: CandidateSettings) -> tuple[Image.Image, list[int] | None]:
+    image = ImageOps.exif_transpose(Image.open(source_path)).convert("RGB")
+    face_box = detect_largest_face(source_path)
+    box = square_crop_box(image.width, image.height, face_box, settings.crop_padding)
+    crop = image.crop(box)
+    crop_path.parent.mkdir(parents=True, exist_ok=True)
+    crop.save(crop_path)
+    return crop, face_box
+
+
+def neutral_background(size: tuple[int, int]) -> Image.Image:
+    return Image.new("RGB", size, "#b8afa3")
+
+
+def transparent_from_mask(image: Image.Image, mask: Image.Image) -> Image.Image:
+    foreground = image.convert("RGBA")
+    foreground.putalpha(mask)
+    return foreground
+
+
+def composite_on_neutral(image: Image.Image, mask: Image.Image) -> Image.Image:
+    return Image.composite(image.convert("RGB"), neutral_background(image.size), mask)
+
+
+def no_removal_mask(image: Image.Image) -> Image.Image:
+    return Image.new("L", image.size, 255)
+
+
+def corner_average(image: Image.Image, sample: int = 12) -> tuple[int, int, int]:
+    rgb = image.convert("RGB")
+    width, height = rgb.size
+    points: list[tuple[int, int, int]] = []
+    for x0, y0 in ((0, 0), (max(0, width - sample), 0), (0, max(0, height - sample)), (max(0, width - sample), max(0, height - sample))):
+        region = rgb.crop((x0, y0, min(width, x0 + sample), min(height, y0 + sample)))
+        region_px = region.load()
+        for y in range(region.height):
+            for x in range(region.width):
+                points.append(region_px[x, y])
+    count = max(1, len(points))
+    return (
+        sum(pixel[0] for pixel in points) // count,
+        sum(pixel[1] for pixel in points) // count,
+        sum(pixel[2] for pixel in points) // count,
+    )
+
+
+def color_distance(a: tuple[int, int, int], b: tuple[int, int, int]) -> float:
+    return math.sqrt(sum((a[index] - b[index]) ** 2 for index in range(3)))
+
+
+def classical_background_mask(image: Image.Image, threshold: int = 48) -> Image.Image:
+    rgb = image.convert("RGB")
+    width, height = rgb.size
+    bg = corner_average(rgb)
+    pixels = rgb.load()
+    visited = set()
+    queue: deque[tuple[int, int]] = deque()
+    for x in range(width):
+        queue.append((x, 0))
+        queue.append((x, height - 1))
+    for y in range(height):
+        queue.append((0, y))
+        queue.append((width - 1, y))
+
+    background = Image.new("L", rgb.size, 0)
+    bg_px = background.load()
+    while queue:
+        x, y = queue.popleft()
+        if (x, y) in visited or x < 0 or y < 0 or x >= width or y >= height:
+            continue
+        visited.add((x, y))
+        if color_distance(pixels[x, y], bg) > threshold:
+            continue
+        bg_px[x, y] = 255
+        queue.extend(((x + 1, y), (x - 1, y), (x, y + 1), (x, y - 1)))
+
+    foreground = ImageOps.invert(background)
+    foreground = foreground.filter(ImageFilter.MaxFilter(5))
+    foreground = foreground.filter(ImageFilter.MinFilter(3))
+    return foreground.filter(ImageFilter.GaussianBlur(1.2))
+
+
+def model_background_mask(image: Image.Image) -> Image.Image:
+    try:
+        from rembg import remove  # type: ignore
+    except Exception as exc:
+        raise RuntimeError("Model background mode requires `uv sync --extra background`") from exc
+    result = remove(image.convert("RGBA"))
+    if not isinstance(result, Image.Image):
+        result = Image.open(result)
+    return result.convert("RGBA").getchannel("A")
+
+
+def make_background_mask(image: Image.Image, mode: str) -> Image.Image:
+    if mode == "none":
+        return no_removal_mask(image)
+    if mode == "classical":
+        return classical_background_mask(image)
+    if mode == "model":
+        return model_background_mask(image)
+    raise ValueError(f"Unknown background benchmark mode: {mode}")
+
+
 def normalize(image: Image.Image, settings: CandidateSettings) -> Image.Image:
     image = ImageOps.autocontrast(image, cutoff=1)
     image = ImageEnhance.Contrast(image).enhance(settings.contrast)
@@ -222,3 +330,72 @@ def process_source(
         )
     return result
 
+
+def benchmark_background_source(
+    source_path: Path,
+    photo_id: int,
+    library_dir: Path,
+    settings: CandidateSettings,
+    modes: list[str],
+    variants: list[str],
+    palette_path: Path | None = None,
+) -> tuple[list[BackgroundResult], list[int] | None]:
+    crop_dir = library_dir / "crops"
+    mask_dir = library_dir / "masks"
+    foreground_dir = library_dir / "foregrounds"
+    background_dir = library_dir / "backgrounds"
+    candidate_dir = library_dir / "candidates"
+    for directory in (crop_dir, mask_dir, foreground_dir, background_dir, candidate_dir):
+        directory.mkdir(parents=True, exist_ok=True)
+
+    crop_path = crop_dir / deterministic_background_filename(photo_id, "benchmark", "crop")
+    crop, face_box = prepare_raw_crop(source_path, crop_path, settings)
+    fixed_palette = load_fixed_palette(palette_path, max(DEFAULT_VARIANTS[name].colors for name in variants))
+    results: list[BackgroundResult] = []
+    for mode in modes:
+        started = time.perf_counter()
+        result = BackgroundResult(
+            mode=mode,
+            elapsed_seconds=0.0,
+            crop=str(crop_path.relative_to(library_dir)),
+        )
+        try:
+            mask = make_background_mask(crop, mode)
+            foreground = transparent_from_mask(crop, mask)
+            neutral = composite_on_neutral(crop, mask)
+
+            mask_path = mask_dir / deterministic_background_filename(photo_id, mode, "mask")
+            foreground_path = foreground_dir / deterministic_background_filename(photo_id, mode, "foreground")
+            neutral_path = background_dir / deterministic_background_filename(photo_id, mode, "neutral")
+            mask.save(mask_path)
+            foreground.save(foreground_path)
+            neutral.save(neutral_path)
+            result.mask = str(mask_path.relative_to(library_dir))
+            result.transparent_foreground = str(foreground_path.relative_to(library_dir))
+            result.neutral_background = str(neutral_path.relative_to(library_dir))
+
+            for name in variants:
+                variant = DEFAULT_VARIANTS[name]
+                candidate = make_variant(neutral, variant, settings, fixed_palette)
+                filename = deterministic_background_candidate_filename(photo_id, mode, name, settings.size)
+                out_path = candidate_dir / filename
+                candidate.save(out_path)
+                result.candidates.append(
+                    {
+                        "background_mode": mode,
+                        "variant": name,
+                        "filename": str(out_path.relative_to(library_dir)),
+                        "logical_size": settings.size,
+                        "review_scale": settings.review_scale,
+                        "colors": variant.colors,
+                        "dither": variant.dither,
+                        "edge": variant.edge,
+                        "settings": settings.to_json(),
+                    }
+                )
+        except Exception as exc:
+            result.error = str(exc)
+        finally:
+            result.elapsed_seconds = round(time.perf_counter() - started, 3)
+        results.append(result)
+    return results, face_box

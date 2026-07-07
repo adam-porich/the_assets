@@ -15,6 +15,9 @@ dev = [
 face = [
   "opencv-python>=4.8",
 ]
+background = [
+  "rembg[cpu]>=2.0",
+]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

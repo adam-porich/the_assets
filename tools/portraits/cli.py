@@ -2,9 +2,10 @@ from __future__ import annotations
 
 import argparse
 import os
+from dataclasses import asdict
 from pathlib import Path
 
-from .imaging import process_source
+from .imaging import benchmark_background_source, process_source
 from .lookbook import generate_lookbook
 from .manifest import (
     DEFAULT_VARIANTS,
@@ -17,9 +18,10 @@ from .manifest import (
 from .pexels import download_candidate, is_plausible_portrait, search_pexels
 
 
-def load_env_file(path: Path) -> None:
+def load_env_file(path: Path, protected_keys: set[str] | None = None, override: bool = False) -> None:
     if not path.exists():
         return
+    protected_keys = protected_keys or set()
     for raw_line in path.read_text(encoding="utf-8").splitlines():
         line = raw_line.strip()
         if not line or line.startswith("#") or "=" not in line:
@@ -27,17 +29,18 @@ def load_env_file(path: Path) -> None:
         key, value = line.split("=", 1)
         key = key.strip()
         value = value.strip().strip('"').strip("'")
-        if key and key not in os.environ:
+        if key and key not in protected_keys and (override or key not in os.environ):
             os.environ[key] = value
 
 
 def load_env_files() -> None:
-    load_env_file(Path.home() / ".env")
-    load_env_file(Path(".env"))
+    protected_keys = set(os.environ)
+    load_env_file(Path.home() / ".env", protected_keys=protected_keys)
+    load_env_file(Path(".env"), protected_keys=protected_keys, override=True)
 
 
 def library_dirs(root: Path) -> None:
-    for name in ("sources", "crops", "candidates", "lookbook"):
+    for name in ("sources", "crops", "candidates", "lookbook", "masks", "foregrounds", "backgrounds"):
         (root / name).mkdir(parents=True, exist_ok=True)
 
 
@@ -110,6 +113,56 @@ def cmd_process(args: argparse.Namespace) -> int:
     return 0
 
 
+def parse_variants(value: str) -> list[str]:
+    variants = [name.strip() for name in value.split(",") if name.strip()]
+    unknown = [name for name in variants if name not in DEFAULT_VARIANTS]
+    if unknown:
+        raise SystemExit(f"Unknown variants: {', '.join(unknown)}")
+    return variants
+
+
+def cmd_background(args: argparse.Namespace) -> int:
+    input_path = Path(args.input)
+    library_dir = Path(args.output) if args.output else (input_path.parent if input_path.name == "sources" else input_path)
+    library_dirs(library_dir)
+    manifest = load_manifest(library_dir)
+    variants = parse_variants(args.variants)
+    modes = [mode.strip() for mode in args.modes.split(",") if mode.strip()]
+    unknown_modes = [mode for mode in modes if mode not in {"none", "classical", "model"}]
+    if unknown_modes:
+        raise SystemExit(f"Unknown background modes: {', '.join(unknown_modes)}")
+    settings = CandidateSettings(
+        size=args.size,
+        review_scale=args.review_scale,
+        contrast=args.contrast,
+        saturation=args.saturation,
+        sharpness=args.sharpness,
+        crop_padding=args.crop_padding,
+        background="none",
+        palette=args.palette,
+    )
+    only_ids = {int(photo_id) for photo_id in args.photo_id} if args.photo_id else None
+    for entry, source_path in source_entries(manifest, input_path, library_dir):
+        photo_id = int(entry["pexels_photo_id"])
+        if only_ids is not None and photo_id not in only_ids:
+            continue
+        results, face_box = benchmark_background_source(
+            source_path,
+            photo_id,
+            library_dir,
+            settings,
+            modes,
+            variants,
+            Path(args.palette) if args.palette else None,
+        )
+        entry["detected_face_box"] = face_box
+        entry["background_benchmarks"] = [asdict(result) for result in results]
+        entry["processing_status"] = "background-benchmarked"
+    save_manifest(library_dir, manifest)
+    print(f"Generated background benchmark artifacts in {library_dir}")
+    return 0
+
+
 def cmd_lookbook(args: argparse.Namespace) -> int:
     out = generate_lookbook(Path(args.input))
     print(out)
@@ -123,6 +176,26 @@ def cmd_select(args: argparse.Namespace) -> int:
     update_selection(manifest, args.photo_id, args.variant, args.tag or [])
     save_manifest(library_dir, manifest)
     print(f"Selected Pexels {args.photo_id} variant {args.variant}")
+    return 0
+
+
+def cmd_score(args: argparse.Namespace) -> int:
+    library_dir = Path(args.input)
+    manifest = load_manifest(library_dir)
+    entry = find_source(manifest, args.photo_id)
+    if entry is None:
+        raise SystemExit(f"No source with Pexels photo id {args.photo_id}")
+    scores = entry.setdefault("scores", {})
+    scores[args.pipeline] = {
+        "likeness": args.likeness,
+        "silhouette": args.silhouette,
+        "pixel_art_quality": args.pixel_art_quality,
+        "game_fit": args.game_fit,
+        "manual_cleanup_needed": args.manual_cleanup_needed,
+        "notes": args.notes or "",
+    }
+    save_manifest(library_dir, manifest)
+    print(f"Scored Pexels {args.photo_id} pipeline {args.pipeline}")
     return 0
 
 
@@ -169,6 +242,21 @@ def build_parser() -> argparse.ArgumentParser:
     process.add_argument("--palette")
     process.set_defaults(func=cmd_process)
 
+    background = sub.add_parser("background")
+    background.add_argument("--input", required=True)
+    background.add_argument("--output")
+    background.add_argument("--photo-id", action="append", default=[])
+    background.add_argument("--modes", default="none,classical")
+    background.add_argument("--size", type=int, choices=[48, 64, 96], default=64)
+    background.add_argument("--variants", default="clean16,clean24,dither24,edge24")
+    background.add_argument("--review-scale", type=int, default=4)
+    background.add_argument("--contrast", type=float, default=1.08)
+    background.add_argument("--saturation", type=float, default=0.95)
+    background.add_argument("--sharpness", type=float, default=1.05)
+    background.add_argument("--crop-padding", type=float, default=1.9)
+    background.add_argument("--palette")
+    background.set_defaults(func=cmd_background)
+
     lookbook = sub.add_parser("lookbook")
     lookbook.add_argument("--input", default="portrait-library")
     lookbook.set_defaults(func=cmd_lookbook)
@@ -179,6 +267,18 @@ def build_parser() -> argparse.ArgumentParser:
     select.add_argument("--variant", required=True)
     select.add_argument("--tag", action="append")
     select.set_defaults(func=cmd_select)
+
+    score = sub.add_parser("score")
+    score.add_argument("--input", default="portrait-library")
+    score.add_argument("--photo-id", required=True)
+    score.add_argument("--pipeline", required=True, help="Variant or benchmark label, e.g. classical/edge24")
+    score.add_argument("--likeness", type=int, choices=range(1, 6), required=True)
+    score.add_argument("--silhouette", type=int, choices=range(1, 6), required=True)
+    score.add_argument("--pixel-art-quality", type=int, choices=range(1, 6), required=True)
+    score.add_argument("--game-fit", type=int, choices=range(1, 6), required=True)
+    score.add_argument("--manual-cleanup-needed", choices=["none", "minor", "major"], required=True)
+    score.add_argument("--notes")
+    score.set_defaults(func=cmd_score)
 
     harvest = sub.add_parser("harvest")
     add_fetch_options(harvest)

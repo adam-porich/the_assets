@@ -20,7 +20,13 @@ Optional face detection uses OpenCV. The pipeline still works without it by usin
 uv sync --extra dev --extra face
 ```
 
-Do not install CUDA, PyTorch, Stable Diffusion, ComfyUI, or background-removal packages for this pipeline. The target machine is an old i7-3770K / GTX 680 Windows host running primarily in WSL2, so this tool intentionally uses CPU-friendly Pillow processing.
+Optional model-based background removal uses `rembg` as a separate extra. Do not install it for the base pipeline:
+
+```bash
+uv sync --extra dev --extra background
+```
+
+Do not install CUDA, PyTorch, Stable Diffusion, or ComfyUI for this pipeline. The target machine is an old i7-3770K / GTX 680 Windows host running primarily in WSL2, so this tool intentionally keeps the base path CPU-friendly and Pillow-first.
 
 ## Pexels API Key
 
@@ -95,6 +101,45 @@ uv run python -m tools.portraits process \
 
 Default outputs are deterministic for the same source file and settings.
 
+## Background Benchmark
+
+Run a controlled background-removal comparison before deciding whether heavier processing is worth it:
+
+```bash
+uv run python -m tools.portraits background \
+  --input portrait-library/sources \
+  --modes none,classical \
+  --size 64
+```
+
+Available modes:
+
+```text
+none       no removal; records a full white mask and neutral composite baseline
+classical  deterministic corner-colour edge flood mask with feathering
+model      optional rembg mask; requires uv sync --extra background
+```
+
+Model mode is intentionally opt-in:
+
+```bash
+uv run python -m tools.portraits background \
+  --input portrait-library/sources \
+  --modes none,classical,model
+```
+
+For each source and mode, the benchmark writes:
+
+```text
+portrait-library/
+  masks/
+  foregrounds/
+  backgrounds/
+  candidates/
+```
+
+The lookbook shows the mask itself, the transparent foreground, the neutral-background composite, pixel variants derived from that composite, duration, and any mode error. Inspecting the mask is the point of this benchmark; otherwise it is hard to tell whether a bad portrait came from segmentation or later stylisation.
+
 ## Harvest
 
 Fetch, process, and build a lookbook in one command:
@@ -141,6 +186,8 @@ uv run python -m tools.portraits lookbook --input portrait-library
 
 The lookbook groups each source with its crop and processed variants, showing photographer, Pexels ID, query, dimensions, status, links, candidate filenames, and selected/tagged candidates.
 
+If background benchmarks exist, they are shown below each source with mask previews and timings.
+
 It has no external JavaScript dependency.
 
 ## Manual Selection
@@ -157,6 +204,32 @@ Selection updates `manifest.json`; it does not duplicate candidate files. Regene
 
 ```bash
 uv run python -m tools.portraits lookbook --input portrait-library
+```
+
+## Manual Scoring
+
+Record comparison scores in `manifest.json`:
+
+```bash
+uv run python -m tools.portraits score \
+  --photo-id 123 \
+  --pipeline classical/edge24 \
+  --likeness 4 \
+  --silhouette 3 \
+  --pixel-art-quality 4 \
+  --game-fit 4 \
+  --manual-cleanup-needed minor \
+  --notes "hat survived, collar needs cleanup"
+```
+
+Scores appear in the lookbook. The intended scoring scale is:
+
+```text
+likeness: 1-5
+silhouette: 1-5
+pixel-art quality: 1-5
+game fit: 1-5
+manual cleanup needed: none / minor / major
 ```
 
 ## Provenance And Licensing Caveats

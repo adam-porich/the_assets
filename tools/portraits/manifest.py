@@ -43,6 +43,14 @@ def deterministic_candidate_filename(photo_id: int | str, variant: str, size: in
     return f"{source_id(photo_id)}-{variant}-{size}.png"
 
 
+def deterministic_background_filename(photo_id: int | str, mode: str, kind: str, suffix: str = ".png") -> str:
+    return f"{source_id(photo_id)}-{mode}-{kind}{suffix}"
+
+
+def deterministic_background_candidate_filename(photo_id: int | str, mode: str, variant: str, size: int) -> str:
+    return f"{source_id(photo_id)}-{mode}-{variant}-{size}.png"
+
+
 def find_source(manifest: dict[str, Any], photo_id: int | str) -> dict[str, Any] | None:
     wanted = int(photo_id)
     for entry in manifest.get("sources", []):
@@ -123,3 +131,14 @@ class ProcessResult:
     candidates: list[dict[str, Any]] = field(default_factory=list)
     face_box: list[int] | None = None
 
+
+@dataclass
+class BackgroundResult:
+    mode: str
+    elapsed_seconds: float
+    crop: str
+    mask: str | None = None
+    transparent_foreground: str | None = None
+    neutral_background: str | None = None
+    candidates: list[dict[str, Any]] = field(default_factory=list)
+    error: str | None = None

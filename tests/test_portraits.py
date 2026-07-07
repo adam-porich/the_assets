@@ -7,8 +7,14 @@ from pathlib import Path
 
 from PIL import Image, ImageDraw
 
-from tools.portraits.cli import load_env_file
-from tools.portraits.imaging import palette_color_count, process_source, square_crop_box
+from tools.portraits.cli import load_env_file, load_env_files
+from tools.portraits.imaging import (
+    benchmark_background_source,
+    classical_background_mask,
+    palette_color_count,
+    process_source,
+    square_crop_box,
+)
 from tools.portraits.lookbook import generate_lookbook
 from tools.portraits.manifest import (
     CandidateSettings,
@@ -136,14 +142,57 @@ def test_processing_is_deterministic_and_palette_limited(tmp_path: Path) -> None
     assert (library / "crops" / "pexels-123-crop.png").exists()
 
 
+def test_classical_background_benchmark_outputs_masks_and_candidates(tmp_path: Path) -> None:
+    library = tmp_path / "portrait-library"
+    source_dir = library / "sources"
+    source_dir.mkdir(parents=True)
+    source = source_dir / "pexels-123-original.jpg"
+    make_fixture_image(source)
+    settings = CandidateSettings(size=48, review_scale=2)
+
+    results, face_box = benchmark_background_source(source, 123, library, settings, ["none", "classical"], ["clean16"])
+
+    assert face_box is None
+    assert [result.mode for result in results] == ["none", "classical"]
+    assert results[0].error is None
+    assert results[1].error is None
+    assert (library / str(results[1].mask)).exists()
+    assert (library / str(results[1].transparent_foreground)).exists()
+    assert (library / str(results[1].neutral_background)).exists()
+    assert (library / "candidates" / "pexels-123-classical-clean16-48.png").exists()
+    assert palette_color_count(library / "candidates" / "pexels-123-classical-clean16-48.png") <= 16
+
+
+def test_classical_mask_is_deterministic(tmp_path: Path) -> None:
+    source = tmp_path / "fixture.jpg"
+    make_fixture_image(source)
+    image = Image.open(source).convert("RGB")
+
+    first = classical_background_mask(image)
+    second = classical_background_mask(image)
+
+    first_path = tmp_path / "first.png"
+    second_path = tmp_path / "second.png"
+    first.save(first_path)
+    second.save(second_path)
+    assert digest(first_path) == digest(second_path)
+
+
 def test_lookbook_generation_includes_failed_and_selected_entries(tmp_path: Path) -> None:
     library = tmp_path / "portrait-library"
     (library / "sources").mkdir(parents=True)
     (library / "crops").mkdir()
     (library / "candidates").mkdir()
+    (library / "masks").mkdir()
+    (library / "foregrounds").mkdir()
+    (library / "backgrounds").mkdir()
     make_fixture_image(library / "sources" / "pexels-123-original.jpg")
     make_fixture_image(library / "crops" / "pexels-123-crop.png")
     make_fixture_image(library / "candidates" / "pexels-123-edge24-64.png")
+    make_fixture_image(library / "candidates" / "pexels-123-classical-clean16-64.png")
+    make_fixture_image(library / "backgrounds" / "pexels-123-classical-neutral.png")
+    make_fixture_image(library / "foregrounds" / "pexels-123-classical-foreground.png")
+    Image.new("L", (160, 220), 255).save(library / "masks" / "pexels-123-classical-mask.png")
     manifest = {
         "version": 1,
         "sources": [
@@ -167,6 +216,35 @@ def test_lookbook_generation_includes_failed_and_selected_entries(tmp_path: Path
                         "colors": 24,
                     }
                 ],
+                "background_benchmarks": [
+                    {
+                        "mode": "classical",
+                        "elapsed_seconds": 0.123,
+                        "crop": "crops/pexels-123-benchmark-crop.png",
+                        "mask": "masks/pexels-123-classical-mask.png",
+                        "transparent_foreground": "foregrounds/pexels-123-classical-foreground.png",
+                        "neutral_background": "backgrounds/pexels-123-classical-neutral.png",
+                        "candidates": [
+                            {
+                                "background_mode": "classical",
+                                "variant": "clean16",
+                                "filename": "candidates/pexels-123-classical-clean16-64.png",
+                                "logical_size": 64,
+                                "colors": 16,
+                            }
+                        ],
+                    }
+                ],
+                "scores": {
+                    "classical/clean16": {
+                        "likeness": 4,
+                        "silhouette": 3,
+                        "pixel_art_quality": 4,
+                        "game_fit": 5,
+                        "manual_cleanup_needed": "minor",
+                        "notes": "good hat",
+                    }
+                },
             },
             {
                 "pexels_photo_id": 456,
@@ -187,6 +265,10 @@ def test_lookbook_generation_includes_failed_and_selected_entries(tmp_path: Path
     assert "edge24" in text
     assert "audit" in text
     assert "Failed: bad image" in text
+    assert "classical background removal" in text
+    assert "Duration: 0.123s" in text
+    assert "classical/clean16" in text
+    assert "good hat" in text
 
 
 def test_env_loader_does_not_override_exported_values(tmp_path: Path, monkeypatch) -> None:
@@ -195,7 +277,25 @@ def test_env_loader_does_not_override_exported_values(tmp_path: Path, monkeypatc
     monkeypatch.setenv("PEXELS_API_KEY", "from-shell")
     os.environ.pop("OTHER", None)
 
-    load_env_file(env_file)
+    load_env_file(env_file, protected_keys={"PEXELS_API_KEY"})
 
     assert os.environ["PEXELS_API_KEY"] == "from-shell"
     assert os.environ["OTHER"] == "value"
+
+
+def test_repo_env_overrides_home_env_but_not_shell(tmp_path: Path, monkeypatch) -> None:
+    home = tmp_path / "home"
+    repo = tmp_path / "repo"
+    home.mkdir()
+    repo.mkdir()
+    (home / ".env").write_text("PEXELS_API_KEY=from-home\nOTHER=home\n", encoding="utf-8")
+    (repo / ".env").write_text("PEXELS_API_KEY=from-repo\nOTHER=repo\n", encoding="utf-8")
+    monkeypatch.setenv("HOME", str(home))
+    monkeypatch.chdir(repo)
+    monkeypatch.delenv("PEXELS_API_KEY", raising=False)
+    monkeypatch.setenv("OTHER", "from-shell")
+
+    load_env_files()
+
+    assert os.environ["PEXELS_API_KEY"] == "from-repo"
+    assert os.environ["OTHER"] == "from-shell"
