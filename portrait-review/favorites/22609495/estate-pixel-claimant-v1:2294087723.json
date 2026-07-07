@@ -1,0 +1,72 @@
+{
+  "backend": "openrouter",
+  "candidate": {
+    "backend": "openrouter",
+    "background_mode": "neutral-dark",
+    "candidate_id": "estate-pixel-claimant-v1:2294087723",
+    "created_at": "2026-07-07T14:03:24+00:00",
+    "elapsed_seconds": 28.984,
+    "final_output_path": "stylized/pexels-22609495-estate-pixel-claimant-v1-2294087723-final.png",
+    "guidance": 6.0,
+    "index": 0,
+    "input_composite_path": "composites/pexels-22609495-neutral-dark-composite.png",
+    "mask_mode": "rembg",
+    "model": "openai/gpt-image-1-mini",
+    "negative_prompt": "text, watermark, logo, extra hands, extra fingers, crowd, complex scene, blurry face, distorted face, duplicate person, photorealistic corporate headshot, noisy background",
+    "output_path": "stylized/pexels-22609495-estate-pixel-claimant-v1-2294087723-raw.png",
+    "preset": "estate-pixel-claimant-v1",
+    "prompt": "character portrait for a card game, fantasy bureaucrat claimant, head and shoulders, centred character, readable face, strong silhouette, simple controlled background, stylized low-resolution-friendly rendering, infernal administrative mood, clear costume shape",
+    "seed": 2294087723,
+    "source_photo_id": 22609495,
+    "steps": 6,
+    "strength": 0.45
+  },
+  "final_copied_image_path": "portrait-review/favorites/22609495/estate-pixel-claimant-v1:2294087723.png",
+  "model": "openai/gpt-image-1-mini",
+  "original_generated_paths": {
+    "final": "stylized/pexels-22609495-estate-pixel-claimant-v1-2294087723-final.png",
+    "input_composite": "composites/pexels-22609495-neutral-dark-composite.png",
+    "raw": "stylized/pexels-22609495-estate-pixel-claimant-v1-2294087723-raw.png"
+  },
+  "preparation": {
+    "background_mode": "neutral-dark",
+    "composite_path": "composites/pexels-22609495-neutral-dark-composite.png",
+    "framing": "full-source",
+    "mask_mode": "rembg",
+    "mask_path": "masks/pexels-22609495-rembg-mask.png",
+    "original_size": [
+      867,
+      1300
+    ],
+    "preparation": {
+      "max_edge": 768
+    },
+    "prepared_size": [
+      512,
+      768
+    ],
+    "prepared_source_path": "prepared/pexels-22609495-stylize-source.png",
+    "transparent_foreground_path": "foregrounds/pexels-22609495-rembg-foreground.png"
+  },
+  "prompt_preset": "estate-pixel-claimant-v1",
+  "seed": 2294087723,
+  "source": {
+    "license_page": "https://www.pexels.com/license/",
+    "local_source_filename": "pexels-22609495-original.jpg",
+    "original_height": 6000,
+    "original_image_url": "https://images.pexels.com/photos/22609495/pexels-photo-22609495.jpeg",
+    "original_width": 4000,
+    "pexels_photo_id": 22609495,
+    "photo_page_url": "https://www.pexels.com/photo/woman-in-costume-hat-and-with-knife-22609495/",
+    "photographer": "Francisco Rivera",
+    "photographer_url": "https://www.pexels.com/@francisco-rivera-145999589",
+    "query": "eccentric portrait hat",
+    "selected_image_url": "https://images.pexels.com/photos/22609495/pexels-photo-22609495.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940",
+    "source": "pexels",
+    "source_checksum_sha256": "18dee424044010826fef0b6d664b2793abfc702de388fcfb4f358f4929519be1"
+  },
+  "timing": {
+    "created_at": "2026-07-07T14:03:24+00:00",
+    "elapsed_seconds": 28.984
+  }
+}

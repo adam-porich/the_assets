@@ -43,7 +43,7 @@ def load_env_files() -> None:
 
 
 def library_dirs(root: Path) -> None:
-    for name in ("sources", "crops", "candidates", "lookbook", "masks", "foregrounds", "backgrounds", "composites", "stylized"):
+    for name in ("sources", "crops", "candidates", "lookbook", "masks", "foregrounds", "backgrounds", "composites", "prepared", "stylized"):
         (root / name).mkdir(parents=True, exist_ok=True)
 
 

@@ -38,6 +38,14 @@ class Img2ImgPreset:
 
 
 @dataclass(frozen=True)
+class PreparationSettings:
+    max_edge: int = 768
+
+    def to_json(self) -> dict[str, Any]:
+        return {"max_edge": self.max_edge}
+
+
+@dataclass(frozen=True)
 class Img2ImgRequest:
     input_image_path: str
     prompt: str
@@ -225,12 +233,25 @@ def composite_on_controlled_background(image: Image.Image, mask: Image.Image, mo
     return Image.composite(image.convert("RGB"), background, mask)
 
 
+def resize_full_source(image: Image.Image, max_edge: int) -> Image.Image:
+    if max_edge <= 0:
+        raise ValueError("preparation max_edge must be positive")
+    largest = max(image.size)
+    if largest <= max_edge:
+        return image.copy()
+    scale = max_edge / largest
+    size = (max(1, round(image.width * scale)), max(1, round(image.height * scale)))
+    return image.resize(size, Image.Resampling.LANCZOS)
+
+
 def prepare_rembg_composite(
     source_path: Path,
     photo_id: int,
     library_dir: Path,
     preset: Img2ImgPreset,
+    preparation: PreparationSettings | None = None,
 ) -> dict[str, Any]:
+    preparation = preparation or PreparationSettings()
     prep_dir = library_dir / "prepared"
     mask_dir = library_dir / "masks"
     foreground_dir = library_dir / "foregrounds"
@@ -238,7 +259,8 @@ def prepare_rembg_composite(
     for directory in (prep_dir, mask_dir, foreground_dir, composite_dir):
         directory.mkdir(parents=True, exist_ok=True)
 
-    source = ImageOps.exif_transpose(Image.open(source_path)).convert("RGB")
+    original = ImageOps.exif_transpose(Image.open(source_path)).convert("RGB")
+    source = resize_full_source(original, preparation.max_edge)
     prepared_path = prep_dir / deterministic_background_filename(photo_id, "stylize", "source")
     source.save(prepared_path)
     mask = model_background_mask(source)
@@ -259,6 +281,9 @@ def prepare_rembg_composite(
         "mask_mode": "rembg",
         "background_mode": preset.background_mode,
         "framing": "full-source",
+        "preparation": preparation.to_json(),
+        "original_size": list(original.size),
+        "prepared_size": list(source.size),
     }
 
 
@@ -293,8 +318,9 @@ def stylize_source(
     backend: Img2ImgBackend,
     seed: int | None = None,
     count: int | None = None,
+    preparation: PreparationSettings | None = None,
 ) -> tuple[dict[str, Any], list[dict[str, Any]]]:
-    prep = prepare_rembg_composite(source_path, photo_id, library_dir, preset)
+    prep = prepare_rembg_composite(source_path, photo_id, library_dir, preset, preparation)
     output_dir = library_dir / "stylized"
     output_dir.mkdir(parents=True, exist_ok=True)
     base_seed = seed if seed is not None else stable_seed(photo_id, preset.name)

@@ -1,6 +1,43 @@
 {
-  "version": 1,
-  "sources": {},
-  "candidates": {}
+  "candidates": {
+    "estate-pixel-claimant-v1:2294087723": {
+      "note": "",
+      "status": "favorite"
+    },
+    "estate-pixel-claimant-v1:3615601749": {
+      "note": "",
+      "status": "favorite"
+    },
+    "estate-pixel-claimant-v1:3675960969": {
+      "note": "",
+      "status": "favorite"
+    },
+    "estate-pixel-claimant-v1:4152053981": {
+      "note": "",
+      "status": "favorite"
+    }
+  },
+  "sources": {
+    "11013487": {
+      "note": "",
+      "status": "favorite"
+    },
+    "14468344": {
+      "note": "",
+      "status": "favorite"
+    },
+    "22609495": {
+      "note": "",
+      "status": "favorite"
+    },
+    "22845473": {
+      "note": "",
+      "status": "reject"
+    },
+    "23024613": {
+      "note": "",
+      "status": "favorite"
+    }
+  },
+  "version": 1
 }
-
