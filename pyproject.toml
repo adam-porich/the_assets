@@ -1,0 +1,22 @@
+[project]
+name = "the-assets"
+version = "0.1.0"
+description = "Experimental asset pipelines for multiple games."
+requires-python = ">=3.10"
+dependencies = [
+  "Pillow>=10.0",
+  "requests>=2.31",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8.0",
+]
+face = [
+  "opencv-python>=4.8",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+pythonpath = ["."]
