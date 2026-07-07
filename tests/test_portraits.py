@@ -9,7 +9,7 @@ from pathlib import Path
 from PIL import Image, ImageDraw
 
 from tools.portraits.cli import cmd_background, cmd_stylize, load_env_file, load_env_files
-from tools.portraits.img2img import ExternalCommandBackend, Img2ImgRequest, Img2ImgResult, load_preset, raw_candidate_path, stable_seed, stylize_source
+from tools.portraits.img2img import ExternalCommandBackend, Img2ImgRequest, Img2ImgResult, OpenRouterBackend, load_preset, raw_candidate_path, stable_seed, stylize_source
 from tools.portraits.imaging import (
     benchmark_background_source,
     classical_background_mask,
@@ -378,6 +378,60 @@ print(json.dumps({"results": [{
     assert Path(results[0].image_path).exists()
 
 
+def test_openrouter_backend_sends_reference_image_and_saves_result(tmp_path: Path, monkeypatch) -> None:
+    input_path = tmp_path / "input.png"
+    make_fixture_image(input_path)
+    output_dir = tmp_path / "stylized"
+    output_dir.mkdir()
+    captured = {}
+
+    class Response:
+        ok = True
+        status_code = 200
+        text = ""
+
+        def json(self):
+            encoded = Image.new("RGB", (16, 16), "#44352f")
+            out = tmp_path / "response.png"
+            encoded.save(out)
+            import base64
+
+            return {"data": [{"b64_json": base64.b64encode(out.read_bytes()).decode("ascii")}]}
+
+    def fake_post(url, headers, json, timeout):
+        captured["url"] = url
+        captured["headers"] = headers
+        captured["json"] = json
+        captured["timeout"] = timeout
+        return Response()
+
+    monkeypatch.setattr("tools.portraits.img2img.requests.post", fake_post)
+    request = Img2ImgRequest(
+        input_image_path=str(input_path),
+        prompt="prompt",
+        seed=7,
+        strength=0.4,
+        steps=6,
+        guidance=5,
+        width=384,
+        height=384,
+        preset="preset-v1",
+        count=1,
+        output_dir=str(output_dir),
+        output_base="candidate",
+    )
+
+    results = OpenRouterBackend(api_key="test-key").generate(request)
+
+    assert captured["url"] == "https://openrouter.ai/api/v1/images"
+    assert captured["json"]["model"] == "openai/gpt-image-1-mini"
+    assert captured["json"]["quality"] == "low"
+    assert captured["json"]["input_references"][0]["image_url"]["url"].startswith("data:image/png;base64,")
+    assert results[0].backend == "openrouter"
+    assert results[0].model == "openai/gpt-image-1-mini"
+    assert Path(results[0].image_path).exists()
+
+
 def test_stylize_command_errors_when_backend_unconfigured(tmp_path: Path, monkeypatch) -> None:
     library = tmp_path / "portrait-library"
     source_dir = library / "sources"
@@ -527,7 +581,7 @@ def test_lookbook_generation_includes_failed_and_selected_entries(tmp_path: Path
     assert "Portrait picker" in text
     assert "data-filter=\"favorite\"" in text
     assert "uv run python -m tools.portraits favorite --photo-id 123" in text
-    assert "uv run --extra background python -m tools.portraits stylize --input portrait-library --preset estate-pixel-claimant-v1 --photo-id 123" in text
+    assert "uv run --extra background python -m tools.portraits stylize --input portrait-library --preset estate-pixel-claimant-v1 --backend openrouter --photo-id 123" in text
     assert "badge-favorite" in text
     assert "shortlist this" in text
     assert "Img2img Candidates" in text

@@ -5,7 +5,7 @@ import os
 from dataclasses import asdict
 from pathlib import Path
 
-from .img2img import ExternalCommandBackend, load_preset, stylize_source
+from .img2img import ExternalCommandBackend, OpenRouterBackend, load_preset, stylize_source
 from .imaging import benchmark_background_source, process_source
 from .lookbook import generate_lookbook
 from .manifest import (
@@ -202,10 +202,14 @@ def cmd_stylize(args: argparse.Namespace) -> int:
     library_dirs(library_dir)
     manifest = load_manifest(library_dir)
     preset = load_preset(args.preset)
-    if args.backend != "external":
+    if args.backend == "external":
+        backend_cls = ExternalCommandBackend
+    elif args.backend == "openrouter":
+        backend_cls = OpenRouterBackend
+    else:
         raise SystemExit(f"Unknown img2img backend: {args.backend}")
     try:
-        backend = ExternalCommandBackend()
+        backend = backend_cls()
     except RuntimeError as exc:
         raise SystemExit(str(exc)) from exc
     processed = 0

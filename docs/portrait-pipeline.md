@@ -141,9 +141,21 @@ The lookbook shows the mask itself, the transparent foreground, the controlled c
 
 ## Img2img Stylization
 
-Stylization uses a pluggable backend. The active backend in this repository is `external`: the portrait tool writes an img2img request JSON file and calls a configured command. That command can wrap OpenVINO, ComfyUI, Automatic1111, a cloud runner, or any later backend without changing the manifest shape.
+Stylization uses a pluggable backend. The recommended hosted backend is `openrouter`, which sends the rembg composite as an OpenRouter Image API reference image and downloads the returned image into `portrait-library/stylized/`.
 
-Configure the command in the shell or `~/.env`:
+Configure OpenRouter in the shell or `~/.env`:
+
+```bash
+OPENROUTER_API_KEY="..."
+OPENROUTER_IMAGE_MODEL="openai/gpt-image-1-mini"
+OPENROUTER_IMAGE_QUALITY="low"
+```
+
+The default model is `openai/gpt-image-1-mini` at `low` quality because the current goal is cheap experimentation. Override `OPENROUTER_IMAGE_MODEL` if a different OpenRouter image model gives better stylized claimant portraits.
+
+The fallback backend is `external`: the portrait tool writes an img2img request JSON file and calls a configured command. That command can wrap OpenVINO, ComfyUI, Automatic1111, a cloud runner, or any later backend without changing the manifest shape.
+
+Configure the external command in the shell or `~/.env`:
 
 ```bash
 export PORTRAIT_IMG2IMG_COMMAND="/path/to/img2img-wrapper"
@@ -176,6 +188,7 @@ Run one source:
 uv run --extra background python -m tools.portraits stylize \
   --input portrait-library \
   --preset estate-pixel-claimant-v1 \
+  --backend openrouter \
   --photo-id 123
 ```
 
@@ -185,6 +198,7 @@ Run a short batch. The default limit is already 3 to avoid accidental long CPU j
 uv run --extra background python -m tools.portraits stylize \
   --input portrait-library \
   --preset estate-pixel-claimant-v1 \
+  --backend openrouter \
   --review-status add
 ```
 
@@ -194,6 +208,7 @@ Override carefully:
 uv run --extra background python -m tools.portraits stylize \
   --input portrait-library \
   --preset estate-pixel-claimant-v1 \
+  --backend openrouter \
   --limit 3 \
   --count 1
 ```

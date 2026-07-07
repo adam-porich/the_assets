@@ -55,7 +55,7 @@ def _review_command(photo_id: int | str, status: str) -> str:
 
 
 def _stylize_command(photo_id: int | str) -> str:
-    return f"uv run --extra background python -m tools.portraits stylize --input portrait-library --preset estate-pixel-claimant-v1 --photo-id {photo_id}"
+    return f"uv run --extra background python -m tools.portraits stylize --input portrait-library --preset estate-pixel-claimant-v1 --backend openrouter --photo-id {photo_id}"
 
 
 def _review_status(entry: dict[str, Any]) -> str:

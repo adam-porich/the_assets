@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import base64
 import hashlib
 import json
 import os
@@ -10,6 +11,7 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any, Protocol
 
+import requests
 from PIL import Image, ImageOps
 
 from .imaging import composite_on_neutral, model_background_mask, prepare_raw_crop, quantize_image, transparent_from_mask
@@ -120,6 +122,91 @@ class ExternalCommandBackend:
                 item["seed"] = request.seed or 0
             results.append(Img2ImgResult(**item))
         return results
+
+
+class OpenRouterBackend:
+    name = "openrouter"
+
+    def __init__(
+        self,
+        api_key: str | None = None,
+        model: str | None = None,
+        quality: str | None = None,
+    ) -> None:
+        self.api_key = api_key or os.environ.get("OPENROUTER_API_KEY")
+        if not self.api_key:
+            raise RuntimeError("OPENROUTER_API_KEY is not configured")
+        self.model = model or os.environ.get("OPENROUTER_IMAGE_MODEL") or "openai/gpt-image-1-mini"
+        self.quality = quality or os.environ.get("OPENROUTER_IMAGE_QUALITY") or "low"
+
+    def generate(self, request: Img2ImgRequest) -> list[Img2ImgResult]:
+        payload: dict[str, Any] = {
+            "model": self.model,
+            "prompt": request.prompt,
+            "n": request.count,
+            "aspect_ratio": "1:1",
+            "output_format": "png",
+            "input_references": [
+                {
+                    "type": "image_url",
+                    "image_url": {"url": image_data_url(Path(request.input_image_path))},
+                }
+            ],
+        }
+        if request.seed is not None:
+            payload["seed"] = request.seed
+        if self.model.startswith("openai/"):
+            payload["quality"] = self.quality
+            payload["background"] = "opaque"
+        else:
+            payload["resolution"] = "1K"
+
+        started = time.perf_counter()
+        response = requests.post(
+            "https://openrouter.ai/api/v1/images",
+            headers={
+                "Authorization": f"Bearer {self.api_key}",
+                "Content-Type": "application/json",
+                "HTTP-Referer": "https://github.com/adam-porich/the_assets",
+                "X-Title": "the_assets portrait pipeline",
+            },
+            json=payload,
+            timeout=180,
+        )
+        elapsed = round(time.perf_counter() - started, 3)
+        if not response.ok:
+            raise RuntimeError(f"OpenRouter image generation failed {response.status_code}: {response.text[:500]}")
+
+        output_dir = Path(request.output_dir)
+        output_dir.mkdir(parents=True, exist_ok=True)
+        results = []
+        for index, item in enumerate(response.json().get("data", [])):
+            seed = (request.seed or 0) + index
+            media_type = item.get("media_type") or "image/png"
+            suffix = ".svg" if media_type == "image/svg+xml" else ".png"
+            output_path = output_dir / f"{request.output_base}-{seed}-openrouter{suffix}"
+            output_path.write_bytes(base64.b64decode(item["b64_json"]))
+            results.append(
+                Img2ImgResult(
+                    image_path=str(output_path),
+                    backend=self.name,
+                    model=self.model,
+                    seed=seed,
+                    strength=request.strength,
+                    steps=request.steps,
+                    guidance=request.guidance,
+                    prompt=request.prompt,
+                    negative_prompt=request.negative_prompt,
+                    elapsed_seconds=elapsed,
+                )
+            )
+        return results
+
+
+def image_data_url(path: Path) -> str:
+    media_type = "image/png" if path.suffix.lower() == ".png" else "image/jpeg"
+    encoded = base64.b64encode(path.read_bytes()).decode("ascii")
+    return f"data:{media_type};base64,{encoded}"
 
 
 def controlled_background(size: tuple[int, int], mode: str, department_tint: str | None = None) -> Image.Image:
@@ -264,4 +351,3 @@ def stylize_source(
             }
         )
     return prep, records
-
