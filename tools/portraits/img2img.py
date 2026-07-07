@@ -14,8 +14,8 @@ from typing import Any, Protocol
 import requests
 from PIL import Image, ImageOps
 
-from .imaging import composite_on_neutral, model_background_mask, prepare_raw_crop, quantize_image, transparent_from_mask
-from .manifest import CandidateSettings, deterministic_background_filename, utc_now_iso
+from .imaging import model_background_mask, quantize_image, transparent_from_mask
+from .manifest import deterministic_background_filename, utc_now_iso
 
 
 PRESET_DIR = Path(__file__).parent / "presets"
@@ -230,21 +230,20 @@ def prepare_rembg_composite(
     photo_id: int,
     library_dir: Path,
     preset: Img2ImgPreset,
-    crop_padding: float,
 ) -> dict[str, Any]:
-    crop_dir = library_dir / "crops"
+    prep_dir = library_dir / "prepared"
     mask_dir = library_dir / "masks"
     foreground_dir = library_dir / "foregrounds"
     composite_dir = library_dir / "composites"
-    for directory in (crop_dir, mask_dir, foreground_dir, composite_dir):
+    for directory in (prep_dir, mask_dir, foreground_dir, composite_dir):
         directory.mkdir(parents=True, exist_ok=True)
 
-    settings = CandidateSettings(crop_padding=crop_padding)
-    crop_path = crop_dir / deterministic_background_filename(photo_id, "stylize", "crop")
-    crop, face_box = prepare_raw_crop(source_path, crop_path, settings)
-    mask = model_background_mask(crop)
-    foreground = transparent_from_mask(crop, mask)
-    composite = composite_on_controlled_background(crop, mask, preset.background_mode, preset.department_tint)
+    source = ImageOps.exif_transpose(Image.open(source_path)).convert("RGB")
+    prepared_path = prep_dir / deterministic_background_filename(photo_id, "stylize", "source")
+    source.save(prepared_path)
+    mask = model_background_mask(source)
+    foreground = transparent_from_mask(source, mask)
+    composite = composite_on_controlled_background(source, mask, preset.background_mode, preset.department_tint)
 
     mask_path = mask_dir / deterministic_background_filename(photo_id, "rembg", "mask")
     foreground_path = foreground_dir / deterministic_background_filename(photo_id, "rembg", "foreground")
@@ -253,13 +252,13 @@ def prepare_rembg_composite(
     foreground.save(foreground_path)
     composite.save(composite_path)
     return {
-        "crop_path": str(crop_path.relative_to(library_dir)),
+        "prepared_source_path": str(prepared_path.relative_to(library_dir)),
         "mask_path": str(mask_path.relative_to(library_dir)),
         "transparent_foreground_path": str(foreground_path.relative_to(library_dir)),
         "composite_path": str(composite_path.relative_to(library_dir)),
-        "face_box": face_box,
         "mask_mode": "rembg",
         "background_mode": preset.background_mode,
+        "framing": "full-source",
     }
 
 
@@ -292,11 +291,10 @@ def stylize_source(
     library_dir: Path,
     preset: Img2ImgPreset,
     backend: Img2ImgBackend,
-    crop_padding: float = 1.9,
     seed: int | None = None,
     count: int | None = None,
 ) -> tuple[dict[str, Any], list[dict[str, Any]]]:
-    prep = prepare_rembg_composite(source_path, photo_id, library_dir, preset, crop_padding)
+    prep = prepare_rembg_composite(source_path, photo_id, library_dir, preset)
     output_dir = library_dir / "stylized"
     output_dir.mkdir(parents=True, exist_ok=True)
     base_seed = seed if seed is not None else stable_seed(photo_id, preset.name)

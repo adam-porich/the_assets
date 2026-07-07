@@ -72,7 +72,7 @@ def build_library_payload(library_dir: Path, review_path: Path = REVIEW_PATH) ->
                 "review": source_review,
                 "selected": selected,
                 "source_url": source_asset_url(entry.get("local_source_filename")),
-                "crop_url": asset_url(prep.get("crop_path") or entry.get("crop_filename")),
+                "prepared_url": asset_url(prep.get("prepared_source_path")),
                 "mask_url": asset_url(prep.get("mask_path")),
                 "foreground_url": asset_url(prep.get("transparent_foreground_path")),
                 "composite_url": asset_url(prep.get("composite_path")),

@@ -227,7 +227,6 @@ def cmd_stylize(args: argparse.Namespace) -> int:
                 library_dir,
                 preset,
                 backend,
-                crop_padding=args.crop_padding,
                 seed=args.seed,
                 count=args.count,
             )
@@ -362,7 +361,6 @@ def build_parser() -> argparse.ArgumentParser:
     stylize.add_argument("--limit", type=int, default=3)
     stylize.add_argument("--count", type=int)
     stylize.add_argument("--seed", type=int)
-    stylize.add_argument("--crop-padding", type=float, default=1.9)
     stylize.set_defaults(func=cmd_stylize)
 
     lookbook = sub.add_parser("lookbook")

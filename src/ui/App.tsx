@@ -34,7 +34,7 @@ type Source = {
   review?: Review;
   selected?: { variant?: string; tags?: string[] };
   source_url?: string;
-  crop_url?: string;
+  prepared_url?: string;
   mask_url?: string;
   foreground_url?: string;
   composite_url?: string;
@@ -183,7 +183,7 @@ function SourceDetail({ source, onUpdated }: { source: Source; onUpdated: () => 
           <h3>Original</h3>
           <div className="image-row">
             <ImagePanel label="Source" src={source.source_url} />
-            <ImagePanel label="Crop" src={source.crop_url} />
+            <ImagePanel label="Prepared source" src={source.prepared_url ?? source.source_url} />
           </div>
         </div>
         <div className="stage">

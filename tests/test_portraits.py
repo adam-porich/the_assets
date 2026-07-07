@@ -315,6 +315,8 @@ def test_stylize_source_records_img2img_metadata(tmp_path: Path, monkeypatch) ->
 
     assert prep["mask_mode"] == "rembg"
     assert prep["background_mode"] == "neutral-dark"
+    assert prep["framing"] == "full-source"
+    assert prep["prepared_source_path"].endswith("stylize-source.png")
     assert records[0]["candidate_id"] == "estate-pixel-claimant-v1:42"
     assert records[0]["backend"] == "fake"
     assert records[0]["model"] == "fake-model"
@@ -643,6 +645,7 @@ def test_review_payload_uses_tree_review_metadata(tmp_path: Path) -> None:
                     "pexels_photo_id": 123,
                     "local_source_filename": "pexels-123-original.jpg",
                     "stylization_prep": {
+                        "prepared_source_path": "prepared/pexels-123-stylize-source.png",
                         "mask_path": "masks/pexels-123-rembg-mask.png",
                         "composite_path": "composites/pexels-123-neutral-dark-composite.png",
                     },

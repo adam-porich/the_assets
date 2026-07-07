@@ -1,6 +1,6 @@
 # Portrait Candidate Pipeline
 
-This is an experimental claimant portrait source and img2img stylization pipeline. It searches Pexels through the official API, downloads selected portrait candidates with provenance metadata, prepares crops with `rembg`, sends controlled composites to a pluggable img2img backend, and generates a static HTML lookbook.
+This is an experimental claimant portrait source and img2img stylization pipeline. It searches Pexels through the official API, downloads selected portrait candidates with provenance metadata, prepares full source images with `rembg`, sends controlled composites to a pluggable img2img backend, and generates review surfaces.
 
 It does not integrate portraits into any game.
 
@@ -125,7 +125,7 @@ none       debugging baseline only
 The primary preparation path is:
 
 ```text
-crop -> rembg mask -> transparent foreground -> controlled RGB composite
+source -> rembg mask -> transparent foreground -> controlled RGB composite
 ```
 
 For each source and mode, the benchmark writes:
@@ -266,8 +266,8 @@ portrait-library/
   manifest.json
   sources/
     pexels-123-original.jpg
-  crops/
-    pexels-123-crop.png
+  prepared/
+    pexels-123-stylize-source.png
   candidates/
   masks/
   foregrounds/
@@ -314,7 +314,6 @@ The app shows the focused track:
 
 ```text
 Original source
--> crop
 -> rembg mask and controlled composite
 -> stylized raw
 -> final review/export image
@@ -334,7 +333,7 @@ Static fallback:
 uv run python -m tools.portraits lookbook --input portrait-library
 ```
 
-The lookbook groups each source with its crop, rembg preparation, img2img candidates, and selected/tagged candidates.
+The lookbook groups each source with its rembg preparation, img2img candidates, and selected/tagged candidates.
 
 If legacy background benchmarks or deterministic variants exist, they are shown below the primary img2img review area.
 
