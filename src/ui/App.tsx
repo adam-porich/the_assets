@@ -45,6 +45,9 @@ type LibraryPayload = {
   sources: Source[];
 };
 
+const appBase = import.meta.env.BASE_URL;
+const apiPath = (path: string) => `${appBase}${path.replace(/^\//, "")}`;
+
 const statusLabels: Array<ReviewStatus | "unreviewed" | "all"> = [
   "all",
   "favorite",
@@ -58,7 +61,7 @@ function statusOf(review?: Review): ReviewStatus | "unreviewed" {
 }
 
 async function postJson(path: string, body: unknown) {
-  const response = await fetch(path, {
+  const response = await fetch(apiPath(path), {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body)
@@ -215,7 +218,7 @@ export function App() {
 
   async function load() {
     try {
-      const response = await fetch("/api/library");
+      const response = await fetch(apiPath("/api/library"));
       if (!response.ok) throw new Error(await response.text());
       const payload = (await response.json()) as LibraryPayload;
       setLibrary(payload);
@@ -274,4 +277,3 @@ export function App() {
     </main>
   );
 }
-

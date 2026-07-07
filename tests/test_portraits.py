@@ -679,9 +679,9 @@ def test_review_payload_uses_tree_review_metadata(tmp_path: Path) -> None:
     assert source["review"]["status"] == "favorite"
     assert source["selected"]["variant"] == "estate-pixel-claimant-v1:42"
     assert source["selected"]["tags"] == ["claimant"]
-    assert source["source_url"] == "/asset/sources/pexels-123-original.jpg"
+    assert source["source_url"] == "asset/sources/pexels-123-original.jpg"
     assert source["candidates"][0]["review"]["note"] == "strong"
-    assert source["candidates"][0]["final_url"] == "/asset/stylized/candidate-final.png"
+    assert source["candidates"][0]["final_url"] == "asset/stylized/candidate-final.png"
 
 
 def test_select_candidate_in_review_tracks_metadata_in_tree() -> None:

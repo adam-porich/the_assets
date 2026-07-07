@@ -11,6 +11,14 @@ export default defineConfig({
     open: false,
     allowedHosts: ["desktop-g62m1s8.taild55c40.ts.net"],
     proxy: {
+      "/butler/assets/api": {
+        target: "http://127.0.0.1:8765",
+        rewrite: (path) => path.replace(/^\/butler\/assets/, "")
+      },
+      "/butler/assets/asset": {
+        target: "http://127.0.0.1:8765",
+        rewrite: (path) => path.replace(/^\/butler\/assets/, "")
+      },
       "/api": "http://127.0.0.1:8765",
       "/asset": "http://127.0.0.1:8765"
     }
@@ -20,4 +28,3 @@ export default defineConfig({
     globals: true
   }
 });
-

@@ -28,7 +28,7 @@ def save_review(review: dict[str, Any], path: Path = REVIEW_PATH) -> None:
 def asset_url(path: str | None) -> str | None:
     if not path:
         return None
-    return "/asset/" + path.replace("\\", "/")
+    return "asset/" + path.replace("\\", "/")
 
 
 def source_asset_url(local_source_filename: str | None) -> str | None:
