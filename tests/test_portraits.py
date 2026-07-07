@@ -22,6 +22,7 @@ from tools.portraits.manifest import (
     deterministic_source_filename,
     load_manifest,
     save_manifest,
+    update_review_status,
     update_selection,
 )
 from tools.portraits.pexels import parse_search_response
@@ -113,6 +114,17 @@ def test_manifest_serialization_and_selection(tmp_path: Path) -> None:
     selected = load_manifest(tmp_path)["sources"][0]["selected"]
     assert selected["variant"] == "edge24"
     assert selected["tags"] == ["audit", "claimant"]
+
+
+def test_review_status_updates_and_clears(tmp_path: Path) -> None:
+    manifest = {"version": 1, "sources": [{"pexels_photo_id": 123}]}
+    update_review_status(manifest, 123, "favorite", "strong candidate")
+    assert manifest["sources"][0]["review"]["status"] == "favorite"
+    assert manifest["sources"][0]["review"]["note"] == "strong candidate"
+
+    update_review_status(manifest, 123, "clear")
+
+    assert "review" not in manifest["sources"][0]
 
 
 def test_crop_bounds_are_square_and_inside_image() -> None:
@@ -251,6 +263,7 @@ def test_lookbook_generation_includes_failed_and_selected_entries(tmp_path: Path
                 "crop_filename": "crops/pexels-123-crop.png",
                 "processing_status": "processed",
                 "selected": {"variant": "edge24", "tags": ["audit"]},
+                "review": {"status": "favorite", "note": "shortlist this"},
                 "candidates": [
                     {
                         "variant": "edge24",
@@ -305,6 +318,11 @@ def test_lookbook_generation_includes_failed_and_selected_entries(tmp_path: Path
     out = generate_lookbook(library)
     text = out.read_text(encoding="utf-8")
     assert "Pexels 123" in text
+    assert "Portrait picker" in text
+    assert "data-filter=\"favorite\"" in text
+    assert "uv run python -m tools.portraits favorite --photo-id 123" in text
+    assert "badge-favorite" in text
+    assert "shortlist this" in text
     assert "edge24" in text
     assert "audit" in text
     assert "Failed: bad image" in text

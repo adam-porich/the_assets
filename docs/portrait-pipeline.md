@@ -188,7 +188,44 @@ The lookbook groups each source with its crop and processed variants, showing ph
 
 If background benchmarks exist, they are shown below each source with mask previews and timings.
 
+The top of the lookbook has a sticky horizontal picker for jumping between source images, plus filters for:
+
+```text
+all
+favorites
+added
+rejected
+unreviewed
+```
+
+Because the lookbook is static HTML, its Favorite, Reject, Add, and Lookbook controls copy CLI commands. Run the copied command in WSL, then regenerate the lookbook.
+
 It has no external JavaScript dependency.
+
+## Source Review
+
+Use source review before spending time on background removal and filters:
+
+```bash
+uv run python -m tools.portraits favorite --photo-id 123 --note "great hat and silhouette"
+uv run python -m tools.portraits reject --photo-id 456 --note "too corporate"
+uv run python -m tools.portraits add --photo-id 789 --note "send to background benchmark"
+```
+
+Equivalent explicit command:
+
+```bash
+uv run python -m tools.portraits review --photo-id 123 --status favorite
+uv run python -m tools.portraits review --photo-id 123 --status clear
+```
+
+The intended workflow is:
+
+```text
+1. Source review: favorite / reject / add
+2. Background removal: compare none / classical / model masks
+3. Filter review: compare low-resolution variants from the best source or background mode
+```
 
 ## Manual Selection
 

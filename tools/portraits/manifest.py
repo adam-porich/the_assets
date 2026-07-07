@@ -84,6 +84,28 @@ def update_selection(
     return entry
 
 
+def update_review_status(
+    manifest: dict[str, Any],
+    photo_id: int | str,
+    status: str | None,
+    note: str = "",
+) -> dict[str, Any]:
+    entry = find_source(manifest, photo_id)
+    if entry is None:
+        raise ValueError(f"No source with Pexels photo id {photo_id}")
+    if status is None or status == "clear":
+        entry.pop("review", None)
+        return entry
+    if status not in {"favorite", "reject", "add"}:
+        raise ValueError(f"Unknown review status: {status}")
+    entry["review"] = {
+        "status": status,
+        "note": note,
+        "updated_at": utc_now_iso(),
+    }
+    return entry
+
+
 @dataclass(frozen=True)
 class CandidateSettings:
     size: int = 64

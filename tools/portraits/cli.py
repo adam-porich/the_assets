@@ -13,6 +13,7 @@ from .manifest import (
     find_source,
     load_manifest,
     save_manifest,
+    update_review_status,
     update_selection,
 )
 from .pexels import download_candidate, is_plausible_portrait, search_pexels
@@ -206,6 +207,15 @@ def cmd_score(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_review(args: argparse.Namespace) -> int:
+    library_dir = Path(args.input)
+    manifest = load_manifest(library_dir)
+    update_review_status(manifest, args.photo_id, args.status, args.note or "")
+    save_manifest(library_dir, manifest)
+    print(f"Marked Pexels {args.photo_id} as {args.status}")
+    return 0
+
+
 def cmd_harvest(args: argparse.Namespace) -> int:
     cmd_fetch(args)
     if args.process:
@@ -286,6 +296,20 @@ def build_parser() -> argparse.ArgumentParser:
     score.add_argument("--manual-cleanup-needed", choices=["none", "minor", "major"], required=True)
     score.add_argument("--notes")
     score.set_defaults(func=cmd_score)
+
+    review = sub.add_parser("review")
+    review.add_argument("--input", default="portrait-library")
+    review.add_argument("--photo-id", required=True)
+    review.add_argument("--status", choices=["favorite", "reject", "add", "clear"], required=True)
+    review.add_argument("--note")
+    review.set_defaults(func=cmd_review)
+
+    for status in ("favorite", "reject", "add"):
+        alias = sub.add_parser(status)
+        alias.add_argument("--input", default="portrait-library")
+        alias.add_argument("--photo-id", required=True)
+        alias.add_argument("--note")
+        alias.set_defaults(func=cmd_review, status=status)
 
     harvest = sub.add_parser("harvest")
     add_fetch_options(harvest)
