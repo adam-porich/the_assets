@@ -1,0 +1,19 @@
+{
+  "name": "estate-pixel-claimant-v1",
+  "prompt": "character portrait for a card game, fantasy bureaucrat claimant, head and shoulders, centred character, readable face, strong silhouette, simple controlled background, stylized low-resolution-friendly rendering, infernal administrative mood, clear costume shape",
+  "negative_prompt": "text, watermark, logo, extra hands, extra fingers, crowd, complex scene, blurry face, distorted face, duplicate person, photorealistic corporate headshot, noisy background",
+  "strength": 0.45,
+  "steps": 6,
+  "guidance": 6.0,
+  "width": 384,
+  "height": 384,
+  "background_mode": "neutral-dark",
+  "candidate_count": 1,
+  "department_tint": "#4f3d57",
+  "post_processing": {
+    "enabled": true,
+    "logical_size": 64,
+    "review_scale": 4,
+    "palette_colors": 32
+  }
+}

@@ -1,0 +1,72 @@
+{
+  "backend": "openrouter",
+  "candidate": {
+    "backend": "openrouter",
+    "background_mode": "neutral-dark",
+    "candidate_id": "estate-pixel-claimant-v1:3615601749",
+    "created_at": "2026-07-07T14:08:28+00:00",
+    "elapsed_seconds": 26.573,
+    "final_output_path": "stylized/pexels-30051167-estate-pixel-claimant-v1-3615601749-final.png",
+    "guidance": 6.0,
+    "index": 0,
+    "input_composite_path": "composites/pexels-30051167-neutral-dark-composite.png",
+    "mask_mode": "rembg",
+    "model": "openai/gpt-image-1-mini",
+    "negative_prompt": "text, watermark, logo, extra hands, extra fingers, crowd, complex scene, blurry face, distorted face, duplicate person, photorealistic corporate headshot, noisy background",
+    "output_path": "stylized/pexels-30051167-estate-pixel-claimant-v1-3615601749-raw.png",
+    "preset": "estate-pixel-claimant-v1",
+    "prompt": "character portrait for a card game, fantasy bureaucrat claimant, head and shoulders, centred character, readable face, strong silhouette, simple controlled background, stylized low-resolution-friendly rendering, infernal administrative mood, clear costume shape",
+    "seed": 3615601749,
+    "source_photo_id": 30051167,
+    "steps": 6,
+    "strength": 0.45
+  },
+  "final_copied_image_path": "portrait-review/favorites/30051167/estate-pixel-claimant-v1:3615601749.png",
+  "model": "openai/gpt-image-1-mini",
+  "original_generated_paths": {
+    "final": "stylized/pexels-30051167-estate-pixel-claimant-v1-3615601749-final.png",
+    "input_composite": "composites/pexels-30051167-neutral-dark-composite.png",
+    "raw": "stylized/pexels-30051167-estate-pixel-claimant-v1-3615601749-raw.png"
+  },
+  "preparation": {
+    "background_mode": "neutral-dark",
+    "composite_path": "composites/pexels-30051167-neutral-dark-composite.png",
+    "framing": "full-source",
+    "mask_mode": "rembg",
+    "mask_path": "masks/pexels-30051167-rembg-mask.png",
+    "original_size": [
+      867,
+      1300
+    ],
+    "preparation": {
+      "max_edge": 768
+    },
+    "prepared_size": [
+      512,
+      768
+    ],
+    "prepared_source_path": "prepared/pexels-30051167-stylize-source.png",
+    "transparent_foreground_path": "foregrounds/pexels-30051167-rembg-foreground.png"
+  },
+  "prompt_preset": "estate-pixel-claimant-v1",
+  "seed": 3615601749,
+  "source": {
+    "license_page": "https://www.pexels.com/license/",
+    "local_source_filename": "pexels-30051167-original.jpg",
+    "original_height": 4898,
+    "original_image_url": "https://images.pexels.com/photos/30051167/pexels-photo-30051167.jpeg",
+    "original_width": 3265,
+    "pexels_photo_id": 30051167,
+    "photo_page_url": "https://www.pexels.com/photo/colorful-costume-with-vibrant-face-paint-30051167/",
+    "photographer": "Cris Ramos",
+    "photographer_url": "https://www.pexels.com/@cris-ramos-1837545236",
+    "query": "eccentric portrait hat",
+    "selected_image_url": "https://images.pexels.com/photos/30051167/pexels-photo-30051167.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940",
+    "source": "pexels",
+    "source_checksum_sha256": "274b2342f695a30a16f5bd6880e81894082b8b1bbb68d0d6dcaebe60b4aa2e33"
+  },
+  "timing": {
+    "created_at": "2026-07-07T14:08:28+00:00",
+    "elapsed_seconds": 26.573
+  }
+}

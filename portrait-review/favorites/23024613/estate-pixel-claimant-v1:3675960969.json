@@ -1,0 +1,61 @@
+{
+  "backend": "openrouter",
+  "candidate": {
+    "backend": "openrouter",
+    "background_mode": "neutral-dark",
+    "candidate_id": "estate-pixel-claimant-v1:3675960969",
+    "created_at": "2026-07-07T13:11:22+00:00",
+    "elapsed_seconds": 44.566,
+    "final_output_path": "stylized/pexels-23024613-estate-pixel-claimant-v1-3675960969-final.png",
+    "guidance": 6.0,
+    "index": 0,
+    "input_composite_path": "composites/pexels-23024613-neutral-dark-composite.png",
+    "mask_mode": "rembg",
+    "model": "openai/gpt-image-1-mini",
+    "negative_prompt": "text, watermark, logo, extra hands, extra fingers, crowd, complex scene, blurry face, distorted face, duplicate person, photorealistic corporate headshot, noisy background",
+    "output_path": "stylized/pexels-23024613-estate-pixel-claimant-v1-3675960969-raw.png",
+    "preset": "estate-pixel-claimant-v1",
+    "prompt": "character portrait for a card game, fantasy bureaucrat claimant, head and shoulders, centred character, readable face, strong silhouette, simple controlled background, stylized low-resolution-friendly rendering, infernal administrative mood, clear costume shape",
+    "seed": 3675960969,
+    "source_photo_id": 23024613,
+    "steps": 6,
+    "strength": 0.45
+  },
+  "final_copied_image_path": "portrait-review/favorites/23024613/estate-pixel-claimant-v1:3675960969.png",
+  "model": "openai/gpt-image-1-mini",
+  "original_generated_paths": {
+    "final": "stylized/pexels-23024613-estate-pixel-claimant-v1-3675960969-final.png",
+    "input_composite": "composites/pexels-23024613-neutral-dark-composite.png",
+    "raw": "stylized/pexels-23024613-estate-pixel-claimant-v1-3675960969-raw.png"
+  },
+  "preparation": {
+    "background_mode": "neutral-dark",
+    "composite_path": "composites/pexels-23024613-neutral-dark-composite.png",
+    "framing": "full-source",
+    "mask_mode": "rembg",
+    "mask_path": "masks/pexels-23024613-rembg-mask.png",
+    "prepared_source_path": "prepared/pexels-23024613-stylize-source.png",
+    "transparent_foreground_path": "foregrounds/pexels-23024613-rembg-foreground.png"
+  },
+  "prompt_preset": "estate-pixel-claimant-v1",
+  "seed": 3675960969,
+  "source": {
+    "license_page": "https://www.pexels.com/license/",
+    "local_source_filename": "pexels-23024613-original.jpg",
+    "original_height": 3000,
+    "original_image_url": "https://images.pexels.com/photos/23024613/pexels-photo-23024613.jpeg",
+    "original_width": 2000,
+    "pexels_photo_id": 23024613,
+    "photo_page_url": "https://www.pexels.com/photo/portrait-of-woman-in-costume-23024613/",
+    "photographer": "Eduardo L\u00f3pez",
+    "photographer_url": "https://www.pexels.com/@eduardo-lopez-242403618",
+    "query": "eccentric portrait hat",
+    "selected_image_url": "https://images.pexels.com/photos/23024613/pexels-photo-23024613.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940",
+    "source": "pexels",
+    "source_checksum_sha256": "70917145e55ece938836083d924d9853bf48c80083d96ef292cc4e86bb0b324e"
+  },
+  "timing": {
+    "created_at": "2026-07-07T13:11:22+00:00",
+    "elapsed_seconds": 44.566
+  }
+}

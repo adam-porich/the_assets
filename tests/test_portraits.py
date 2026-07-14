@@ -3,11 +3,25 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import sys
 from pathlib import Path
 
 from PIL import Image, ImageDraw
 
-from tools.portraits.cli import cmd_background, load_env_file, load_env_files
+from tools.portraits.cli import cmd_background, cmd_stylize, load_env_file, load_env_files
+from tools.portraits.img2img import (
+    ExternalCommandBackend,
+    Img2ImgRequest,
+    Img2ImgResult,
+    OpenRouterBackend,
+    PreparationSettings,
+    load_preset,
+    prepare_rembg_composite,
+    raw_candidate_path,
+    resize_full_source,
+    stable_seed,
+    stylize_source,
+)
 from tools.portraits.imaging import (
     benchmark_background_source,
     classical_background_mask,
@@ -26,6 +40,15 @@ from tools.portraits.manifest import (
     update_selection,
 )
 from tools.portraits.pexels import parse_search_response
+from tools.portraits.review_server import (
+    build_library_payload,
+    favorite_candidate,
+    generate_candidate,
+    load_review,
+    save_review,
+    select_candidate_in_review,
+    update_review_item,
+)
 
 
 def make_fixture_image(path: Path) -> None:
@@ -83,6 +106,18 @@ def test_parse_pexels_response_preserves_provenance_fields() -> None:
 def test_deterministic_filenames() -> None:
     assert deterministic_source_filename(123) == "pexels-123-original.jpg"
     assert deterministic_candidate_filename(123, "edge24", 64) == "pexels-123-edge24-64.png"
+
+
+def test_preset_loading() -> None:
+    preset = load_preset("estate-pixel-claimant-v1")
+    assert preset.name == "estate-pixel-claimant-v1"
+    assert preset.background_mode == "neutral-dark"
+    assert preset.candidate_count == 1
+    assert preset.width == 384
+    assert preset.height == 384
+    assert preset.steps == 6
+    assert "fantasy bureaucrat" in preset.prompt
+    assert stable_seed(123, preset.name) == stable_seed(123, preset.name)
 
 
 def test_manifest_serialization_and_selection(tmp_path: Path) -> None:
@@ -233,6 +268,250 @@ def test_background_command_merges_existing_modes(tmp_path: Path) -> None:
     assert [benchmark["mode"] for benchmark in entry["background_benchmarks"]] == ["classical", "none"]
 
 
+def test_background_command_rejects_classical_mode(tmp_path: Path) -> None:
+    library = tmp_path / "portrait-library"
+    source_dir = library / "sources"
+    source_dir.mkdir(parents=True)
+    save_manifest(library, {"version": 1, "sources": []})
+    args = type(
+        "Args",
+        (),
+        {
+            "input": str(source_dir),
+            "output": None,
+            "variants": "clean16",
+            "modes": "classical",
+            "size": 48,
+            "review_scale": 2,
+            "contrast": 1.08,
+            "saturation": 0.95,
+            "sharpness": 1.05,
+            "crop_padding": 1.9,
+            "palette": None,
+            "photo_id": [],
+        },
+    )()
+
+    try:
+        cmd_background(args)
+    except SystemExit as exc:
+        assert "Unknown background modes: classical" in str(exc)
+    else:
+        raise AssertionError("classical mode should not be accepted by the normal CLI")
+
+
+class FakeImg2ImgBackend:
+    name = "fake"
+
+    def generate(self, request):
+        output = raw_candidate_path(Path(request.output_dir).parent, 123, request.preset, request.seed)
+        make_fixture_image(output)
+        return [
+            Img2ImgResult(
+                image_path=str(output),
+                backend=self.name,
+                model="fake-model",
+                seed=request.seed,
+                strength=request.strength,
+                steps=request.steps,
+                guidance=request.guidance,
+                prompt=request.prompt,
+                negative_prompt=request.negative_prompt,
+                elapsed_seconds=0.01,
+            )
+        ]
+
+
+def test_stylize_source_records_img2img_metadata(tmp_path: Path, monkeypatch) -> None:
+    library = tmp_path / "portrait-library"
+    source_dir = library / "sources"
+    source_dir.mkdir(parents=True)
+    source = source_dir / "pexels-123-original.jpg"
+    make_fixture_image(source)
+    monkeypatch.setattr("tools.portraits.img2img.model_background_mask", lambda image: Image.new("L", image.size, 255))
+    preset = load_preset("estate-pixel-claimant-v1")
+
+    prep, records = stylize_source(source, 123, library, preset, FakeImg2ImgBackend(), seed=42, count=1)
+
+    assert prep["mask_mode"] == "rembg"
+    assert prep["background_mode"] == "neutral-dark"
+    assert prep["framing"] == "full-source"
+    assert prep["prepared_source_path"].endswith("stylize-source.png")
+    assert records[0]["candidate_id"] == "estate-pixel-claimant-v1:42"
+    assert records[0]["backend"] == "fake"
+    assert records[0]["model"] == "fake-model"
+    assert records[0]["mask_mode"] == "rembg"
+    assert records[0]["input_composite_path"].endswith("neutral-dark-composite.png")
+    assert (library / records[0]["output_path"]).exists()
+    assert (library / records[0]["final_output_path"]).exists()
+
+
+def test_prepared_source_resize_preserves_aspect_ratio_without_cropping() -> None:
+    image = Image.new("RGB", (1600, 1000), "#c8b09a")
+
+    resized = resize_full_source(image, 768)
+
+    assert resized.size == (768, 480)
+
+
+def test_rembg_prep_records_full_source_max_edge(tmp_path: Path, monkeypatch) -> None:
+    library = tmp_path / "portrait-library"
+    source_dir = library / "sources"
+    source_dir.mkdir(parents=True)
+    source = source_dir / "pexels-123-original.jpg"
+    Image.new("RGB", (1600, 1000), "#c8b09a").save(source)
+    monkeypatch.setattr("tools.portraits.img2img.model_background_mask", lambda image: Image.new("L", image.size, 255))
+    preset = load_preset("estate-pixel-claimant-v1")
+
+    prep = prepare_rembg_composite(source, 123, library, preset, PreparationSettings(max_edge=768))
+
+    assert prep["framing"] == "full-source"
+    assert prep["preparation"]["max_edge"] == 768
+    assert prep["prepared_size"] == [768, 480]
+    assert Image.open(library / prep["prepared_source_path"]).size == (768, 480)
+
+
+def test_external_backend_serializes_request_and_parses_result(tmp_path: Path) -> None:
+    output_dir = tmp_path / "stylized"
+    output_dir.mkdir()
+    script = tmp_path / "fake_backend.py"
+    script.write_text(
+        """
+import json
+import sys
+from pathlib import Path
+from PIL import Image
+request_path = Path(sys.argv[-1])
+request = json.loads(request_path.read_text())
+out = Path(request["output_dir"]) / f'{request["output_base"]}-raw.png'
+Image.new("RGB", (32, 32), "#44352f").save(out)
+print(json.dumps({"results": [{
+    "image_path": str(out),
+    "backend": "external-test",
+    "model": "tiny-test",
+    "seed": request["seed"],
+    "strength": request["strength"],
+    "steps": request["steps"],
+    "guidance": request["guidance"],
+    "prompt": request["prompt"],
+    "negative_prompt": request["negative_prompt"],
+    "elapsed_seconds": 0.02
+}]}))
+""",
+        encoding="utf-8",
+    )
+    request = Img2ImgRequest(
+        input_image_path=str(tmp_path / "input.png"),
+        prompt="prompt",
+        negative_prompt="negative",
+        seed=7,
+        strength=0.4,
+        steps=6,
+        guidance=5,
+        width=384,
+        height=384,
+        preset="preset-v1",
+        count=1,
+        output_dir=str(output_dir),
+        output_base="candidate",
+    )
+
+    results = ExternalCommandBackend(f"{sys.executable} {script}").generate(request)
+
+    saved_request = json.loads((output_dir / "candidate-request.json").read_text(encoding="utf-8"))
+    assert saved_request["width"] == 384
+    assert saved_request["count"] == 1
+    assert results[0].backend == "external-test"
+    assert results[0].model == "tiny-test"
+    assert Path(results[0].image_path).exists()
+
+
+def test_openrouter_backend_sends_reference_image_and_saves_result(tmp_path: Path, monkeypatch) -> None:
+    input_path = tmp_path / "input.png"
+    make_fixture_image(input_path)
+    output_dir = tmp_path / "stylized"
+    output_dir.mkdir()
+    captured = {}
+
+    class Response:
+        ok = True
+        status_code = 200
+        text = ""
+
+        def json(self):
+            encoded = Image.new("RGB", (16, 16), "#44352f")
+            out = tmp_path / "response.png"
+            encoded.save(out)
+            import base64
+
+            return {"data": [{"b64_json": base64.b64encode(out.read_bytes()).decode("ascii")}]}
+
+    def fake_post(url, headers, json, timeout):
+        captured["url"] = url
+        captured["headers"] = headers
+        captured["json"] = json
+        captured["timeout"] = timeout
+        return Response()
+
+    monkeypatch.setattr("tools.portraits.img2img.requests.post", fake_post)
+    request = Img2ImgRequest(
+        input_image_path=str(input_path),
+        prompt="prompt",
+        seed=7,
+        strength=0.4,
+        steps=6,
+        guidance=5,
+        width=384,
+        height=384,
+        preset="preset-v1",
+        count=1,
+        output_dir=str(output_dir),
+        output_base="candidate",
+    )
+
+    results = OpenRouterBackend(api_key="test-key").generate(request)
+
+    assert captured["url"] == "https://openrouter.ai/api/v1/images"
+    assert captured["json"]["model"] == "openai/gpt-image-1-mini"
+    assert captured["json"]["quality"] == "low"
+    assert captured["json"]["input_references"][0]["image_url"]["url"].startswith("data:image/png;base64,")
+    assert results[0].backend == "openrouter"
+    assert results[0].model == "openai/gpt-image-1-mini"
+    assert Path(results[0].image_path).exists()
+
+
+def test_stylize_command_errors_when_backend_unconfigured(tmp_path: Path, monkeypatch) -> None:
+    library = tmp_path / "portrait-library"
+    source_dir = library / "sources"
+    source_dir.mkdir(parents=True)
+    make_fixture_image(source_dir / "pexels-123-original.jpg")
+    save_manifest(library, {"version": 1, "sources": [{"pexels_photo_id": 123, "local_source_filename": "pexels-123-original.jpg"}]})
+    monkeypatch.delenv("PORTRAIT_IMG2IMG_COMMAND", raising=False)
+    args = type(
+        "Args",
+        (),
+        {
+            "input": str(library),
+            "preset": "estate-pixel-claimant-v1",
+            "backend": "external",
+            "photo_id": ["123"],
+            "selected_only": False,
+            "review_status": None,
+            "limit": None,
+            "count": 1,
+            "seed": None,
+            "crop_padding": 1.9,
+        },
+    )()
+
+    try:
+        cmd_stylize(args)
+    except SystemExit as exc:
+        assert "PORTRAIT_IMG2IMG_COMMAND is not configured" in str(exc)
+    else:
+        raise AssertionError("stylize should fail clearly without a configured backend")
+
+
 def test_lookbook_generation_includes_failed_and_selected_entries(tmp_path: Path) -> None:
     library = tmp_path / "portrait-library"
     (library / "sources").mkdir(parents=True)
@@ -245,6 +524,11 @@ def test_lookbook_generation_includes_failed_and_selected_entries(tmp_path: Path
     make_fixture_image(library / "crops" / "pexels-123-crop.png")
     make_fixture_image(library / "candidates" / "pexels-123-edge24-64.png")
     make_fixture_image(library / "candidates" / "pexels-123-classical-clean16-64.png")
+    (library / "stylized").mkdir()
+    make_fixture_image(library / "stylized" / "pexels-123-estate-pixel-claimant-v1-42-raw.png")
+    make_fixture_image(library / "stylized" / "pexels-123-estate-pixel-claimant-v1-42-final.png")
+    (library / "composites").mkdir()
+    make_fixture_image(library / "composites" / "pexels-123-neutral-dark-composite.png")
     make_fixture_image(library / "backgrounds" / "pexels-123-classical-neutral.png")
     make_fixture_image(library / "foregrounds" / "pexels-123-classical-foreground.png")
     Image.new("L", (160, 220), 255).save(library / "masks" / "pexels-123-classical-mask.png")
@@ -264,6 +548,30 @@ def test_lookbook_generation_includes_failed_and_selected_entries(tmp_path: Path
                 "processing_status": "processed",
                 "selected": {"variant": "edge24", "tags": ["audit"]},
                 "review": {"status": "favorite", "note": "shortlist this"},
+                "stylization_prep": {
+                    "mask_mode": "rembg",
+                    "background_mode": "neutral-dark",
+                    "mask_path": "masks/pexels-123-classical-mask.png",
+                    "transparent_foreground_path": "foregrounds/pexels-123-classical-foreground.png",
+                    "composite_path": "composites/pexels-123-neutral-dark-composite.png",
+                },
+                "stylized_candidates": [
+                    {
+                        "candidate_id": "estate-pixel-claimant-v1:42",
+                        "preset": "estate-pixel-claimant-v1",
+                        "backend": "fake",
+                        "model": "fake-model",
+                        "seed": 42,
+                        "strength": 0.45,
+                        "steps": 10,
+                        "guidance": 6,
+                        "elapsed_seconds": 0.01,
+                        "background_mode": "neutral-dark",
+                        "mask_mode": "rembg",
+                        "output_path": "stylized/pexels-123-estate-pixel-claimant-v1-42-raw.png",
+                        "final_output_path": "stylized/pexels-123-estate-pixel-claimant-v1-42-final.png",
+                    }
+                ],
                 "candidates": [
                     {
                         "variant": "edge24",
@@ -321,8 +629,12 @@ def test_lookbook_generation_includes_failed_and_selected_entries(tmp_path: Path
     assert "Portrait picker" in text
     assert "data-filter=\"favorite\"" in text
     assert "uv run python -m tools.portraits favorite --photo-id 123" in text
+    assert "uv run --extra background python -m tools.portraits stylize --input portrait-library --preset estate-pixel-claimant-v1 --backend openrouter --photo-id 123" in text
     assert "badge-favorite" in text
     assert "shortlist this" in text
+    assert "Img2img Candidates" in text
+    assert "fake / fake-model" in text
+    assert "rembg mask" in text
     assert "edge24" in text
     assert "audit" in text
     assert "Failed: bad image" in text
@@ -360,3 +672,234 @@ def test_repo_env_overrides_home_env_but_not_shell(tmp_path: Path, monkeypatch) 
 
     assert os.environ["PEXELS_API_KEY"] == "from-repo"
     assert os.environ["OTHER"] == "from-shell"
+
+
+def test_review_payload_uses_tree_review_metadata(tmp_path: Path) -> None:
+    library = tmp_path / "portrait-library"
+    review_path = tmp_path / "portrait-review" / "review.json"
+    (library / "sources").mkdir(parents=True)
+    (library / "stylized").mkdir()
+    make_fixture_image(library / "sources" / "pexels-123-original.jpg")
+    make_fixture_image(library / "stylized" / "candidate-final.png")
+    save_manifest(
+        library,
+        {
+            "version": 1,
+            "sources": [
+                {
+                    "pexels_photo_id": 123,
+                    "local_source_filename": "pexels-123-original.jpg",
+                    "stylization_prep": {
+                        "prepared_source_path": "prepared/pexels-123-stylize-source.png",
+                        "mask_path": "masks/pexels-123-rembg-mask.png",
+                        "composite_path": "composites/pexels-123-neutral-dark-composite.png",
+                    },
+                    "stylized_candidates": [
+                        {
+                            "candidate_id": "estate-pixel-claimant-v1:42",
+                            "final_output_path": "stylized/candidate-final.png",
+                            "backend": "openrouter",
+                            "model": "openai/gpt-image-1-mini",
+                        }
+                    ],
+                }
+            ],
+        },
+    )
+    save_review(
+        {
+            "version": 1,
+            "sources": {
+                "123": {
+                    "status": "favorite",
+                    "selected_candidate": "estate-pixel-claimant-v1:42",
+                    "tags": ["claimant"],
+                }
+            },
+            "candidates": {"estate-pixel-claimant-v1:42": {"status": "add", "note": "strong"}},
+        },
+        review_path,
+    )
+
+    payload = build_library_payload(library, review_path)
+
+    source = payload["sources"][0]
+    assert source["review"]["status"] == "favorite"
+    assert source["selected"]["variant"] == "estate-pixel-claimant-v1:42"
+    assert source["selected"]["tags"] == ["claimant"]
+    assert source["source_url"] == "asset/sources/pexels-123-original.jpg"
+    assert source["candidates"][0]["review"]["note"] == "strong"
+    assert source["candidates"][0]["final_url"] == "asset/stylized/candidate-final.png"
+
+
+def test_select_candidate_in_review_tracks_metadata_in_tree() -> None:
+    review = {"version": 1, "sources": {}, "candidates": {}}
+
+    select_candidate_in_review(review, "123", "estate-pixel-claimant-v1:42", ["audit", "claimant", "audit"])
+
+    assert review["sources"]["123"]["selected_candidate"] == "estate-pixel-claimant-v1:42"
+    assert review["sources"]["123"]["tags"] == ["audit", "claimant"]
+    assert review["candidates"]["estate-pixel-claimant-v1:42"]["status"] == "favorite"
+
+
+def test_generation_requires_explicit_source_preset_and_model(tmp_path: Path) -> None:
+    library = tmp_path / "portrait-library"
+    save_manifest(library, {"version": 1, "sources": []})
+
+    for photo_id, preset, model in (("", "estate-pixel-claimant-v1", "openai/gpt-image-1-mini"), ("123", "", "openai/gpt-image-1-mini"), ("123", "estate-pixel-claimant-v1", "")):
+        try:
+            generate_candidate(library, photo_id, preset, model)
+        except ValueError as exc:
+            assert "photo_id, preset, and model are required" in str(exc)
+        else:
+            raise AssertionError("generate_candidate should require explicit inputs")
+
+
+def test_generation_endpoint_helper_records_one_openrouter_candidate(tmp_path: Path, monkeypatch) -> None:
+    library = tmp_path / "portrait-library"
+    source_dir = library / "sources"
+    source_dir.mkdir(parents=True)
+    source = source_dir / "pexels-123-original.jpg"
+    make_fixture_image(source)
+    save_manifest(library, {"version": 1, "sources": [{"pexels_photo_id": 123, "local_source_filename": "pexels-123-original.jpg"}]})
+    monkeypatch.setattr("tools.portraits.img2img.model_background_mask", lambda image: Image.new("L", image.size, 255))
+
+    class FakeOpenRouterBackend(FakeImg2ImgBackend):
+        name = "openrouter"
+
+        def __init__(self, model):
+            self.model = model
+
+        def generate(self, request):
+            results = super().generate(request)
+            return [
+                Img2ImgResult(
+                    image_path=result.image_path,
+                    backend=self.name,
+                    model=self.model,
+                    seed=result.seed,
+                    strength=result.strength,
+                    steps=result.steps,
+                    guidance=result.guidance,
+                    prompt=result.prompt,
+                    negative_prompt=result.negative_prompt,
+                    elapsed_seconds=result.elapsed_seconds,
+                )
+                for result in results
+            ]
+
+    monkeypatch.setattr("tools.portraits.review_server.OpenRouterBackend", FakeOpenRouterBackend)
+
+    result = generate_candidate(library, "123", "estate-pixel-claimant-v1", "openai/gpt-image-1-mini")
+
+    entry = load_manifest(library)["sources"][0]
+    assert len(result["records"]) == 1
+    assert entry["stylized_candidates"][0]["backend"] == "openrouter"
+    assert entry["stylized_candidates"][0]["model"] == "openai/gpt-image-1-mini"
+
+
+def test_favorite_candidate_copies_final_image_and_writes_provenance(tmp_path: Path) -> None:
+    library = tmp_path / "portrait-library"
+    review_path = tmp_path / "portrait-review" / "review.json"
+    (library / "sources").mkdir(parents=True)
+    (library / "stylized").mkdir()
+    final_path = library / "stylized" / "pexels-123-estate-pixel-claimant-v1-42-final.png"
+    make_fixture_image(library / "sources" / "pexels-123-original.jpg")
+    make_fixture_image(final_path)
+    save_manifest(
+        library,
+        {
+            "version": 1,
+            "sources": [
+                {
+                    "source": "pexels",
+                    "pexels_photo_id": 123,
+                    "photo_page_url": "https://www.pexels.com/photo/example-123/",
+                    "photographer": "Tester",
+                    "original_image_url": "https://example.test/original.jpg",
+                    "selected_image_url": "https://example.test/large.jpg",
+                    "local_source_filename": "pexels-123-original.jpg",
+                    "stylization_prep": {
+                        "framing": "full-source",
+                        "preparation": {"max_edge": 768},
+                        "prepared_source_path": "prepared/pexels-123-stylize-source.png",
+                    },
+                    "stylized_candidates": [
+                        {
+                            "candidate_id": "estate-pixel-claimant-v1:42",
+                            "preset": "estate-pixel-claimant-v1",
+                            "backend": "openrouter",
+                            "model": "openai/gpt-image-1-mini",
+                            "seed": 42,
+                            "elapsed_seconds": 0.5,
+                            "final_output_path": "stylized/pexels-123-estate-pixel-claimant-v1-42-final.png",
+                        }
+                    ],
+                }
+            ],
+        },
+    )
+    save_review({"version": 1, "sources": {}, "candidates": {}}, review_path)
+
+    result = favorite_candidate(library, review_path, "123", "estate-pixel-claimant-v1:42")
+
+    copied = Path(result["image_path"])
+    sidecar = Path(result["metadata_path"])
+    assert copied.exists()
+    assert sidecar.exists()
+    metadata = json.loads(sidecar.read_text(encoding="utf-8"))
+    assert metadata["source"]["pexels_photo_id"] == 123
+    assert metadata["preparation"]["preparation"]["max_edge"] == 768
+    assert metadata["prompt_preset"] == "estate-pixel-claimant-v1"
+    assert metadata["model"] == "openai/gpt-image-1-mini"
+    assert metadata["original_generated_paths"]["final"] == "stylized/pexels-123-estate-pixel-claimant-v1-42-final.png"
+    assert load_review(review_path)["candidates"]["estate-pixel-claimant-v1:42"]["status"] == "favorite"
+
+
+def test_source_favorite_does_not_copy_pexels_source_image(tmp_path: Path) -> None:
+    review_path = tmp_path / "portrait-review" / "review.json"
+    review = {"version": 1, "sources": {}, "candidates": {}}
+
+    update_review_item(review, "sources", "123", "favorite")
+    save_review(review, review_path)
+
+    assert load_review(review_path)["sources"]["123"]["status"] == "favorite"
+    assert not (tmp_path / "portrait-review" / "favorites").exists()
+
+
+def test_review_payload_includes_manifest_candidates_and_scanned_disk_outputs(tmp_path: Path) -> None:
+    library = tmp_path / "portrait-library"
+    review_path = tmp_path / "portrait-review" / "review.json"
+    (library / "sources").mkdir(parents=True)
+    (library / "stylized").mkdir()
+    make_fixture_image(library / "sources" / "pexels-123-original.jpg")
+    make_fixture_image(library / "stylized" / "pexels-123-estate-pixel-claimant-v1-42-final.png")
+    make_fixture_image(library / "stylized" / "pexels-123-dead-end-v1-99-final.png")
+    save_manifest(
+        library,
+        {
+            "version": 1,
+            "sources": [
+                {
+                    "pexels_photo_id": 123,
+                    "local_source_filename": "pexels-123-original.jpg",
+                    "stylized_candidates": [
+                        {
+                            "candidate_id": "estate-pixel-claimant-v1:42",
+                            "preset": "estate-pixel-claimant-v1",
+                            "seed": 42,
+                            "final_output_path": "stylized/pexels-123-estate-pixel-claimant-v1-42-final.png",
+                        }
+                    ],
+                }
+            ],
+        },
+    )
+    save_review({"version": 1, "sources": {}, "candidates": {}}, review_path)
+
+    payload = build_library_payload(library, review_path)
+
+    source = payload["sources"][0]
+    assert [candidate["candidate_id"] for candidate in source["candidates"]] == ["estate-pixel-claimant-v1:42"]
+    assert {candidate["candidate_id"] for candidate in source["all_outputs"]} == {"estate-pixel-claimant-v1:42", "dead-end-v1:99"}
+    assert any(candidate.get("disk_only") for candidate in source["all_outputs"] if candidate["candidate_id"] == "dead-end-v1:99")

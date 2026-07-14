@@ -1,0 +1,24 @@
+# systemd --user unit for The Assets portrait review app (Vite + HMR).
+#
+# nginx reverse-proxies /butler/assets/ to this server on 127.0.0.1:5182.
+#
+# Install:
+#   cp deploy/the-assets-review-app.service ~/.config/systemd/user/
+#   systemctl --user daemon-reload
+#   systemctl --user enable --now the-assets-review-app.service
+
+[Unit]
+Description=The Assets portrait review app (Vite + HMR)
+After=network.target the-assets-review-api.service
+
+[Service]
+Type=simple
+WorkingDirectory=%h/dev/the_assets
+Environment=PATH=/home/gimo/.nvm/versions/node/v22.22.1/bin:/usr/local/bin:/usr/bin:/bin
+ExecStart=/home/gimo/.nvm/versions/node/v22.22.1/bin/npm run dev
+Restart=on-failure
+RestartSec=2
+
+[Install]
+WantedBy=default.target
+

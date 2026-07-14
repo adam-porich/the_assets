@@ -1,0 +1,22 @@
+# systemd --user unit for The Assets portrait review API.
+#
+# Install:
+#   cp deploy/the-assets-review-api.service ~/.config/systemd/user/
+#   systemctl --user daemon-reload
+#   systemctl --user enable --now the-assets-review-api.service
+
+[Unit]
+Description=The Assets portrait review API
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=%h/dev/the_assets
+Environment=PATH=%h/.local/bin:/usr/local/bin:/usr/bin:/bin
+ExecStart=%h/.local/bin/uv run python -m tools.portraits review-server
+Restart=on-failure
+RestartSec=2
+
+[Install]
+WantedBy=default.target
+

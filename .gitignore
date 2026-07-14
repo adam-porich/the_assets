@@ -4,7 +4,9 @@ __pycache__/
 .venv/
 venv/
 .env
+node_modules/
+dist/
+coverage/
 
 # Generated portrait source images and candidates can become large.
 portrait-library/
-
