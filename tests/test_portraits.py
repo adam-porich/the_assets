@@ -8,7 +8,7 @@ from pathlib import Path
 
 from PIL import Image, ImageDraw
 
-from tools.cards.pipeline import card_payloads, list_templates, master_payloads, promote_master, render_card, update_master_composition, validate_cards
+from tools.cards.pipeline import card_payloads, create_set, list_templates, master_payloads, promote_master, render_card, update_master_composition, validate_cards, validate_set
 from tools.portraits.cli import cmd_background, cmd_stylize, load_env_file, load_env_files
 from tools.portraits.img2img import (
     ExternalCommandBackend,
@@ -165,6 +165,38 @@ def test_portrait_master_and_deterministic_card_render(tmp_path: Path) -> None:
     assert masters[0]["master_url"] == "asset/masters/claimant-123.png"
     assert masters[0]["renders"][0]["card_id"] == card["card_id"]
     assert list_templates()[0]["archetypes"]["standard-bust"]["label"] == "Standard bust"
+
+
+def test_clean_master_preserves_raw_canvas_and_set_requires_approvals(tmp_path: Path) -> None:
+    library = tmp_path / "portrait-library"
+    stylized = library / "stylized"
+    stylized.mkdir(parents=True)
+    raw_path = stylized / "pexels-123-estate-pixel-claimant-v1-43-raw.png"
+    raw = Image.new("RGB", (300, 500), "#6d5141")
+    raw.save(raw_path)
+    final_path = stylized / "pexels-123-estate-pixel-claimant-v1-43-final.png"
+    Image.new("RGB", (128, 128), "#6d5141").save(final_path)
+    save_manifest(library, {"version": 1, "sources": [{"pexels_photo_id": 123, "stylized_candidates": [{
+        "candidate_id": "estate-pixel-claimant-v1:43", "output_path": str(raw_path.relative_to(library)), "final_output_path": str(final_path.relative_to(library)),
+    }]}]})
+    master = promote_master(library, "123", "estate-pixel-claimant-v1:43", "claimant-raw", source_kind="clean")
+    assert master["master_source_kind"] == "clean"
+    assert master["master_size"] == [300, 500]
+    assert Image.open(library / master["master_path"]).size == (300, 500)
+    standard = render_card(library, "claimant-raw", archetype_id="standard-bust")
+    tall = render_card(library, "claimant-raw", archetype_id="tall-silhouette")
+    assert standard["crop_transform"]["source_box_normalized"] != tall["crop_transform"]["source_box_normalized"]
+    review = {"masters": {"claimant-raw": {"status": "approved"}}, "cards": {standard["card_id"]: {"status": "approved"}}}
+    created = create_set(library, review, "fixture-set", "Fixture set", [standard["card_id"]])
+    assert created["card_ids"] == [standard["card_id"]]
+    assert (library / created["contact_sheet_path"]).exists()
+    assert validate_set(library, "fixture-set")["ok"]
+    try:
+        create_set(library, {"masters": {}, "cards": {}}, "not-approved", "No", [tall["card_id"]])
+    except ValueError as exc:
+        assert "only approved" in str(exc)
+    else:
+        raise AssertionError("unapproved cards must not enter a set")
 
 
 def test_manifest_serialization_and_selection(tmp_path: Path) -> None:
@@ -843,6 +875,10 @@ def test_generation_endpoint_helper_records_one_openrouter_candidate(tmp_path: P
     assert len(result["records"]) == 1
     assert entry["stylized_candidates"][0]["backend"] == "openrouter"
     assert entry["stylized_candidates"][0]["model"] == "openai/gpt-image-1-mini"
+    assert entry["stylized_candidates"][0]["style_id"] == "estate-card-v1"
+    assert entry["stylized_candidates"][0]["style_version"] == 1
+    assert entry["stylized_candidates"][0]["style_reference_paths"] == ["portrait-review/styles/9ff3c44f945f.png"]
+    assert len(entry["stylized_candidates"][0]["style_reference_pack"]) == 2
 
 
 def test_favorite_candidate_copies_final_image_and_writes_provenance(tmp_path: Path) -> None:

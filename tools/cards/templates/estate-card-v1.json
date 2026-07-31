@@ -13,8 +13,29 @@
     "label": "#c9b99a"
   },
   "archetypes": {
-    "standard-bust": {"face_y_bias": 0.16, "label": "Standard bust"},
-    "tall-silhouette": {"face_y_bias": 0.07, "label": "Tall silhouette"},
-    "wide-torso": {"face_y_bias": 0.23, "label": "Wide torso"}
+    "standard-bust": {
+      "label": "Standard bust",
+      "crop_scale": 0.78,
+      "face_target": [0.5, 0.39],
+      "safe_face_x": [0.32, 0.68],
+      "safe_face_y": [0.20, 0.55],
+      "safe_silhouette_occupancy": [0.48, 0.92]
+    },
+    "tall-silhouette": {
+      "label": "Tall silhouette",
+      "crop_scale": 1.0,
+      "face_target": [0.5, 0.31],
+      "safe_face_x": [0.32, 0.68],
+      "safe_face_y": [0.14, 0.48],
+      "safe_silhouette_occupancy": [0.42, 0.86]
+    },
+    "wide-torso": {
+      "label": "Wide torso",
+      "crop_scale": 0.9,
+      "face_target": [0.5, 0.42],
+      "safe_face_x": [0.30, 0.70],
+      "safe_face_y": [0.24, 0.58],
+      "safe_silhouette_occupancy": [0.55, 0.98]
+    }
   }
 }

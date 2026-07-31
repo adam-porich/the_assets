@@ -15,35 +15,35 @@ contract rather than a label attached at promotion time.
 
 ## Checklist
 
-- [ ] Select and store a small fixed house-style reference pack in
+- [x] Select and store a small fixed house-style reference pack in
   `tools/portraits/styles/estate-card-v1.json`.
-- [ ] Record the house-style ID/version on every new candidate, not only a
+- [x] Record the house-style ID/version on every new candidate, not only a
   promoted master.
-- [ ] Make generation choose the house style explicitly and resolve its prompt,
+- [x] Make generation choose the house style explicitly and resolve its prompt,
   negative prompt, references, palette roles, and master post-processing.
-- [ ] Add a simple Style contract view to the web UI: references, palette
+- [x] Add a simple Style contract view to the web UI: references, palette
   roles, logical size, and generation preset.
-- [ ] Audit the selected image backend's documented request shape and map only
+- [x] Audit the selected image backend's documented request shape and map only
   supported controls into its payload.
-- [ ] Stop presenting unsupported `strength`, `steps`, `guidance`, or size
+- [x] Stop presenting unsupported `strength`, `steps`, `guidance`, or size
   fields as effective generation controls; label them provenance-only or omit
   them from the active UI.
-- [ ] Add backend capability metadata for identity/reference count, seed,
+- [x] Add backend capability metadata for identity/reference count, seed,
   dimensions, and any supported image-to-image strength control.
-- [ ] Run a fixed source benchmark using the same style contract and compare
+- [x] Run a fixed source benchmark using the same style contract and compare
   results as a grid in the review app.
-- [ ] Record explicit reject reasons for text, weak silhouette, palette drift,
+- [x] Record explicit reject reasons for text, weak silhouette, palette drift,
   and poor identity retention.
-- [ ] Add tests ensuring a candidate/master records its resolved style version
+- [x] Add tests ensuring a candidate/master records its resolved style version
   and reference pack.
 
 ## Acceptance checks
 
-- [ ] A reviewer can identify the exact fixed style contract behind every new
+- [x] A reviewer can identify the exact fixed style contract behind every new
   candidate and master.
-- [ ] The UI exposes only controls that the selected backend can actually
+- [x] The UI exposes only controls that the selected backend can actually
   honor.
-- [ ] A small benchmark batch is generated from one style version and reviewed
+- [x] A small benchmark batch is generated from one style version and reviewed
   together without hidden reference drift.
 
 ## Decision needed before work

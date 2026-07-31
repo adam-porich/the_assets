@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 type ReviewStatus = "favorite" | "reject" | "add";
 
-type Review = { status?: ReviewStatus; note?: string };
+type Review = { status?: ReviewStatus; note?: string; feedback_category?: string };
 
 type Candidate = {
   candidate_id: string;
@@ -75,6 +75,11 @@ type CardEntry = {
   label: string;
   card_url?: string;
   master_url?: string;
+  candidate_url?: string;
+  source_url?: string;
+  candidate_id?: string;
+  composition?: PortraitComposition;
+  master_review?: { status?: "approved" | "keep" | "reject"; note?: string };
   review?: { status?: "approved" | "keep" | "reject"; note?: string };
 };
 
@@ -94,8 +99,24 @@ type MasterEntry = {
   style_version: number;
   master_url?: string;
   composition?: PortraitComposition;
+  master_source_kind?: string;
+  master_size?: [number, number];
+  review?: { status?: "approved" | "keep" | "reject"; note?: string };
   renders: CardEntry[];
 };
+
+type HouseStyle = {
+  id: string;
+  version: number;
+  label: string;
+  intent: string;
+  generation_preset: string;
+  logical_size: number;
+  palette_roles: Record<string, string>;
+  reference_urls: string[];
+};
+
+type SetEntry = { set_id: string; label: string; version: number; card_ids: string[]; contact_sheet_url?: string };
 
 type TemplateEntry = {
   id: string;
@@ -138,6 +159,12 @@ const COST_TIERS: Record<string, string> = {
   "sourceful/riverflow-v2-fast": "$",
 };
 function costTier(id: string) { return COST_TIERS[id] ?? "?"; }
+function boxText(value?: number[]) { return (value ?? []).join(", "); }
+function parseBox(value: string, label: string) {
+  const numbers = value.split(",").map((part) => Number(part.trim()));
+  if (numbers.length !== 4 || numbers.some((number) => !Number.isFinite(number) || number < 0 || number > 1)) throw new Error(`${label} must be four normalized values, for example 0.1, 0.2, 0.8, 0.9.`);
+  return numbers;
+}
 
 type Tab = "source" | "style" | "prompt" | "generations" | "cards";
 
@@ -181,9 +208,9 @@ function CandidateDetail({ candidate, onClose }: { candidate: Candidate; onClose
             <dt>Backend</dt><dd>{candidate.backend ?? "unknown"}</dd>
             <dt>Model</dt><dd>{candidate.model ?? "unknown"}</dd>
             <dt>Seed</dt><dd>{candidate.seed ?? "unknown"}</dd>
-            <dt>Strength</dt><dd>{candidate.strength ?? "unknown"}</dd>
-            <dt>Steps</dt><dd>{candidate.steps ?? "unknown"}</dd>
-            <dt>Guidance</dt><dd>{candidate.guidance ?? "unknown"}</dd>
+            <dt>Strength (provenance)</dt><dd>{candidate.strength ?? "unknown"}</dd>
+            <dt>Steps (provenance)</dt><dd>{candidate.steps ?? "unknown"}</dd>
+            <dt>Guidance (provenance)</dt><dd>{candidate.guidance ?? "unknown"}</dd>
             <dt>Elapsed</dt><dd>{candidate.elapsed_seconds != null ? `${candidate.elapsed_seconds}s` : "unknown"}</dd>
             <dt>Background</dt><dd>{candidate.background_mode ?? "unknown"}</dd>
             <dt>Mask mode</dt><dd>{candidate.mask_mode ?? "unknown"}</dd>
@@ -193,6 +220,23 @@ function CandidateDetail({ candidate, onClose }: { candidate: Candidate; onClose
       </div>
     </div>
   );
+}
+
+function CardDetail({ card, onClose }: { card: CardEntry; onClose: () => void }) {
+  return <div className="detail-overlay" onClick={onClose}><div className="detail-modal card-detail-modal" onClick={(event) => event.stopPropagation()}>
+    <button className="detail-close" onClick={onClose}>×</button><h2>{card.label}</h2>
+    <div className="detail-images">
+      <figure className="detail-figure">{card.card_url && <img src={card.card_url} alt="Card preview" />}<figcaption>Card render</figcaption></figure>
+      <figure className="detail-figure">{card.master_url && <img src={card.master_url} alt="Portrait master" />}<figcaption>Portrait master</figcaption></figure>
+      <figure className="detail-figure">{card.candidate_url && <img src={card.candidate_url} alt="Candidate" />}<figcaption>Candidate</figcaption></figure>
+      <figure className="detail-figure">{card.source_url && <img src={card.source_url} alt="Source" />}<figcaption>Source</figcaption></figure>
+    </div>
+    <div className="detail-meta"><h3>Composition provenance</h3><dl>
+      <dt>Master</dt><dd>{card.master_id}</dd><dt>Candidate</dt><dd>{card.candidate_id ?? "unknown"}</dd>
+      <dt>Template</dt><dd>{card.template_id} v{card.template_version}</dd><dt>Archetype</dt><dd>{card.archetype_id}</dd>
+      <dt>Face anchor</dt><dd>{card.composition?.face_anchor?.join(", ") ?? "unknown"}</dd>
+    </dl></div>
+  </div></div>;
 }
 
 /* ── main app ── */
@@ -242,6 +286,17 @@ export function App() {
   const [anchorY, setAnchorY] = useState("0.35");
   const [masterArchetype, setMasterArchetype] = useState("standard-bust");
   const [validation, setValidation] = useState<ValidationReport | null>(null);
+  const [houseStyles, setHouseStyles] = useState<HouseStyle[]>([]);
+  const [sets, setSets] = useState<SetEntry[]>([]);
+  const [activeSetId, setActiveSetId] = useState("");
+  const [setId, setSetId] = useState("estate-experiment-v1");
+  const [setLabel, setSetLabel] = useState("Estate experiment v1");
+  const [headBox, setHeadBox] = useState("0.28, 0.12, 0.72, 0.54");
+  const [shoulderLine, setShoulderLine] = useState("0.65");
+  const [silhouetteBox, setSilhouetteBox] = useState("0.12, 0.08, 0.88, 0.96");
+  const [cardNote, setCardNote] = useState("");
+  const [feedbackCategory, setFeedbackCategory] = useState("placement");
+  const [cardDetail, setCardDetail] = useState<CardEntry | null>(null);
 
   // trash
   const [trashedSources, setTrashedSources] = useState<Set<string>>(new Set());
@@ -250,7 +305,7 @@ export function App() {
 
   const load = useCallback(async () => {
     try {
-      const [libRes, modelsRes, stylesRes, presetsRes, gensRes, cardsRes, mastersRes, templatesRes] = await Promise.all([
+      const [libRes, modelsRes, stylesRes, presetsRes, gensRes, cardsRes, mastersRes, templatesRes, houseStylesRes, setsRes] = await Promise.all([
         fetch(apiPath("/api/library")),
         fetch(apiPath("/api/models/img2img")).catch(() => null),
         fetch(apiPath("/api/styles")).catch(() => null),
@@ -259,6 +314,8 @@ export function App() {
         fetch(apiPath("/api/cards")).catch(() => null),
         fetch(apiPath("/api/masters")).catch(() => null),
         fetch(apiPath("/api/card-templates")).catch(() => null),
+        fetch(apiPath("/api/house-styles")).catch(() => null),
+        fetch(apiPath("/api/sets")).catch(() => null),
       ]);
       if (!libRes.ok) throw new Error(await libRes.text());
       const payload = (await libRes.json()) as LibraryPayload;
@@ -290,6 +347,14 @@ export function App() {
       if (templatesRes?.ok) {
         const tp = await templatesRes.json();
         if (tp.templates) setTemplates(tp.templates);
+      }
+      if (houseStylesRes?.ok) {
+        const hp = await houseStylesRes.json();
+        if (hp.styles) setHouseStyles(hp.styles);
+      }
+      if (setsRes?.ok) {
+        const sp = await setsRes.json();
+        if (sp.sets) setSets(sp.sets);
       }
       if (!loadedRef.current) {
         setActiveId(payload.sources[0]?.photo_id);
@@ -355,7 +420,7 @@ export function App() {
     if (!activeSource) return;
     setGeneratingSince(Date.now()); setGeneratingModel(model); setActionError(undefined);
     try {
-      const r = await postJson("/api/generate", { photo_id: activeSource.photo_id, preset, model, style_reference_url: styleRefUrl || undefined });
+      const r = await postJson("/api/generate", { photo_id: activeSource.photo_id, preset, model, style_id: houseStyles[0]?.id ?? "estate-card-v1", style_reference_url: styleRefUrl || undefined });
       setLibrary(r.library);
     } catch (err) { setActionError(err instanceof Error ? err.message : String(err)); }
     finally { setGeneratingSince(null); setGeneratingModel(null); }
@@ -383,12 +448,16 @@ export function App() {
     const fallback = `claimant-${activeSource.photo_id}-${c.seed ?? "candidate"}`;
     const masterId = window.prompt("Portrait master ID", fallback);
     if (!masterId) return;
+    const sourceKind = window.prompt("Master source: raw, clean, or final", "clean");
+    if (!sourceKind) return;
     setActionError(undefined);
     try {
       const promoted = await postJson("/api/promote-master", {
         photo_id: activeSource.photo_id,
         candidate_id: c.candidate_id,
         master_id: masterId,
+        style_id: houseStyles[0]?.id ?? "estate-card-v1",
+        source_kind: sourceKind,
       });
       await postJson("/api/render-card", { master_id: promoted.master.master_id });
       await load();
@@ -397,8 +466,10 @@ export function App() {
   }
   async function trashCandidate(c: Candidate) {
     if (statusOf(c.review) === "favorite") return;
+    const rejectionReason = window.prompt("Reject reason", "generated-text");
+    if (!rejectionReason) return;
     setTrashedCandidates((p) => new Set(p).add(c.candidate_id)); setActionError(undefined);
-    try { await postJson("/api/review", { collection: "candidates", id: c.candidate_id, status: "reject" }); }
+    try { await postJson("/api/review", { collection: "candidates", id: c.candidate_id, status: "reject", feedback_category: rejectionReason }); }
     catch (err) { setActionError(err instanceof Error ? err.message : String(err)); }
   }
   async function favoriteSource(s: Source) {
@@ -426,6 +497,9 @@ export function App() {
     const [x, y] = master.composition?.face_anchor ?? [0.5, 0.35];
     setAnchorX(String(x)); setAnchorY(String(y));
     setMasterArchetype(master.composition?.preferred_archetype ?? "standard-bust");
+    setHeadBox(boxText(master.composition?.head_box) || "0.28, 0.12, 0.72, 0.54");
+    setShoulderLine(String(master.composition?.shoulder_line ?? 0.65));
+    setSilhouetteBox(boxText(master.composition?.silhouette_box) || "0.12, 0.08, 0.88, 0.96");
     setArchetypeId(master.composition?.preferred_archetype ?? "standard-bust");
     setCardLabel(master.master_id.replace(/[-_]/g, " "));
   }
@@ -438,6 +512,9 @@ export function App() {
         composition: {
           ...selectedMaster.composition,
           face_anchor: [Number(anchorX), Number(anchorY)],
+          head_box: parseBox(headBox, "Head box"),
+          shoulder_line: Number(shoulderLine),
+          silhouette_box: parseBox(silhouetteBox, "Silhouette box"),
           preferred_archetype: masterArchetype,
         },
       });
@@ -464,6 +541,33 @@ export function App() {
       setValidation(result.report);
     } catch (err) { setActionError(err instanceof Error ? err.message : String(err)); }
   }
+  async function reviewMaster(status: "approved" | "reject") {
+    if (!selectedMaster) return;
+    setActionError(undefined);
+    try {
+      await postJson("/api/review", { collection: "masters", id: selectedMaster.master_id, status });
+      await load();
+    } catch (err) { setActionError(err instanceof Error ? err.message : String(err)); }
+  }
+  async function reviewCardWithNote(card: CardEntry, status: "approved" | "reject") {
+    setActionError(undefined);
+    try {
+      await postJson("/api/review", { collection: "cards", id: card.card_id, status, note: cardNote, feedback_category: feedbackCategory });
+      setCardNote("");
+      await load();
+    } catch (err) { setActionError(err instanceof Error ? err.message : String(err)); }
+  }
+  async function createApprovedSet() {
+    setActionError(undefined);
+    try {
+      const cardIds = cards.filter((card) => card.review?.status === "approved" && card.master_review?.status === "approved").map((card) => card.card_id);
+      const result = await postJson("/api/create-set", { set_id: setId, label: setLabel, card_ids: cardIds });
+      setValidation(result.report);
+      setActiveSetId(result.set.set_id);
+      await load();
+    } catch (err) { setActionError(err instanceof Error ? err.message : String(err)); }
+  }
+  const visibleCards = activeSetId ? cards.filter((card) => sets.find((set) => set.set_id === activeSetId)?.card_ids.includes(card.card_id)) : cards;
 
   const TABS: { key: Tab; label: string }[] = [
     { key: "source", label: "Source" },
@@ -568,7 +672,7 @@ export function App() {
                   <h2>⚡ img2img</h2>
                   <label>Model<select value={model} onChange={(e) => setModel(e.target.value)}>{modelOptions.map((o) => <option key={o} value={o}>{costTier(o)} {o}</option>)}</select></label>
                   <label>Preset<select value={preset} onChange={(e) => setPreset(e.target.value)}><option value="estate-pixel-claimant-v1">estate-pixel-claimant-v1</option></select></label>
-                  <label>Style ref<select value={styleRefUrl} onChange={(e) => setStyleRefUrl(e.target.value)}><option value="">— none —</option>{styles.map((s) => (<option key={s.id} value={apiPath(`/asset/portrait-review/styles/${s.filename}`)}>{s.prompt.slice(0, 60)}...</option>))}</select></label>
+                  <label>Experimental extra ref<select value={styleRefUrl} onChange={(e) => setStyleRefUrl(e.target.value)}><option value="">— none —</option>{styles.map((s) => (<option key={s.id} value={`portrait-review/styles/${s.filename}`}>{s.prompt.slice(0, 60)}...</option>))}</select></label>
                   <button className="generate-btn" onClick={generateImg2Img} disabled={generatingSince !== null}>{generatingSince !== null ? `Generating... ${genElapsed}s` : "Generate Image"}</button>
                 </aside>
                 <aside className="sidebar-panel source-info">
@@ -596,6 +700,7 @@ export function App() {
           </aside>
           <section className="styles-grid">
             <h2>Style references ({styles.length})</h2>
+            {houseStyles.map((style) => <article key={style.id} className="preset-card sidebar-panel"><h3>{style.label} v{style.version}</h3><p>{style.intent}</p><p>Fixed reference pack: {style.reference_urls.length} image{style.reference_urls.length === 1 ? "" : "s"}. Generation controls are prompt, references, seed, square aspect, and quality; steps/guidance/strength are provenance-only for the current backend.</p><div className="detail-images">{style.reference_urls.map((url) => <img key={url} src={apiPath(`/${url}`)} alt="House style reference" />)}</div></article>)}
             {styles.length === 0 && styleGeneratingSince === null ? <p className="empty">No style references yet.</p> : (
               <div className="candidates-grid">
                 {styleGeneratingSince !== null && (
@@ -604,7 +709,7 @@ export function App() {
                   </article>
                 )}
                 {styles.map((s) => (
-                  <article key={s.id} className="candidate-card style-card" onClick={() => { setStyleRefUrl(apiPath(`/asset/portrait-review/styles/${s.filename}`)); setTab("source"); }}>
+                  <article key={s.id} className="candidate-card style-card" onClick={() => { setStyleRefUrl(`portrait-review/styles/${s.filename}`); setTab("source"); }}>
                     <div className="card-image"><img src={apiPath(`/asset/portrait-review/styles/${s.filename}`)} alt={s.prompt} /></div>
                     <div className="card-overlay">
                       <span className="card-model">{s.model}</span>
@@ -632,10 +737,7 @@ export function App() {
                   <h3>{p.name}</h3>
                   <div className="preset-field"><strong>Prompt:</strong> <span>{p.prompt}</span></div>
                   {p.negative_prompt && <div className="preset-field"><strong>Negative:</strong> <span>{p.negative_prompt}</span></div>}
-                  <div className="preset-params">
-                    {p.strength != null && <span>strength={p.strength}</span>}
-                    {p.steps != null && <span>steps={p.steps}</span>}
-                  </div>
+                  <div className="preset-params"><span>Strength, steps, and guidance are recorded for provenance; this hosted backend does not currently expose them as request controls.</span></div>
                 </article>
               ))}
             </div>
@@ -691,13 +793,23 @@ export function App() {
             <aside className="sidebar-panel">
               <h3>2. Master anchors</h3>
               {selectedMaster ? <>
+                <div className="master-geometry-preview">
+                  {selectedMaster.master_url && <img src={selectedMaster.master_url} alt={selectedMaster.master_id} />}
+                  <span className="geometry-box geometry-head" style={{ left: `${Number(headBox.split(",")[0]) * 100 || 0}%`, top: `${Number(headBox.split(",")[1]) * 100 || 0}%`, width: `${((Number(headBox.split(",")[2]) || 0) - (Number(headBox.split(",")[0]) || 0)) * 100}%`, height: `${((Number(headBox.split(",")[3]) || 0) - (Number(headBox.split(",")[1]) || 0)) * 100}%` }} />
+                  <span className="geometry-box geometry-silhouette" style={{ left: `${Number(silhouetteBox.split(",")[0]) * 100 || 0}%`, top: `${Number(silhouetteBox.split(",")[1]) * 100 || 0}%`, width: `${((Number(silhouetteBox.split(",")[2]) || 0) - (Number(silhouetteBox.split(",")[0]) || 0)) * 100}%`, height: `${((Number(silhouetteBox.split(",")[3]) || 0) - (Number(silhouetteBox.split(",")[1]) || 0)) * 100}%` }} />
+                  <span className="geometry-face" style={{ left: `${Number(anchorX) * 100}%`, top: `${Number(anchorY) * 100}%` }} />
+                </div>
                 <p>Move the face anchor to control where this reusable master sits in the card window.</p>
                 <label>Face X<input type="number" min="0" max="1" step="0.01" value={anchorX} onChange={(e) => setAnchorX(e.target.value)} /></label>
                 <label>Face Y<input type="number" min="0" max="1" step="0.01" value={anchorY} onChange={(e) => setAnchorY(e.target.value)} /></label>
+                <label>Head box<input value={headBox} onChange={(e) => setHeadBox(e.target.value)} /></label>
+                <label>Shoulder line<input type="number" min="0" max="1" step="0.01" value={shoulderLine} onChange={(e) => setShoulderLine(e.target.value)} /></label>
+                <label>Silhouette box<input value={silhouetteBox} onChange={(e) => setSilhouetteBox(e.target.value)} /></label>
                 <label>Preferred archetype<select value={masterArchetype} onChange={(e) => setMasterArchetype(e.target.value)}>
                   {Object.entries(selectedTemplate?.archetypes ?? {}).map(([id, archetype]) => <option key={id} value={id}>{archetype.label ?? id}</option>)}
                 </select></label>
                 <button className="generate-btn" onClick={saveMasterComposition}>Save anchors</button>
+                <div className="split-actions"><button onClick={() => reviewMaster("approved")}>Approve master</button><button onClick={() => reviewMaster("reject")}>Reject</button></div>
               </> : <p>Select or promote a portrait master.</p>}
             </aside>
             <aside className="sidebar-panel">
@@ -713,11 +825,27 @@ export function App() {
               {validation.issues.map((issue, index) => <p key={`${issue.card_id ?? "batch"}-${index}`} className={`validation-${issue.level}`}>{issue.card_id ? `${issue.card_id}: ` : ""}{issue.message}</p>)}
             </aside>}
           </section>
-          {cards.length === 0 ? <p className="empty cards-empty">The first promoted master will be rendered here in card context.</p> : (
+          {houseStyles.length > 0 && <section className="house-style-summary">
+            <strong>{houseStyles[0].label} v{houseStyles[0].version}</strong><span>{houseStyles[0].intent}</span>
+            <div>{Object.entries(houseStyles[0].palette_roles).map(([role, color]) => <span className="palette-role" key={role}><i style={{ background: color }} />{role}</span>)}</div>
+          </section>}
+          <section className="set-controls sidebar-panel">
+            <h3>4. Approved experimental set</h3>
+            <label>View set<select value={activeSetId} onChange={(e) => setActiveSetId(e.target.value)}><option value="">All renders</option>{sets.map((set) => <option key={set.set_id} value={set.set_id}>{set.label} ({set.card_ids.length})</option>)}</select></label>
+            <label>New set ID<input value={setId} onChange={(e) => setSetId(e.target.value)} /></label>
+            <label>Set label<input value={setLabel} onChange={(e) => setSetLabel(e.target.value)} /></label>
+            <button className="generate-btn" onClick={createApprovedSet}>Create from approved cards</button>
+          </section>
+          <section className="card-review-controls sidebar-panel">
+            <h3>Card review note</h3>
+            <label>Category<select value={feedbackCategory} onChange={(e) => setFeedbackCategory(e.target.value)}>{["placement", "master-quality", "style", "template"].map((category) => <option key={category} value={category}>{category}</option>)}</select></label>
+            <label>Note<input value={cardNote} onChange={(e) => setCardNote(e.target.value)} placeholder="Applied to next approve/reject" /></label>
+          </section>
+          {visibleCards.length === 0 ? <p className="empty cards-empty">The first promoted master will be rendered here in card context.</p> : (
             <div className="candidates-grid">
-              {cards.map((card) => (
+              {visibleCards.map((card) => (
                 <article key={card.card_id} className={`candidate-card card-preview status-${card.review?.status ?? "unreviewed"}`}>
-                  <div className="card-image">
+                  <div className="card-image" onClick={() => setCardDetail(card)}>
                     {card.card_url ? <img src={card.card_url} alt={card.label} /> : <div className="missing">?</div>}
                   </div>
                   <div className="card-overlay">
@@ -726,8 +854,8 @@ export function App() {
                     {card.review?.status && <span className={`badge badge-${card.review.status}`}>{card.review.status}</span>}
                   </div>
                   <div className="card-actions">
-                    <button className="action-btn fav-btn" onClick={() => reviewCard(card, "approved")} title="Approve card">✓</button>
-                    <button className="action-btn trash-btn" onClick={() => reviewCard(card, "reject")} title="Reject card">🗑</button>
+                    <button className="action-btn fav-btn" onClick={() => reviewCardWithNote(card, "approved")} title="Approve card">✓</button>
+                    <button className="action-btn trash-btn" onClick={() => reviewCardWithNote(card, "reject")} title="Reject card">🗑</button>
                   </div>
                 </article>
               ))}
@@ -737,6 +865,7 @@ export function App() {
       )}
 
       {genDetail && <CandidateDetail candidate={genDetail} onClose={() => setGenDetail(null)} />}
+      {cardDetail && <CardDetail card={cardDetail} onClose={() => setCardDetail(null)} />}
     </main>
   );
 }

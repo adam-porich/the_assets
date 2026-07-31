@@ -17,7 +17,7 @@ from urllib.parse import unquote, urlparse
 
 import requests
 
-from tools.cards.pipeline import card_payloads, list_templates, master_payloads, promote_master, render_card, update_master_composition, validate_cards
+from tools.cards.pipeline import card_payloads, create_set, list_templates, load_style, master_payloads, promote_master, render_card, set_payloads, update_master_composition, validate_cards, validate_set
 
 from .img2img import OpenRouterBackend, load_preset, stable_seed, stylize_source
 from .manifest import find_source, load_manifest, save_manifest
@@ -83,7 +83,7 @@ STYLIZED_RAW_RE = re.compile(r"^pexels-(?P<photo_id>\d+)-(?P<preset>.+)-(?P<seed
 
 def load_review(path: Path = REVIEW_PATH) -> dict[str, Any]:
     if not path.exists():
-        return {"version": 1, "sources": {}, "candidates": {}, "cards": {}}
+        return {"version": 1, "sources": {}, "candidates": {}, "masters": {}, "cards": {}}
     return json.loads(path.read_text(encoding="utf-8"))
 
 
@@ -209,14 +209,17 @@ def build_library_payload(library_dir: Path, review_path: Path = REVIEW_PATH) ->
     return {"sources": sources, "review": review}
 
 
-def update_review_item(review: dict[str, Any], collection: str, item_id: str, status: str, note: str = "") -> dict[str, Any]:
-    if collection not in {"sources", "candidates", "cards"}:
-        raise ValueError("collection must be sources, candidates, or cards")
-    allowed_statuses = {"favorite", "reject", "add"} if collection != "cards" else {"approved", "keep", "reject"}
+def update_review_item(review: dict[str, Any], collection: str, item_id: str, status: str, note: str = "", feedback_category: str = "") -> dict[str, Any]:
+    if collection not in {"sources", "candidates", "masters", "cards"}:
+        raise ValueError("collection must be sources, candidates, masters, or cards")
+    allowed_statuses = {"favorite", "reject", "add"} if collection in {"sources", "candidates"} else {"approved", "keep", "reject"}
     if status == "clear":
         review.setdefault(collection, {}).pop(item_id, None)
     elif status in allowed_statuses:
-        review.setdefault(collection, {})[item_id] = {"status": status, "note": note}
+        entry = {"status": status, "note": note}
+        if feedback_category:
+            entry["feedback_category"] = feedback_category
+        review.setdefault(collection, {})[item_id] = entry
     else:
         raise ValueError(f"unknown review status: {status}")
     return review
@@ -329,7 +332,19 @@ def favorite_candidate(library_dir: Path, review_path: Path, photo_id: str, cand
     return {"image_path": str(image_dest), "metadata_path": str(json_dest), "review": review, "sidecar": sidecar}
 
 
-def generate_candidate(library_dir: Path, photo_id: str, preset_name: str, model: str, style_reference_url: str | None = None) -> dict[str, Any]:
+def house_style_payload(style_id: str) -> dict[str, Any]:
+    style = load_style(style_id)
+    return {
+        **style,
+        "reference_urls": [f"asset/{path}" for path in style.get("reference_images", [])],
+    }
+
+
+def list_house_styles() -> list[dict[str, Any]]:
+    return [house_style_payload("estate-card-v1")]
+
+
+def generate_candidate(library_dir: Path, photo_id: str, preset_name: str, model: str, style_reference_url: str | None = None, style_id: str = "estate-card-v1") -> dict[str, Any]:
     if not photo_id or not preset_name or not model:
         raise ValueError("photo_id, preset, and model are required")
     manifest = load_manifest(library_dir)
@@ -337,16 +352,32 @@ def generate_candidate(library_dir: Path, photo_id: str, preset_name: str, model
     source_filename = entry.get("local_source_filename")
     if not source_filename:
         raise ValueError(f"source has no local source image: {photo_id}")
-    preset = load_preset(preset_name)
+    style = load_style(style_id)
+    preset = load_preset(str(style.get("generation_preset") or preset_name))
     backend = OpenRouterBackend(model=model)
     source_path = library_dir / "sources" / str(source_filename)
 
-    resolved_style_ref: str | None = None
-    if style_reference_url:
-        resolved_style_ref = style_reference_url
+    # The house-style reference pack is fixed. A transient gallery reference is
+    # recorded as an experiment but cannot replace the contract pack.
+    reference_pack = list(style.get("reference_images") or [])
+    # The source portrait consumes one input reference. Keep one deterministic
+    # style reference for the current low-cost models, whose minimum supported
+    # total is two; retain the complete pack as the review contract.
+    reference_paths = reference_pack[:1]
+    if style_reference_url and style_reference_url not in reference_paths:
+        reference_paths.append(style_reference_url)
 
     seed = stable_seed(int(photo_id), preset.name, len(entry.get("stylized_candidates", [])))
-    prep, records = stylize_source(source_path, int(photo_id), library_dir, preset, backend, seed=seed, count=1, style_reference_url=resolved_style_ref)
+    prep, records = stylize_source(source_path, int(photo_id), library_dir, preset, backend, seed=seed, count=1, style_reference_urls=reference_paths)
+    for record in records:
+        record["style_id"] = style["id"]
+        record["style_version"] = style["version"]
+        record["style_reference_paths"] = reference_paths
+        record["style_reference_pack"] = reference_pack
+        record["backend_capabilities"] = {
+            "effective_controls": ["prompt", "input_references", "seed", "aspect_ratio", "quality"],
+            "provenance_only": ["strength", "steps", "guidance", "width", "height"],
+        }
     entry["stylization_prep"] = prep
     merge_stylized_candidates(entry, records)
     entry["processing_status"] = "stylized"
@@ -548,11 +579,17 @@ class ReviewHandler(BaseHTTPRequestHandler):
         if parsed.path == "/api/cards":
             self.send_json({"ok": True, "cards": card_payloads(self.library_dir, load_review(self.review_path))})
             return
+        if parsed.path == "/api/house-styles":
+            self.send_json({"ok": True, "styles": list_house_styles()})
+            return
         if parsed.path == "/api/masters":
-            self.send_json({"ok": True, "masters": master_payloads(self.library_dir)})
+            self.send_json({"ok": True, "masters": master_payloads(self.library_dir, load_review(self.review_path))})
             return
         if parsed.path == "/api/card-templates":
             self.send_json({"ok": True, "templates": list_templates()})
+            return
+        if parsed.path == "/api/sets":
+            self.send_json({"ok": True, "sets": set_payloads(self.library_dir)})
             return
         if parsed.path.startswith("/asset/"):
             self.serve_asset(parsed.path.removeprefix("/asset/"))
@@ -572,6 +609,7 @@ class ReviewHandler(BaseHTTPRequestHandler):
                     str(payload["id"]),
                     str(payload["status"]),
                     str(payload.get("note") or ""),
+                    str(payload.get("feedback_category") or ""),
                 )
                 save_review(review, self.review_path)
                 self.send_json({"ok": True, "review": review})
@@ -600,6 +638,7 @@ class ReviewHandler(BaseHTTPRequestHandler):
                     str(payload["preset"]),
                     str(payload["model"]),
                     str(payload.get("style_reference_url") or "") or None,
+                    str(payload.get("style_id") or "estate-card-v1"),
                 )
                 self.send_json({"ok": True, **result, "library": build_library_payload(self.library_dir, self.review_path)})
                 return
@@ -621,6 +660,8 @@ class ReviewHandler(BaseHTTPRequestHandler):
                     str(payload["master_id"]),
                     str(payload.get("style_id") or "estate-card-v1"),
                     str(payload.get("note") or ""),
+                    str(payload.get("source_kind") or "raw"),
+                    str(payload.get("rejection_reason") or ""),
                 )
                 self.send_json({"ok": True, "master": master})
                 return
@@ -645,6 +686,16 @@ class ReviewHandler(BaseHTTPRequestHandler):
             if parsed.path == "/api/validate-cards":
                 report = validate_cards(self.library_dir, list(payload.get("card_ids") or []) or None)
                 self.send_json({"ok": True, "report": report})
+                return
+            if parsed.path == "/api/create-set":
+                review = load_review(self.review_path)
+                card_ids = list(payload.get("card_ids") or [])
+                record = create_set(self.library_dir, review, str(payload["set_id"]), str(payload.get("label") or ""), [str(card_id) for card_id in card_ids])
+                report = validate_set(self.library_dir, record["set_id"])
+                self.send_json({"ok": True, "set": record, "report": report})
+                return
+            if parsed.path == "/api/validate-set":
+                self.send_json({"ok": True, "report": validate_set(self.library_dir, str(payload["set_id"]))})
                 return
             if parsed.path == "/api/fetch-pexels":
                 new_entries = fetch_pexels_sources(

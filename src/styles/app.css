@@ -222,6 +222,20 @@ main { min-height: 100vh; display: flex; flex-direction: column; }
   background: #efe5d7;
   border-bottom: 1px solid #c8b9a8;
 }
+.master-geometry-preview { position: relative; align-self: start; width: 100%; max-width: 180px; aspect-ratio: 1; overflow: hidden; border: 1px solid #8f7d6a; background: #201916; }
+.master-geometry-preview img { width: 100%; height: 100%; object-fit: contain; image-rendering: pixelated; }
+.geometry-box { position: absolute; pointer-events: none; border: 2px dashed; }
+.geometry-head { border-color: #ffd966; }
+.geometry-silhouette { border-color: #7fd4ff; }
+.geometry-face { position: absolute; width: 10px; height: 10px; margin: -5px; border-radius: 50%; background: #ff6b6b; border: 2px solid #fff; pointer-events: none; }
+.split-actions { display: flex; gap: 6px; }
+.split-actions button { flex: 1; font-size: 12px; }
+.house-style-summary { display: grid; gap: 6px; padding: 12px 18px; border-bottom: 1px solid #c8b9a8; background: #f7f0e5; font-size: 12px; color: #64594f; }
+.house-style-summary strong { color: #211c18; }
+.palette-role { display: inline-flex; align-items: center; gap: 4px; margin-right: 10px; }
+.palette-role i { width: 12px; height: 12px; border: 1px solid #65584d; border-radius: 50%; }
+.set-controls, .card-review-controls { margin: 16px 18px; max-width: 520px; }
+.card-detail-modal { max-width: 1080px; }
 .master-picker-panel { max-height: 342px; overflow-y: auto; }
 .master-picker {
   display: grid; grid-template-columns: 42px 1fr; align-items: center; gap: 8px;

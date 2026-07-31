@@ -5,7 +5,7 @@ import os
 from dataclasses import asdict
 from pathlib import Path
 
-from tools.cards.pipeline import promote_master, render_card, write_validation_report
+from tools.cards.pipeline import create_set, load_style, promote_master, render_card, validate_set, write_validation_report
 
 from .img2img import ExternalCommandBackend, OpenRouterBackend, load_preset, stylize_source
 from .imaging import benchmark_background_source, process_source
@@ -20,7 +20,7 @@ from .manifest import (
     update_selection,
 )
 from .pexels import download_candidate, is_plausible_portrait, search_pexels
-from .review_server import run_review_server
+from .review_server import load_review, run_review_server
 
 
 def load_env_file(path: Path, protected_keys: set[str] | None = None, override: bool = False) -> None:
@@ -204,7 +204,8 @@ def cmd_stylize(args: argparse.Namespace) -> int:
     library_dir = Path(args.input)
     library_dirs(library_dir)
     manifest = load_manifest(library_dir)
-    preset = load_preset(args.preset)
+    style = load_style(getattr(args, "style", "estate-card-v1"))
+    preset = load_preset(str(style.get("generation_preset") or args.preset))
     if args.backend == "external":
         backend_cls = ExternalCommandBackend
     elif args.backend == "openrouter":
@@ -231,7 +232,13 @@ def cmd_stylize(args: argparse.Namespace) -> int:
                 backend,
                 seed=args.seed,
                 count=args.count,
+                style_reference_urls=list(style.get("reference_images") or [])[:1],
             )
+            for record in records:
+                record["style_id"] = style["id"]
+                record["style_version"] = style["version"]
+                record["style_reference_paths"] = list(style.get("reference_images") or [])[:1]
+                record["style_reference_pack"] = list(style.get("reference_images") or [])
             entry["stylization_prep"] = prep
             merge_stylized_candidates(entry, records)
             entry["processing_status"] = "stylized"
@@ -303,6 +310,8 @@ def cmd_promote_master(args: argparse.Namespace) -> int:
         args.master_id,
         args.style,
         args.note or "",
+        args.source_kind,
+        args.rejection_reason or "",
     )
     print(f"Promoted {master['candidate_id']} to portrait master {master['master_id']}")
     return 0
@@ -327,6 +336,14 @@ def cmd_validate_cards(args: argparse.Namespace) -> int:
         card_id = f" [{issue['card_id']}]" if issue.get("card_id") else ""
         print(f"{prefix}{card_id}: {issue['message']}")
     print(f"Validated {report['card_count']} card render(s): {'ok' if report['ok'] else 'errors found'}")
+    return 0 if report["ok"] else 1
+
+
+def cmd_create_set(args: argparse.Namespace) -> int:
+    review = load_review(Path(args.review_file))
+    record = create_set(Path(args.input), review, args.set_id, args.label or args.set_id, args.card_id)
+    report = validate_set(Path(args.input), record["set_id"])
+    print(f"Created set {record['set_id']} with {len(record['card_ids'])} cards; validation {'ok' if report['ok'] else 'has errors'}")
     return 0 if report["ok"] else 1
 
 
@@ -398,6 +415,7 @@ def build_parser() -> argparse.ArgumentParser:
     stylize.add_argument("--limit", type=int, default=3)
     stylize.add_argument("--count", type=int)
     stylize.add_argument("--seed", type=int)
+    stylize.add_argument("--style", default="estate-card-v1")
     stylize.set_defaults(func=cmd_stylize)
 
     lookbook = sub.add_parser("lookbook")
@@ -450,6 +468,8 @@ def build_parser() -> argparse.ArgumentParser:
     promote.add_argument("--master-id", required=True)
     promote.add_argument("--style", default="estate-card-v1")
     promote.add_argument("--note")
+    promote.add_argument("--source-kind", choices=["raw", "clean", "final"], default="raw")
+    promote.add_argument("--rejection-reason")
     promote.set_defaults(func=cmd_promote_master)
 
     render = sub.add_parser("render-card", help="Compose a portrait master into a deterministic card preview")
@@ -464,6 +484,14 @@ def build_parser() -> argparse.ArgumentParser:
     validate.add_argument("--input", default="portrait-library")
     validate.add_argument("--card-id", action="append")
     validate.set_defaults(func=cmd_validate_cards)
+
+    create = sub.add_parser("create-set", help="Create an approved-only experimental card set and contact sheet")
+    create.add_argument("--input", default="portrait-library")
+    create.add_argument("--review-file", default="portrait-review/review.json")
+    create.add_argument("--set-id", required=True)
+    create.add_argument("--label")
+    create.add_argument("--card-id", action="append", required=True)
+    create.set_defaults(func=cmd_create_set)
 
     harvest = sub.add_parser("harvest")
     add_fetch_options(harvest)

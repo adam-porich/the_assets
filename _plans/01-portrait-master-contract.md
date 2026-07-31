@@ -16,33 +16,33 @@ created by blindly copying the tightly cropped `*-final.png` output.
 
 ## Checklist
 
-- [ ] Define the master source policy: preferred candidate source, fallback
+- [x] Define the master source policy: preferred candidate source, fallback
   source, target size, and acceptable text/background rules.
-- [ ] Add explicit candidate source choices to promotion: raw generation,
+- [x] Add explicit candidate source choices to promotion: raw generation,
   clean master derivative, or legacy final crop.
-- [ ] Add `master_source_kind`, original dimensions, and source crop bounds to
+- [x] Add `master_source_kind`, original dimensions, and source crop bounds to
   master provenance.
-- [ ] Make the deterministic master derivative preserve aspect ratio and its
+- [x] Make the deterministic master derivative preserve aspect ratio and its
   full usable canvas; do not call `ImageOps.fit` during master creation.
-- [ ] Add a lightweight rejection reason for candidates with generated text,
+- [x] Add a lightweight rejection reason for candidates with generated text,
   inadequate headroom, or a clipped silhouette.
-- [ ] Add editable/visible head box, shoulder line, and silhouette bounds to
+- [x] Add editable/visible head box, shoulder line, and silhouette bounds to
   the Cards workbench, alongside the existing face anchor.
-- [ ] Overlay the saved composition geometry on the selected master in the UI.
-- [ ] Update card crop logic to use the whole composition record, not only the
+- [x] Overlay the saved composition geometry on the selected master in the UI.
+- [x] Update card crop logic to use the whole composition record, not only the
   face anchor plus a fixed bias.
-- [ ] Render the three archetypes from at least three masters and compare their
+- [x] Render the three archetypes from at least three masters and compare their
   framing in the Cards grid.
-- [ ] Add unit tests for non-destructive master preparation and predictable
+- [x] Add unit tests for non-destructive master preparation and predictable
   archetype crop transforms.
 
 ## Acceptance checks
 
-- [ ] A master can yield visibly distinct and intentional standard, tall, and
+- [x] A master can yield visibly distinct and intentional standard, tall, and
   wide renders without regeneration.
-- [ ] Promoting a master cannot silently discard source pixels through a fixed
+- [x] Promoting a master cannot silently discard source pixels through a fixed
   square crop.
-- [ ] Each selected master has a reviewable composition record and provenance.
+- [x] Each selected master has a reviewable composition record and provenance.
 
 ## Decision needed before work
 

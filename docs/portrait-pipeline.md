@@ -336,6 +336,12 @@ API exposes `POST /api/master-composition` for a small client to update them.
 `portrait-library/cards/` and `cards.json`. The supported initial archetypes
 are `standard-bust`, `tall-silhouette`, and `wide-torso`.
 
+Promotion now has an explicit source policy. Use `--source-kind raw` for the
+preferred full-canvas source, `--source-kind clean` for a deterministic,
+aspect-preserving palette-limited derivative of raw output, or `--source-kind
+final` only for legacy tightly cropped candidates. The chosen source, original
+dimensions, and crop bounds are retained in `masters.json`.
+
 The React review app has a **Cards** tab for card-context approval or rejection.
 This is not a production card renderer; it exists to test framing, headroom,
 and silhouette across a small experimental set.
@@ -369,6 +375,39 @@ This writes `portrait-library/cards/validation.json` and reports only
 explainable contract issues (missing assets, template dimensions, missing
 masters/anchors, and mixed style/template versions). It is a review aid, not an
 automatic art-quality gate.
+
+## House Style and Approved Sets
+
+`tools/portraits/styles/estate-card-v1.json` is the initial production-
+experiment contract. It records the fixed reference pack, palette roles,
+generation preset, and master-processing policy. New API/CLI stylized
+candidates record the resolved style ID, version, and references. The current
+hosted image endpoint only receives prompt, references, seed, aspect ratio, and
+quality; strength, steps, guidance, and dimensions are retained as provenance,
+not exposed as promised generation controls.
+
+The contract retains a small reference pack for review, while the current
+low-cost img2img request uses its first reference alongside the portrait input.
+This keeps the request within the supported two-reference floor; the complete
+pack remains recorded on the candidate for comparison and future backends.
+
+In the web UI, approve both a master and one or more card renders, then use
+**Create from approved cards**. The resulting set is a small file-backed
+manifest under `portrait-library/sets/`, references existing renders rather
+than copying them, and includes a deterministic contact sheet and validation
+report. The equivalent CLI flow is:
+
+```bash
+uv run python -m tools.portraits create-set \
+  --set-id estate-experiment-v1 \
+  --label "Estate experiment v1" \
+  --card-id claimant-123--estate-card-v1--standard-bust
+```
+
+Do not reset the current exploratory library until a newly generated,
+full-canvas master has completed this flow. Existing legacy-final masters are
+useful framing controls but are intentionally expected to fail some composition
+warnings.
 
 The Vite app follows the same hosting pattern as `the_estate_agent`: fixed port, no browser auto-open, and Tailnet host allow-list. It runs on:
 

@@ -51,6 +51,7 @@ class Img2ImgRequest:
     prompt: str
     negative_prompt: str = ""
     style_reference_url: str | None = None
+    style_reference_urls: list[str] | None = None
     seed: int | None = None
     strength: float = 0.45
     steps: int = 10
@@ -155,8 +156,11 @@ class OpenRouterBackend:
                 "image_url": {"url": image_data_url(Path(request.input_image_path))},
             }
         ]
-        if request.style_reference_url:
-            url = request.style_reference_url
+        style_references = list(request.style_reference_urls or [])
+        if request.style_reference_url and request.style_reference_url not in style_references:
+            style_references.insert(0, request.style_reference_url)
+        for style_reference in style_references:
+            url = style_reference
             if not (url.startswith("http://") or url.startswith("https://") or url.startswith("data:")):
                 resolved = Path(url)
                 if not resolved.exists():
@@ -338,6 +342,7 @@ def stylize_source(
     count: int | None = None,
     preparation: PreparationSettings | None = None,
     style_reference_url: str | None = None,
+    style_reference_urls: list[str] | None = None,
 ) -> tuple[dict[str, Any], list[dict[str, Any]]]:
     prep = prepare_rembg_composite(source_path, photo_id, library_dir, preset, preparation)
     output_dir = library_dir / "stylized"
@@ -348,6 +353,7 @@ def stylize_source(
         prompt=preset.prompt,
         negative_prompt=preset.negative_prompt,
         style_reference_url=style_reference_url,
+        style_reference_urls=style_reference_urls,
         seed=base_seed,
         strength=preset.strength,
         steps=preset.steps,
