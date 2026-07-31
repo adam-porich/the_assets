@@ -7,11 +7,14 @@ from typing import Any
 
 from PIL import Image, ImageDraw, ImageFont, ImageOps
 
-from tools.portraits.workspace import WorkspaceError, WorkspaceStore, now_iso
+from tools.portraits.workspace import WorkspaceStore, checksum, now_iso
 
 
 TEMPLATE_DIR = Path(__file__).parent / "templates"
 ART_WINDOW = (336, 276)
+PIXEL_LOGICAL_SIZE = (112, 92)
+PIXEL_PALETTE_COLOURS = 32
+TREATMENTS = {"painterly", "estate-pixel-v1"}
 FRAME_PRESETS: dict[str, dict[str, float | str]] = {
     "bust": {"label": "Bust", "zoom": 1.0, "offset_x": 0.0, "offset_y": 0.02},
     "tall": {"label": "Tall", "zoom": 1.16, "offset_x": 0.0, "offset_y": -0.06},
@@ -67,7 +70,28 @@ def calculate_cover_transform(
     }
 
 
-def _render_image(source_path: Path, output_path: Path, label: str, framing: dict[str, Any], template: dict[str, Any]) -> dict[str, Any]:
+def apply_estate_pixel_treatment(art: Image.Image) -> Image.Image:
+    """Apply the deterministic estate-pixel-v1 treatment to a framed 336×276 crop."""
+    logical = art.convert("RGB").resize(PIXEL_LOGICAL_SIZE, Image.Resampling.LANCZOS)
+    quantized = logical.quantize(
+        colors=PIXEL_PALETTE_COLOURS,
+        method=Image.Quantize.MEDIANCUT,
+        dither=Image.Dither.NONE,
+    ).convert("RGB")
+    return quantized.resize(ART_WINDOW, Image.Resampling.NEAREST)
+
+
+def _render_image(
+    source_path: Path,
+    output_path: Path,
+    art_output_path: Path,
+    label: str,
+    framing: dict[str, Any],
+    template: dict[str, Any],
+    treatment: str,
+) -> dict[str, Any]:
+    if treatment not in TREATMENTS:
+        raise ValueError("treatment must be painterly or estate-pixel-v1")
     width, height = int(template["width"]), int(template["height"])
     left, top, right, bottom = [int(value) for value in template["art_window"]]
     colors = template["colors"]
@@ -78,6 +102,12 @@ def _render_image(source_path: Path, output_path: Path, label: str, framing: dic
     crop_left = max(0, round(-transform["left"]))
     crop_top = max(0, round(-transform["top"]))
     art = scaled.crop((crop_left, crop_top, crop_left + (right - left), crop_top + (bottom - top)))
+    if treatment == "estate-pixel-v1":
+        art = apply_estate_pixel_treatment(art)
+    art_output_path.parent.mkdir(parents=True, exist_ok=True)
+    art_temporary = art_output_path.with_name(f".{art_output_path.name}.{uuid.uuid4().hex}.tmp")
+    art.save(art_temporary, format="PNG")
+    art_temporary.replace(art_output_path)
     canvas = Image.new("RGB", (width, height), colors["card"])
     draw = ImageDraw.Draw(canvas)
     draw.rectangle((10, 10, width - 11, height - 11), fill=colors["inner"], outline=colors["border"], width=5)
@@ -94,7 +124,22 @@ def _render_image(source_path: Path, output_path: Path, label: str, framing: dic
     temporary = output_path.with_name(f".{output_path.name}.{uuid.uuid4().hex}.tmp")
     canvas.save(temporary, format="PNG")
     temporary.replace(output_path)
-    return {"dimensions": [width, height], "transform": transform}
+    palette_colours = len(art.resize(PIXEL_LOGICAL_SIZE, Image.Resampling.NEAREST).getcolors(maxcolors=PIXEL_LOGICAL_SIZE[0] * PIXEL_LOGICAL_SIZE[1]) or []) if treatment == "estate-pixel-v1" else None
+    return {
+        "dimensions": [width, height], "transform": transform,
+        "render_metadata": {
+            "treatment": treatment,
+            "treatment_version": treatment if treatment == "estate-pixel-v1" else "painterly-source-v1",
+            "art_window": list(ART_WINDOW),
+            "logical_size": list(PIXEL_LOGICAL_SIZE) if treatment == "estate-pixel-v1" else list(ART_WINDOW),
+            "palette_limit": PIXEL_PALETTE_COLOURS if treatment == "estate-pixel-v1" else None,
+            "palette_colours": palette_colours,
+            "dither": False if treatment == "estate-pixel-v1" else None,
+            "resampling": "nearest-3x" if treatment == "estate-pixel-v1" else "painterly-framed-crop",
+            "art_checksum_sha256": checksum(art_output_path),
+            "render_checksum_sha256": checksum(output_path),
+        },
+    }
 
 
 def _cards_path(store: WorkspaceStore) -> Path:
@@ -127,10 +172,22 @@ def _find_run_item(store: WorkspaceStore, run_id: str, item_id: str) -> tuple[di
 
 
 def _payload(store: WorkspaceStore, card: dict[str, Any]) -> dict[str, Any]:
-    return {**card, "render_url": store.asset_url(card.get("render_path")), "source_url": store.asset_url(card.get("source_output_path"))}
+    return {
+        **card,
+        "render_url": store.asset_url(card.get("render_path")),
+        "art_url": store.asset_url(card.get("art_render_path")),
+        "source_url": store.asset_url(card.get("source_output_path")),
+    }
 
 
-def create_card_draft(store: WorkspaceStore, run_id: str, item_id: str, label: str = "Experimental claimant", preset: str = "bust") -> dict[str, Any]:
+def create_card_draft(
+    store: WorkspaceStore,
+    run_id: str,
+    item_id: str,
+    label: str = "Experimental claimant",
+    preset: str = "bust",
+    treatment: str = "painterly",
+) -> dict[str, Any]:
     store.ensure()
     run, item = _find_run_item(store, run_id, item_id)
     framing = framing_preset(preset)
@@ -144,15 +201,30 @@ def create_card_draft(store: WorkspaceStore, run_id: str, item_id: str, label: s
         "archetype": preset,
         "framing": {key: framing[key] for key in ("zoom", "offset_x", "offset_y")},
         "decision": "working",
+        "treatment": treatment,
+        "treatment_version": treatment if treatment == "estate-pixel-v1" else "painterly-source-v1",
         "render_path": f"cards/{card_id}.png",
+        "art_render_path": f"cards/{card_id}-art.png",
         "source_output_path": item["output_path"],
         "source_dimensions": item.get("dimensions"),
         "created_at": now_iso(),
         "updated_at": now_iso(),
+        "source_run_provenance": {
+            "run_id": run_id,
+            "run_item_id": item_id,
+            "execution_mode": run.get("execution_mode"),
+            "model": run.get("model"),
+            "recipe_id": run.get("recipe_id"),
+            "source_output_checksum_sha256": checksum(item["_source_path"]),
+        },
     }
-    rendered = _render_image(item["_source_path"], store.absolute_path(record["render_path"]), record["label"], record["framing"], load_template())
+    rendered = _render_image(
+        item["_source_path"], store.absolute_path(record["render_path"]), store.absolute_path(record["art_render_path"]),
+        record["label"], record["framing"], load_template(), treatment,
+    )
     record["render_dimensions"] = rendered["dimensions"]
     record["transform"] = rendered["transform"]
+    record["render_metadata"] = rendered["render_metadata"]
     data = load_cards(store)
     data.setdefault("cards", []).insert(0, record)
     _save_cards(store, data)
@@ -175,8 +247,23 @@ def update_card_draft(store: WorkspaceStore, card_id: str, patch: dict[str, Any]
     decision = str(patch.get("decision", record.get("decision", "working")))
     if decision not in {"working", "keep", "discard"}:
         raise ValueError("decision must be working, keep, or discard")
-    rendered = _render_image(item["_source_path"], store.absolute_path(record["render_path"]), label, framing, load_template())
-    updated = {**record, "label": label, "framing": framing, "decision": decision, "archetype": patch.get("archetype", record.get("archetype", "bust")), "updated_at": now_iso(), "render_dimensions": rendered["dimensions"], "transform": rendered["transform"]}
+    treatment = str(patch.get("treatment", record.get("treatment", "painterly")))
+    if treatment not in TREATMENTS:
+        raise ValueError("treatment must be painterly or estate-pixel-v1")
+    art_render_path = str(record.get("art_render_path") or f"cards/{card_id}-art.png")
+    rendered = _render_image(
+        item["_source_path"], store.absolute_path(record["render_path"]), store.absolute_path(art_render_path),
+        label, framing, load_template(), treatment,
+    )
+    updated = {
+        **record, "label": label, "framing": framing, "decision": decision,
+        "archetype": patch.get("archetype", record.get("archetype", "bust")),
+        "treatment": treatment,
+        "treatment_version": treatment if treatment == "estate-pixel-v1" else "painterly-source-v1",
+        "art_render_path": art_render_path,
+        "updated_at": now_iso(), "render_dimensions": rendered["dimensions"],
+        "transform": rendered["transform"], "render_metadata": rendered["render_metadata"],
+    }
     data["cards"] = [updated if item.get("card_id") == card_id else item for item in data.get("cards", [])]
     _save_cards(store, data)
     return _payload(store, updated)

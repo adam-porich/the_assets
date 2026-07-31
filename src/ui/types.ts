@@ -35,12 +35,15 @@ export type Reference = {
   image_url: string;
   checksum_sha256: string;
   position?: number;
+  dimensions?: [number, number];
+  provenance?: { kind: string; [key: string]: unknown };
 };
 
 export type Recipe = {
   id: string;
   name: string;
   model: string;
+  execution_mode: "live" | "simulation";
   quality: "low" | "medium" | "high";
   direction: Direction;
   avoid: string;
@@ -70,6 +73,14 @@ export type Model = {
   qualities: string[];
   supports_negative_prompt: boolean;
   supports_reference_roles: boolean;
+  execution_mode: "live" | "simulation";
+  available: boolean;
+  supported_parameters: Record<string, { type: string; values?: string[]; min?: number; max?: number }>;
+  supports_streaming: boolean;
+  pricing: Array<{ billable: string; unit: string; cost_usd: number; variant?: string }>;
+  provider_name?: string;
+  provider_slug?: string;
+  provider_tag?: string;
 };
 
 export type RunSummary = {
@@ -82,6 +93,9 @@ export type RunSummary = {
   created_at: string;
   completed_calls: number;
   total_calls: number;
+  execution_mode: "live" | "simulation";
+  model: string;
+  cost_usd: number;
 };
 
 export type RunItem = {
@@ -100,6 +114,8 @@ export type RunItem = {
   backend?: string;
   model?: string;
   error?: string;
+  usage?: Record<string, number>;
+  cost_usd?: number;
 };
 
 export type Run = RunSummary & {
@@ -110,17 +126,21 @@ export type Run = RunSummary & {
   sources_snapshot: Array<Source & { input_url?: string; input_path?: string; input_checksum_sha256?: string }>;
   references_snapshot: Array<Reference & { input_url?: string; input_path?: string; input_checksum_sha256?: string }>;
   model: string;
+  execution_mode: "live" | "simulation";
   quality: string;
   requested_aspect_ratio: string;
   effective_aspect_ratio: string;
   backend_capabilities: Record<string, unknown>;
-  backend_mapping: Record<string, string>;
+  backend_mapping: Record<string, unknown>;
   outputs_per_source: number;
   total_calls: number;
   completed_calls: number;
   items: RunItem[];
   verdict: "unreviewed" | "coherent" | "mixed" | "not-useful";
   note: string;
+  usage: Record<string, number>;
+  cost_usd: number;
+  model_metadata: Model;
 };
 
 export type Card = {
@@ -134,11 +154,17 @@ export type Card = {
   decision: "working" | "keep" | "discard";
   render_path: string;
   render_url: string;
+  art_render_path: string;
+  art_url?: string;
   source_output_path: string;
   source_url?: string;
   source_dimensions?: [number, number];
   render_dimensions?: [number, number];
   transform?: Record<string, unknown>;
+  treatment: "painterly" | "estate-pixel-v1";
+  treatment_version: string;
+  render_metadata?: Record<string, unknown>;
+  source_run_provenance?: Record<string, unknown>;
   created_at: string;
   updated_at: string;
 };
@@ -149,5 +175,6 @@ export type Bootstrap = {
   runs: RunSummary[];
   cards: Card[];
   models: Model[];
-  integrations: { pexels: { configured: boolean } };
+  integrations: { pexels: { configured: boolean }; openrouter: { configured: boolean } };
+  starter: { photo_ids: number[] };
 };

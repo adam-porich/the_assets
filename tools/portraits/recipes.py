@@ -15,7 +15,8 @@ RECIPE_FIELDS = (
 
 STARTER_RECIPE: dict[str, Any] = {
     "name": "Estate painterly study 01",
-    "model": "fake/painterly-deterministic",
+    "model": "openai/gpt-image-1-mini",
+    "execution_mode": "live",
     "quality": "low",
     "direction": {
         "medium_brushwork": "Opaque gouache and oil-brush modelling with visible, confident strokes and softened edges.",
@@ -48,10 +49,14 @@ def recipe_from_payload(payload: dict[str, Any], recipe_id: str, now: str) -> di
         raise ValueError("recipe model is required")
     if payload.get("quality") not in {"low", "medium", "high"}:
         raise ValueError("quality must be low, medium, or high")
+    execution_mode = str(payload.get("execution_mode") or "live")
+    if execution_mode not in {"live", "simulation"}:
+        raise ValueError("execution_mode must be live or simulation")
     return {
         "id": recipe_id,
         "name": str(payload["name"]).strip(),
         "model": str(payload["model"]).strip(),
+        "execution_mode": execution_mode,
         "quality": payload["quality"],
         "direction": direction,
         "avoid": str(payload.get("avoid") or "").strip(),

@@ -16,9 +16,9 @@ import requests
 
 from tools.cards.pipeline import card_detail, create_card_draft, list_card_drafts, list_templates, update_card_draft
 
-from .generation import FALLBACK_MODELS
-from .pexels import has_pexels_api_key, is_plausible_portrait, search_pexels
-from .recipes import STARTER_RECIPE, recipe_from_payload, resolve_recipe_instruction
+from .generation import DEFAULT_LIVE_MODEL_ID, fetch_model_catalogue, simulation_model, unavailable_live_model
+from .pexels import STARTER_PHOTO_IDS, get_pexels_photo, has_pexels_api_key, is_plausible_portrait, search_pexels
+from .recipes import STARTER_RECIPE, recipe_from_payload
 from .runs import RunManager
 from .workspace import WorkspaceError, WorkspaceStore, new_id, now_iso
 
@@ -32,30 +32,21 @@ def fetch_models() -> list[dict[str, Any]]:
 
     if _models_cache and time.time() - _models_cache[1] < 3600:
         return _models_cache[0]
-    key = os.environ.get("OPENROUTER_API_KEY")
-    if not key:
-        return FALLBACK_MODELS
     try:
-        response = requests.get("https://openrouter.ai/api/v1/images/models", headers={"Authorization": f"Bearer {key}"}, timeout=15)
-        response.raise_for_status()
-        models = []
-        for item in response.json().get("data", []):
-            params = item.get("supported_parameters") or {}
-            refs = params.get("input_references") or {}
-            if "input_references" not in params:
-                continue
-            models.append({
-                "id": item.get("id"), "name": item.get("name") or item.get("id"), "description": item.get("description"),
-                "max_input_references": refs.get("max", 0) if isinstance(refs, dict) else 0,
-                "aspect_ratios": ["5:4", "4:3", "3:2"], "qualities": ["low", "medium", "high"],
-                "supports_negative_prompt": "negative_prompt" in params, "supports_reference_roles": False,
-            })
-        if models:
+        models = fetch_model_catalogue()
+        if len(models) > 1:
             _models_cache = (models, time.time())
             return models
     except requests.RequestException:
         pass
-    return FALLBACK_MODELS
+    return [simulation_model(), unavailable_live_model(DEFAULT_LIVE_MODEL_ID)]
+
+
+def _models_for_store(store: WorkspaceStore) -> list[dict[str, Any]]:
+    models = fetch_models()
+    known = {str(item.get("id")) for item in models}
+    stale = [str(recipe.get("model")) for recipe in store.read().get("recipes", []) if recipe.get("model") not in known]
+    return [*models, *(unavailable_live_model(model_id) for model_id in dict.fromkeys(stale))]
 
 
 def _workspace_response(store: WorkspaceStore, manager: RunManager) -> dict[str, Any]:
@@ -65,16 +56,21 @@ def _workspace_response(store: WorkspaceStore, manager: RunManager) -> dict[str,
         "workspace": store.payload(),
         "runs": manager.list(),
         "cards": list_card_drafts(store),
-        "models": fetch_models(),
-        "integrations": {"pexels": {"configured": has_pexels_api_key()}},
+        "models": _models_for_store(store),
+        "integrations": {
+            "pexels": {"configured": has_pexels_api_key()},
+            "openrouter": {"configured": bool(os.environ.get("OPENROUTER_API_KEY"))},
+        },
+        "starter": {"photo_ids": list(STARTER_PHOTO_IDS)},
     }
 
 
 def _ensure_starter_recipe(store: WorkspaceStore) -> None:
+    bundled_reference_ids = store.ensure_bundled_references()
     data = store.read()
     if data.get("recipes"):
         return
-    recipe = recipe_from_payload(STARTER_RECIPE, new_id("recipe"), now_iso())
+    recipe = recipe_from_payload({**STARTER_RECIPE, "reference_ids": bundled_reference_ids}, new_id("recipe"), now_iso())
     store.mutate(lambda current: (current["recipes"].append(recipe), current.update({"active_recipe_id": recipe["id"]})))
 
 
@@ -101,6 +97,62 @@ def _parse_upload(body: bytes, content_type: str) -> tuple[dict[str, str], str, 
     if not file_content:
         raise ValueError("multipart request did not include an image file")
     return fields, filename, file_content, file_type
+
+
+def _import_source(store: WorkspaceStore, candidate: dict[str, Any], include_in_benchmark: bool = True) -> dict[str, Any]:
+    photo_id = candidate.get("pexels_photo_id")
+    if photo_id is None:
+        raise ValueError("Pexels result is missing its photo ID")
+    existing = next(
+        (
+            source for source in store.read().get("sources", [])
+            if str((source.get("provenance") or {}).get("photo_id")) == str(photo_id)
+        ),
+        None,
+    )
+    if existing:
+        if include_in_benchmark:
+            store.mutate(lambda data: data["benchmark_source_ids"].append(existing["id"]) if existing["id"] not in data["benchmark_source_ids"] else None)
+        return {"photo_id": photo_id, "status": "deduplicated", "source_id": existing["id"]}
+    url = str(candidate.get("selected_image_url") or candidate.get("original_image_url") or "")
+    if not url:
+        raise ValueError("Pexels result has no downloadable image")
+    response = requests.get(url, timeout=60)
+    response.raise_for_status()
+    record = store.add_image_record(
+        "source", str(candidate.get("photographer") or f"Pexels {photo_id}"),
+        f"pexels-{photo_id or new_id('source')}.jpg", response.content, response.headers.get("Content-Type"),
+    )
+
+    def annotate(data: dict[str, Any]) -> None:
+        source = _find_item(data, "sources", str(record["id"]))
+        if not record.get("deduplicated"):
+            source["provenance"] = {
+                "kind": "pexels", "photo_id": photo_id, "photographer": candidate.get("photographer"),
+                "photographer_url": candidate.get("photographer_url"), "photo_page_url": candidate.get("photo_page_url"),
+                "license_page": candidate.get("license_page"), "query": candidate.get("query"),
+                "original_image_url": candidate.get("original_image_url"),
+            }
+        if include_in_benchmark and source["id"] not in data["benchmark_source_ids"]:
+            data["benchmark_source_ids"].append(source["id"])
+
+    store.mutate(annotate)
+    return {"photo_id": photo_id, "status": "deduplicated" if record.get("deduplicated") else "imported", "source_id": record["id"]}
+
+
+def bulk_import_sources(store: WorkspaceStore, candidates: list[dict[str, Any]], include_in_benchmark: bool = True) -> dict[str, Any]:
+    results: list[dict[str, Any]] = []
+    for candidate in candidates:
+        try:
+            results.append(_import_source(store, dict(candidate), include_in_benchmark))
+        except Exception as exc:
+            results.append({"photo_id": candidate.get("pexels_photo_id"), "status": "failed", "error": str(exc)})
+    return {
+        "results": results,
+        "imported": sum(item["status"] == "imported" for item in results),
+        "deduplicated": sum(item["status"] == "deduplicated" for item in results),
+        "failed": sum(item["status"] == "failed" for item in results),
+    }
 
 
 class WorkbenchHandler(BaseHTTPRequestHandler):
@@ -142,7 +194,7 @@ class WorkbenchHandler(BaseHTTPRequestHandler):
                 self.send_json(_workspace_response(self.store, self.manager))
                 return
             if path == "/api/models":
-                self.send_json({"ok": True, "models": fetch_models()})
+                self.send_json({"ok": True, "models": _models_for_store(self.store)})
                 return
             if path == "/api/templates":
                 self.send_json({"ok": True, "templates": list_templates()})
@@ -189,30 +241,60 @@ class WorkbenchHandler(BaseHTTPRequestHandler):
                     raise ValueError("search query is required")
                 results = [
                     {**candidate, "preview_url": candidate.get("selected_image_url"), "provenance": {"kind": "pexels", "photographer": candidate.get("photographer"), "photo_page_url": candidate.get("photo_page_url"), "license_page": candidate.get("license_page")}}
-                    for candidate in search_pexels(query, int(payload.get("count", 8)), "portrait")
+                    for candidate in search_pexels(
+                        query, int(payload.get("count", 12)), "portrait",
+                        page=max(1, int(payload.get("page", 1))), per_page=min(40, max(1, int(payload.get("count", 12)))),
+                    )
                     if is_plausible_portrait(candidate)
                 ]
-                self.send_json({"ok": True, "results": results})
+                self.send_json({"ok": True, "results": results, "page": max(1, int(payload.get("page", 1))), "has_more": len(results) == int(payload.get("count", 12))})
                 return
             if path == "/api/sources/import":
                 payload = self._json()
                 candidate = dict(payload.get("candidate") or {})
-                url = str(candidate.get("selected_image_url") or candidate.get("original_image_url") or "")
-                if not url:
-                    raise ValueError("Pexels result has no downloadable image")
-                response = requests.get(url, timeout=60)
-                response.raise_for_status()
-                record = self.store.add_image_record("source", str(candidate.get("photographer") or "Pexels source"), f"pexels-{candidate.get('pexels_photo_id', new_id('source'))}.jpg", response.content, response.headers.get("Content-Type"))
-                def annotate(data: dict[str, Any]) -> None:
-                    source = _find_item(data, "sources", record["id"])
-                    source["provenance"] = {"kind": "pexels", "photo_id": candidate.get("pexels_photo_id"), "photographer": candidate.get("photographer"), "photographer_url": candidate.get("photographer_url"), "photo_page_url": candidate.get("photo_page_url"), "license_page": candidate.get("license_page"), "query": candidate.get("query"), "original_image_url": candidate.get("original_image_url")}
-                self.store.mutate(annotate)
-                self.send_json({"ok": True, "workspace": self.store.payload()})
+                result = bulk_import_sources(self.store, [candidate], bool(payload.get("include_in_benchmark", True)))
+                if result["failed"]:
+                    raise ValueError(result["results"][0]["error"])
+                self.send_json({"ok": True, "workspace": self.store.payload(), **result})
+                return
+            if path == "/api/sources/import-bulk":
+                payload = self._json()
+                candidates = payload.get("candidates") or []
+                if not isinstance(candidates, list) or not candidates:
+                    raise ValueError("select at least one search result to import")
+                result = bulk_import_sources(self.store, [dict(item) for item in candidates], bool(payload.get("include_in_benchmark", True)))
+                self.send_json({"ok": True, "workspace": self.store.payload(), **result})
+                return
+            if path == "/api/sources/starter":
+                candidates: list[dict[str, Any]] = []
+                lookup_failures: list[dict[str, Any]] = []
+                for photo_id in STARTER_PHOTO_IDS:
+                    try:
+                        candidates.append(get_pexels_photo(photo_id))
+                    except Exception as exc:
+                        lookup_failures.append({"photo_id": photo_id, "status": "failed", "error": str(exc)})
+                result = bulk_import_sources(self.store, candidates, True)
+                result["results"] = [*result["results"], *lookup_failures]
+                result["failed"] += len(lookup_failures)
+                self.send_json({"ok": True, "workspace": self.store.payload(), **result})
+                return
+            match = re.fullmatch(r"/api/references/([^/]+)/replace", path)
+            if match:
+                _, filename, content, content_type = _parse_upload(
+                    self.rfile.read(int(self.headers.get("Content-Length", "0"))), self.headers.get("Content-Type", "")
+                )
+                record = self.store.replace_reference_image(match.group(1), filename, content, content_type)
+                self.send_json({"ok": True, "workspace": self.store.payload(), "record": record})
                 return
             if path == "/api/sources/upload" or path == "/api/references/upload":
                 fields, filename, content, content_type = _parse_upload(self.rfile.read(int(self.headers.get("Content-Length", "0"))), self.headers.get("Content-Type", ""))
                 kind = "source" if path.startswith("/api/sources") else "reference"
                 record = self.store.add_image_record(kind, fields.get("label", ""), filename, content, content_type)
+                if kind == "source":
+                    self.store.mutate(
+                        lambda data: data["benchmark_source_ids"].append(record["id"])
+                        if record["id"] not in data["benchmark_source_ids"] else None
+                    )
                 self.send_json({"ok": True, "workspace": self.store.payload(), "record": record})
                 return
             if path == "/api/benchmark":
@@ -254,8 +336,15 @@ class WorkbenchHandler(BaseHTTPRequestHandler):
                 return
             if path == "/api/runs":
                 payload = self._json()
-                run = self.manager.create(payload.get("recipe_id"), int(payload.get("outputs_per_source", 1)))
-                self.send_json({"ok": True, "run": run})
+                run = self.manager.create(
+                    dict(payload.get("recipe") or {}),
+                    [str(item) for item in payload.get("source_ids") or []],
+                    int(payload.get("outputs_per_source", 1)),
+                    str(payload.get("execution_mode") or ""),
+                    _models_for_store(self.store),
+                    bool(payload.get("confirm_paid")),
+                )
+                self.send_json({"ok": True, "run": run, "workspace": self.store.payload()})
                 return
             match = re.fullmatch(r"/api/runs/([^/]+)/review", path)
             if match:
@@ -269,7 +358,11 @@ class WorkbenchHandler(BaseHTTPRequestHandler):
                 return
             if path == "/api/cards":
                 payload = self._json()
-                card = create_card_draft(self.store, str(payload.get("run_id") or ""), str(payload.get("run_item_id") or ""), str(payload.get("label") or "Experimental claimant"), str(payload.get("preset") or "bust"))
+                card = create_card_draft(
+                    self.store, str(payload.get("run_id") or ""), str(payload.get("run_item_id") or ""),
+                    str(payload.get("label") or "Experimental claimant"), str(payload.get("preset") or "bust"),
+                    str(payload.get("treatment") or "painterly"),
+                )
                 self.send_json({"ok": True, "card": card})
                 return
             match = re.fullmatch(r"/api/cards/([^/]+)/decision", path)

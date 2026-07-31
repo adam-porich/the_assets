@@ -20,6 +20,8 @@ def utc_now_iso() -> str:
 
 
 API_URL = "https://api.pexels.com/v1/search"
+PHOTO_URL = "https://api.pexels.com/v1/photos/{photo_id}"
+STARTER_PHOTO_IDS = (11013487, 14468344, 23024613, 9009504, 14650121, 35918726)
 
 
 def has_pexels_api_key() -> bool:
@@ -72,6 +74,15 @@ def search_pexels(
     response = requests.get(API_URL, headers={"Authorization": key}, params=params, timeout=30)
     response.raise_for_status()
     return parse_search_response(response.json(), query)[:count]
+
+
+def get_pexels_photo(photo_id: int, api_key: str | None = None) -> dict[str, Any]:
+    key = api_key or os.environ.get("PEXELS_API_KEY")
+    if not key:
+        raise RuntimeError("PEXELS_API_KEY is not set")
+    response = requests.get(PHOTO_URL.format(photo_id=int(photo_id)), headers={"Authorization": key}, timeout=30)
+    response.raise_for_status()
+    return parse_photo(response.json(), "starter benchmark")
 
 
 def is_plausible_portrait(candidate: dict[str, Any]) -> bool:

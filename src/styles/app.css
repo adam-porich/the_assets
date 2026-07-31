@@ -44,3 +44,82 @@ pre, code { font-family: "DM Mono", monospace; }
 .reference-label { min-width: 0; flex: 1; border: 0; border-bottom: 1px solid var(--line); padding: 4px; background: transparent; color: var(--ink); font-size: 11px; }
 @media (max-width: 980px) { .app-header { padding: 18px 24px; flex-wrap: wrap; gap: 18px; }.brand-block { min-width: 0; }.header-status { margin-left: 0; width: 100%; }.global-band { padding: 0 24px; }.lab-layout, .run-view, .gallery-view, .card-workbench-view, .compare-view { width: min(100% - 40px, 1450px); }.lab-columns { grid-template-columns: 1fr; }.card-workbench-layout { grid-template-columns: 1fr; }.frame-controls { width: min(100%, 500px); justify-self: center; } }
 @media (max-width: 620px) { .app-header { display: grid; }.main-nav { gap: 16px; }.lab-layout, .run-view, .gallery-view, .card-workbench-view, .compare-view { width: calc(100% - 24px); margin-top: 17px; }.benchmark-strip, .recipe-panel, .experiment-panel { padding: 17px 14px; }.section-heading { flex-wrap: wrap; }.recommendation, .quiet-status { margin-left: 0; order: 3; }.setup-drawer { grid-template-columns: 1fr; margin-left: 0; margin-right: 0; }.form-grid { grid-template-columns: 1fr; }.run-toolbar, .workbench-top { align-items: flex-start; flex-wrap: wrap; }.toolbar-actions { margin-left: auto; }.sheet-grid { grid-template-columns: repeat(2, 1fr); gap: 7px; }.sheet-cell-caption { padding: 6px; }.sheet-cell-caption strong { font-size: 10px; }.compare-bar { align-items: stretch; flex-direction: column; }.compare-bar select { width: 100%; }.gallery-view .page-heading { align-items: flex-start; flex-direction: column; }.toggle { margin-left: 0; }.card-workbench-layout { gap: 15px; }.app-footer { padding: 16px 12px; flex-direction: column; } }
+
+.readiness { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1px; margin-bottom: 18px; padding: 1px; background: var(--line); }
+.readiness > span { display: grid; gap: 4px; padding: 11px 13px; background: var(--paper); color: var(--muted); font: 10px "DM Mono", monospace; }
+.readiness > span.ready { color: var(--olive); }
+.readiness b { color: var(--ink); font: 11px "DM Sans", sans-serif; }
+.starter-action { display: flex; align-items: center; gap: 12px; margin: -6px 0 16px; }
+.starter-action span { color: var(--muted); font-size: 11px; }
+.search-presets { display: flex; flex-wrap: wrap; gap: 5px; }
+.search-presets button { border: 1px solid var(--line); border-radius: 14px; padding: 5px 9px; background: #fffdf9; color: var(--muted); font-size: 10px; }
+.search-presets button.selected { border-color: var(--accent); color: var(--accent-dark); background: #f5e5df; }
+.bulk-bar, .pagination { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.bulk-bar { padding: 8px 0; border-bottom: 1px solid var(--line); color: var(--muted); font-size: 11px; }
+.pagination { justify-content: center; margin-top: 8px; color: var(--muted); font: 10px "DM Mono", monospace; }
+.search-result { position: relative; cursor: pointer; }
+.search-result > input { position: absolute; top: 7px; left: 7px; z-index: 1; width: auto; accent-color: var(--accent); }
+.search-result > span { min-width: 0; display: flex; flex-direction: column; gap: 4px; padding-left: 3px; }
+.search-result.selected { border-color: var(--accent); background: #f8ece7; }
+.style-pack-panel { margin-top: 18px; padding: 22px 24px; }
+.reference-gallery { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 10px; }
+.reference-gallery article { display: grid; grid-template-columns: 55px 1fr; grid-template-rows: auto auto; gap: 3px 9px; align-items: center; padding: 7px; border: 1px solid var(--line); opacity: .6; }
+.reference-gallery article.selected { border-color: var(--olive); opacity: 1; }
+.reference-gallery img { grid-row: 1 / 3; width: 55px; height: 64px; object-fit: cover; }
+.reference-gallery strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11px; }
+.reference-gallery small { color: var(--muted); font: 9px "DM Mono", monospace; }
+.replace-button { position: relative; overflow: hidden; cursor: pointer; }
+.replace-button input { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
+.recipe-panel, .experiment-panel { margin-top: 18px; }
+.draft-state, .mode-badge { margin-left: auto; padding: 5px 8px; background: var(--paper-deep); color: var(--muted); font: 9px "DM Mono", monospace; }
+.draft-state.dirty, .mode-badge.live { background: #f7eddb; color: #71562b; }
+.draft-state.saved { color: var(--olive); }
+.mode-switch { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-top: 16px; }
+.mode-switch button { display: grid; gap: 4px; border: 1px solid var(--line); padding: 11px 12px; background: #fffdf9; color: var(--ink); text-align: left; font-size: 12px; }
+.mode-switch button.selected { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); color: var(--accent-dark); }
+.mode-switch small { color: var(--muted); font: 9px "DM Mono", monospace; }
+.mode-switch.compact { margin-top: 6px; }
+.mode-switch.compact button { padding: 8px; font-size: 10px; }
+.recipe-basics { display: grid; grid-template-columns: minmax(180px, 1fr) minmax(240px, 1.25fr) 130px; gap: 10px; margin-top: 14px; }
+.compact-field { max-width: 420px; margin-top: 14px; }
+.advanced-direction { margin-top: 16px; border-top: 1px solid var(--line); padding-top: 13px; }
+.advanced-direction > summary { cursor: pointer; color: var(--accent-dark); font-size: 12px; font-weight: 600; }
+.advanced-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 14px; }
+.advanced-fields .instruction-preview { grid-column: 1 / -1; margin: 0; }
+.experiment-panel .run-preflight { grid-template-columns: repeat(4, 1fr); }
+.experiment-panel .run-preflight > .button { grid-column: span 2; margin: 10px; }
+.modal-backdrop { position: fixed; z-index: 20; inset: 0; display: grid; place-items: center; padding: 20px; background: rgba(27, 22, 18, .62); }
+.run-confirm { width: min(540px, 100%); max-height: calc(100vh - 40px); overflow: auto; padding: 26px; box-shadow: 0 20px 60px rgba(0, 0, 0, .3); }
+.run-confirm h2 { margin: 5px 0 16px; }
+.run-confirm dl { display: grid; grid-template-columns: 135px 1fr; gap: 8px 12px; padding: 14px; background: var(--paper-deep); font-size: 11px; }
+.run-confirm dt { color: var(--muted); }
+.run-confirm dd { margin: 0; overflow-wrap: anywhere; }
+.run-confirm p { margin-top: 14px; color: var(--muted); font-size: 12px; line-height: 1.5; }
+.modal-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 18px; }
+.sheet-cell.selected { border-color: var(--accent); box-shadow: 0 0 0 2px rgba(163, 75, 53, .22); }
+.frame-action { width: 100%; margin-top: 5px; padding: 7px 9px; }
+.sticky-frame-action { position: sticky; bottom: -32px; margin: 18px -28px -32px; padding: 12px 28px 24px; background: linear-gradient(transparent, var(--paper) 20%); }
+.run-summary.simulation { border-left: 4px solid #8d785d; }
+.run-summary.live { border-left: 4px solid var(--accent); }
+.treatment-control { padding-top: 4px; border-top: 1px solid var(--line); }
+.live-art-window img.treated-art { inset: 0 !important; width: 100%; height: 100%; object-fit: fill; image-rendering: auto; }
+.live-art-window.estate-pixel-v1 img.treated-art { image-rendering: pixelated; }
+
+@media (max-width: 980px) {
+  .recipe-basics { grid-template-columns: 1fr 1fr; }
+  .recipe-basics > :first-child { grid-column: 1 / -1; }
+  .experiment-panel .run-preflight { grid-template-columns: repeat(2, 1fr); }
+}
+
+@media (max-width: 620px) {
+  .readiness { grid-template-columns: 1fr 1fr; }
+  .starter-action { align-items: stretch; flex-direction: column; }
+  .style-pack-panel { padding: 17px 14px; }
+  .reference-gallery { grid-template-columns: 1fr 1fr; }
+  .recipe-basics, .advanced-fields { grid-template-columns: 1fr; }
+  .recipe-basics > :first-child, .advanced-fields .instruction-preview { grid-column: auto; }
+  .experiment-panel .run-preflight { grid-template-columns: 1fr 1fr; }
+  .experiment-panel .run-preflight > .button { grid-column: 1 / -1; }
+  .run-confirm dl { grid-template-columns: 1fr; }
+  .sheet-grid { grid-template-columns: 1fr; }
+}

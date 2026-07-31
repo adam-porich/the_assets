@@ -10,19 +10,19 @@ npm install
 npm run dev
 ```
 
-Open the Vite URL and use Style Lab. The Python service creates an ignored `portrait-library/` workspace on first start. Use the local upload path for a smoke test, or set `PEXELS_API_KEY` to search Pexels. When running the provided systemd user service, put that variable in `~/.env`; the service loads it on restart. Set `OPENROUTER_API_KEY` when using an image model; the default deterministic painterly model needs no key and is useful for UI validation.
+Open the Vite URL and use Style Lab. The Python service creates an ignored `portrait-library/` workspace on first start, seeds two bundled estate style references, and creates a low-quality `openai/gpt-image-1-mini` live recipe. Set `PEXELS_API_KEY` to load the six-source starter benchmark or search Pexels. Set `OPENROUTER_API_KEY` only when you are ready to confirm a paid live generation. The separate Simulation mode is local and free, but its filtered output is a workflow fixture—not generated artwork.
 
 The Vite app keeps its existing `/butler/assets/` base path and the API defaults to `127.0.0.1:8765`. Set `ASSET_REVIEW_PORT` if the API uses another port.
 
 ## Browser workflow
 
-1. In Style Lab, add source portraits from Pexels or local files and put a fixed order into the benchmark.
-2. Upload and order a small, consistent style-reference pack.
-3. Edit or duplicate the seeded artist-facing recipe and inspect its resolved instruction preview.
-4. Run the benchmark, wait for the source-ordered sheet, and assign one sheet-level verdict.
-5. Compare completed sheets, choose one result, and use it in Card Workbench.
-6. Drag, zoom, or nudge the image in the 336 × 276 art window. Framing saves automatically; Keep and Discard are exploratory draft decisions.
+1. Load the starter benchmark, or bulk-import/upload an ordered source set.
+2. Confirm the bundled style pack and adjust reference selection or order if needed.
+3. Choose explicit Live generation or Simulation, edit the recipe, then use **Save and run**.
+4. For live work, complete and confirm a one-source paid smoke test before unlocking the full benchmark.
+5. Review the source-ordered sheet and choose **Frame this portrait** on any completed tile.
+6. Adjust the 336 × 276 frame, choose Painterly or deterministic Estate Pixel treatment, then Keep or Discard the draft.
 
-Only `workspace.json`, source/reference metadata, immutable run snapshots, and card drafts live under `portrait-library/`. Every image URL served by the API is checked to remain below that directory. Pexels provenance and its experimental-use licensing caveat remain attached to imported sources.
+Runs record exact recipe/model provenance, live or simulation mode, provider capabilities, usage, and returned cost. Card drafts retain their source run, framing, treatment version, render metadata, and output. Every workspace asset URL is checked to remain below `portrait-library/`.
 
 See [docs/portrait-workbench.md](docs/portrait-workbench.md) for the workspace contract, backend limitations, framing formula, and reset procedure.
