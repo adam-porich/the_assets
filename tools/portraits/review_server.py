@@ -1,23 +1,32 @@
 from __future__ import annotations
 
+import base64
+import hashlib
 import json
 import mimetypes
+import os
 import re
 import shutil
+import time
+import uuid
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
 from urllib.parse import unquote, urlparse
 
+import requests
+
+from tools.cards.pipeline import card_payloads, list_templates, master_payloads, promote_master, render_card, update_master_composition, validate_cards
+
 from .img2img import OpenRouterBackend, load_preset, stable_seed, stylize_source
 from .manifest import find_source, load_manifest, save_manifest
 from .pexels import download_candidate, is_plausible_portrait, search_pexels
 
-import os
-import time
-import requests
 
+STYLES_PATH = Path("portrait-review/styles.json")
+STYLES_DIR = Path("portrait-review/styles")
+PRESETS_DIR = Path(__file__).parent / "presets"
 
 _image_models_cache: tuple[list[dict[str, Any]], float] | None = None
 IMAGE_MODELS_CACHE_TTL = 3600
@@ -26,8 +35,6 @@ CHEAP_IMG2IMG_MODELS = [
     "openai/gpt-image-1-mini",
     "google/gemini-3.1-flash-lite-image",
     "google/gemini-3.1-flash-image",
-    "recraft/recraft-v3",
-    "recraft/recraft-v4",
     "black-forest-labs/flux.2-klein-4b",
     "sourceful/riverflow-v2-fast",
 ]
@@ -48,12 +55,15 @@ def fetch_image_models() -> list[dict[str, Any]]:
     models = []
     for model in payload.get("data", []):
         params = model.get("supported_parameters") or {}
+        refs = params.get("input_references") or {}
         supports_img2img = "input_references" in params
+        max_refs = refs.get("max", 0) if isinstance(refs, dict) else 0
         models.append({
             "id": model.get("id"),
             "name": model.get("name"),
             "description": model.get("description"),
             "supports_img2img": supports_img2img,
+            "max_input_references": max_refs,
             "supported_parameters": list(params.keys()),
         })
     _image_models_cache = (models, now)
@@ -63,9 +73,7 @@ def fetch_image_models() -> list[dict[str, Any]]:
 def fetch_cheap_img2img_models() -> list[dict[str, Any]]:
     all_models = fetch_image_models()
     cheap_set = set(CHEAP_IMG2IMG_MODELS)
-    return [m for m in all_models if m["id"] in cheap_set and m["supports_img2img"]]
-    _image_models_cache = (models, now)
-    return models
+    return [m for m in all_models if m["id"] in cheap_set and m["supports_img2img"] and m.get("max_input_references", 0) >= 2]
 
 
 REVIEW_PATH = Path("portrait-review/review.json")
@@ -75,7 +83,7 @@ STYLIZED_RAW_RE = re.compile(r"^pexels-(?P<photo_id>\d+)-(?P<preset>.+)-(?P<seed
 
 def load_review(path: Path = REVIEW_PATH) -> dict[str, Any]:
     if not path.exists():
-        return {"version": 1, "sources": {}, "candidates": {}}
+        return {"version": 1, "sources": {}, "candidates": {}, "cards": {}}
     return json.loads(path.read_text(encoding="utf-8"))
 
 
@@ -202,11 +210,12 @@ def build_library_payload(library_dir: Path, review_path: Path = REVIEW_PATH) ->
 
 
 def update_review_item(review: dict[str, Any], collection: str, item_id: str, status: str, note: str = "") -> dict[str, Any]:
-    if collection not in {"sources", "candidates"}:
-        raise ValueError("collection must be sources or candidates")
+    if collection not in {"sources", "candidates", "cards"}:
+        raise ValueError("collection must be sources, candidates, or cards")
+    allowed_statuses = {"favorite", "reject", "add"} if collection != "cards" else {"approved", "keep", "reject"}
     if status == "clear":
         review.setdefault(collection, {}).pop(item_id, None)
-    elif status in {"favorite", "reject", "add"}:
+    elif status in allowed_statuses:
         review.setdefault(collection, {})[item_id] = {"status": status, "note": note}
     else:
         raise ValueError(f"unknown review status: {status}")
@@ -320,7 +329,7 @@ def favorite_candidate(library_dir: Path, review_path: Path, photo_id: str, cand
     return {"image_path": str(image_dest), "metadata_path": str(json_dest), "review": review, "sidecar": sidecar}
 
 
-def generate_candidate(library_dir: Path, photo_id: str, preset_name: str, model: str) -> dict[str, Any]:
+def generate_candidate(library_dir: Path, photo_id: str, preset_name: str, model: str, style_reference_url: str | None = None) -> dict[str, Any]:
     if not photo_id or not preset_name or not model:
         raise ValueError("photo_id, preset, and model are required")
     manifest = load_manifest(library_dir)
@@ -331,8 +340,13 @@ def generate_candidate(library_dir: Path, photo_id: str, preset_name: str, model
     preset = load_preset(preset_name)
     backend = OpenRouterBackend(model=model)
     source_path = library_dir / "sources" / str(source_filename)
+
+    resolved_style_ref: str | None = None
+    if style_reference_url:
+        resolved_style_ref = style_reference_url
+
     seed = stable_seed(int(photo_id), preset.name, len(entry.get("stylized_candidates", [])))
-    prep, records = stylize_source(source_path, int(photo_id), library_dir, preset, backend, seed=seed, count=1)
+    prep, records = stylize_source(source_path, int(photo_id), library_dir, preset, backend, seed=seed, count=1, style_reference_url=resolved_style_ref)
     entry["stylization_prep"] = prep
     merge_stylized_candidates(entry, records)
     entry["processing_status"] = "stylized"
@@ -365,6 +379,124 @@ def fetch_pexels_sources(library_dir: Path, query: str, count: int = 10) -> list
             break
     save_manifest(library_dir, manifest)
     return new_entries
+
+
+def load_styles() -> dict[str, Any]:
+    if not STYLES_PATH.exists():
+        return {"version": 1, "styles": []}
+    return json.loads(STYLES_PATH.read_text(encoding="utf-8"))
+
+
+def save_styles(styles: dict[str, Any]) -> None:
+    STYLES_PATH.parent.mkdir(parents=True, exist_ok=True)
+    STYLES_PATH.write_text(json.dumps(styles, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+
+def generate_style_image(prompt: str, model: str, count: int = 1) -> dict[str, Any]:
+    if not prompt or not model:
+        raise ValueError("prompt and model are required")
+    api_key = os.environ.get("OPENROUTER_API_KEY")
+    if not api_key:
+        raise RuntimeError("OPENROUTER_API_KEY is not configured")
+
+    styles_data = load_styles()
+    STYLES_DIR.mkdir(parents=True, exist_ok=True)
+
+    payload: dict[str, Any] = {
+        "model": model,
+        "prompt": prompt,
+        "n": count,
+        "aspect_ratio": "1:1",
+        "output_format": "png",
+    }
+    if model.startswith("openai/"):
+        payload["quality"] = "low"
+        payload["background"] = "opaque"
+    else:
+        payload["resolution"] = "1K"
+
+    response = requests.post(
+        "https://openrouter.ai/api/v1/images",
+        headers={
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json",
+            "HTTP-Referer": "https://github.com/adam-porich/the_assets",
+            "X-Title": "the_assets style generator",
+        },
+        json=payload,
+        timeout=180,
+    )
+    if not response.ok:
+        raise RuntimeError(f"Style generation failed {response.status_code}: {response.text[:500]}")
+
+    results = []
+    for item in response.json().get("data", []):
+        style_id = uuid.uuid4().hex[:12]
+        filename = f"{style_id}.png"
+        image_path = STYLES_DIR / filename
+        image_path.write_bytes(base64.b64decode(item["b64_json"]))
+        entry = {
+            "id": style_id,
+            "prompt": prompt,
+            "model": model,
+            "created_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+            "filename": filename,
+            "url": f"asset/../portrait-review/styles/{filename}",
+        }
+        styles_data["styles"].insert(0, entry)
+        results.append(entry)
+
+    save_styles(styles_data)
+    return {"styles": results, "all": styles_data["styles"]}
+
+
+def list_presets() -> list[dict[str, Any]]:
+    presets = []
+    if PRESETS_DIR.exists():
+        for path in sorted(PRESETS_DIR.glob("*.json")):
+            try:
+                data = json.loads(path.read_text(encoding="utf-8"))
+                presets.append({
+                    "name": path.stem,
+                    "prompt": data.get("prompt", ""),
+                    "negative_prompt": data.get("negative_prompt", ""),
+                    "strength": data.get("strength"),
+                    "steps": data.get("steps"),
+                })
+            except Exception:
+                pass
+    return presets
+
+
+def list_all_generations(library_dir: Path) -> list[dict[str, Any]]:
+    manifest = load_manifest(library_dir)
+    review = load_review(REVIEW_PATH)
+    generations: list[dict[str, Any]] = []
+    for entry in manifest.get("sources", []):
+        photo_id = str(entry.get("pexels_photo_id"))
+        source_info = {
+            "photo_id": photo_id,
+            "photographer": entry.get("photographer"),
+            "query": entry.get("query"),
+        }
+        prep = entry.get("stylization_prep") or {}
+        for candidate in entry.get("stylized_candidates", []):
+            cid = str(candidate.get("candidate_id"))
+            candidate_review = review.get("candidates", {}).get(cid, {})
+            generations.append({
+                "candidate_id": cid,
+                "source": source_info,
+                "model": candidate.get("model"),
+                "preset": candidate.get("preset"),
+                "prompt": candidate.get("prompt"),
+                "seed": candidate.get("seed"),
+                "review": candidate_review,
+                "raw_url": asset_url(candidate.get("output_path")),
+                "final_url": asset_url(candidate.get("final_output_path")),
+                "source_url": source_asset_url(entry.get("local_source_filename")),
+            })
+    generations.sort(key=lambda g: g.get("candidate_id", ""), reverse=True)
+    return generations
 
 
 class ReviewHandler(BaseHTTPRequestHandler):
@@ -403,6 +535,24 @@ class ReviewHandler(BaseHTTPRequestHandler):
                 self.send_json({"ok": True, "models": fetch_cheap_img2img_models()})
             except Exception as exc:
                 self.send_json({"ok": False, "error": str(exc)}, HTTPStatus.BAD_GATEWAY)
+            return
+        if parsed.path == "/api/styles":
+            self.send_json({"ok": True, **load_styles()})
+            return
+        if parsed.path == "/api/presets":
+            self.send_json({"ok": True, "presets": list_presets()})
+            return
+        if parsed.path == "/api/generations":
+            self.send_json({"ok": True, "generations": list_all_generations(self.library_dir)})
+            return
+        if parsed.path == "/api/cards":
+            self.send_json({"ok": True, "cards": card_payloads(self.library_dir, load_review(self.review_path))})
+            return
+        if parsed.path == "/api/masters":
+            self.send_json({"ok": True, "masters": master_payloads(self.library_dir)})
+            return
+        if parsed.path == "/api/card-templates":
+            self.send_json({"ok": True, "templates": list_templates()})
             return
         if parsed.path.startswith("/asset/"):
             self.serve_asset(parsed.path.removeprefix("/asset/"))
@@ -449,6 +599,7 @@ class ReviewHandler(BaseHTTPRequestHandler):
                     str(payload["photo_id"]),
                     str(payload["preset"]),
                     str(payload["model"]),
+                    str(payload.get("style_reference_url") or "") or None,
                 )
                 self.send_json({"ok": True, **result, "library": build_library_payload(self.library_dir, self.review_path)})
                 return
@@ -462,6 +613,39 @@ class ReviewHandler(BaseHTTPRequestHandler):
                 )
                 self.send_json({"ok": True, **result})
                 return
+            if parsed.path == "/api/promote-master":
+                master = promote_master(
+                    self.library_dir,
+                    str(payload["photo_id"]),
+                    str(payload["candidate_id"]),
+                    str(payload["master_id"]),
+                    str(payload.get("style_id") or "estate-card-v1"),
+                    str(payload.get("note") or ""),
+                )
+                self.send_json({"ok": True, "master": master})
+                return
+            if parsed.path == "/api/master-composition":
+                master = update_master_composition(
+                    self.library_dir,
+                    str(payload["master_id"]),
+                    dict(payload["composition"]),
+                )
+                self.send_json({"ok": True, "master": master})
+                return
+            if parsed.path == "/api/render-card":
+                card = render_card(
+                    self.library_dir,
+                    str(payload["master_id"]),
+                    str(payload.get("template_id") or "estate-card-v1"),
+                    str(payload.get("archetype_id") or "") or None,
+                    str(payload.get("label") or "Experimental claimant"),
+                )
+                self.send_json({"ok": True, "card": card})
+                return
+            if parsed.path == "/api/validate-cards":
+                report = validate_cards(self.library_dir, list(payload.get("card_ids") or []) or None)
+                self.send_json({"ok": True, "report": report})
+                return
             if parsed.path == "/api/fetch-pexels":
                 new_entries = fetch_pexels_sources(
                     self.library_dir,
@@ -474,6 +658,14 @@ class ReviewHandler(BaseHTTPRequestHandler):
                     "library": build_library_payload(self.library_dir, self.review_path),
                 })
                 return
+            if parsed.path == "/api/generate-style":
+                result = generate_style_image(
+                    str(payload.get("prompt") or ""),
+                    str(payload.get("model") or ""),
+                    int(payload.get("count", 1)),
+                )
+                self.send_json({"ok": True, **result})
+                return
         except Exception as exc:
             self.send_json({"ok": False, "error": str(exc)}, HTTPStatus.BAD_REQUEST)
             return
@@ -484,7 +676,10 @@ class ReviewHandler(BaseHTTPRequestHandler):
         if safe.is_absolute() or ".." in safe.parts:
             self.send_error(HTTPStatus.BAD_REQUEST)
             return
-        path = self.library_dir / safe
+        if str(safe).startswith("portrait-review/"):
+            path = safe
+        else:
+            path = self.library_dir / safe
         if not path.exists() or not path.is_file():
             self.send_error(HTTPStatus.NOT_FOUND)
             return

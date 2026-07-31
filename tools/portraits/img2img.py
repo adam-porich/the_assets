@@ -50,6 +50,7 @@ class Img2ImgRequest:
     input_image_path: str
     prompt: str
     negative_prompt: str = ""
+    style_reference_url: str | None = None
     seed: int | None = None
     strength: float = 0.45
     steps: int = 10
@@ -148,18 +149,35 @@ class OpenRouterBackend:
         self.quality = quality or os.environ.get("OPENROUTER_IMAGE_QUALITY") or "low"
 
     def generate(self, request: Img2ImgRequest) -> list[Img2ImgResult]:
+        input_references: list[dict[str, Any]] = [
+            {
+                "type": "image_url",
+                "image_url": {"url": image_data_url(Path(request.input_image_path))},
+            }
+        ]
+        if request.style_reference_url:
+            url = request.style_reference_url
+            if not (url.startswith("http://") or url.startswith("https://") or url.startswith("data:")):
+                resolved = Path(url)
+                if not resolved.exists():
+                    resolved = Path("portrait-review") / "styles" / Path(url).name
+                if not resolved.exists():
+                    resolved = Path.cwd() / url.lstrip("/")
+                if not resolved.exists():
+                    raise RuntimeError(f"Style reference image not found: {url} (tried {resolved})")
+                url = image_data_url(resolved)
+            input_references.append({
+                "type": "image_url",
+                "image_url": {"url": url},
+            })
+
         payload: dict[str, Any] = {
             "model": self.model,
             "prompt": request.prompt,
             "n": request.count,
             "aspect_ratio": "1:1",
             "output_format": "png",
-            "input_references": [
-                {
-                    "type": "image_url",
-                    "image_url": {"url": image_data_url(Path(request.input_image_path))},
-                }
-            ],
+            "input_references": input_references,
         }
         if request.seed is not None:
             payload["seed"] = request.seed
@@ -319,6 +337,7 @@ def stylize_source(
     seed: int | None = None,
     count: int | None = None,
     preparation: PreparationSettings | None = None,
+    style_reference_url: str | None = None,
 ) -> tuple[dict[str, Any], list[dict[str, Any]]]:
     prep = prepare_rembg_composite(source_path, photo_id, library_dir, preset, preparation)
     output_dir = library_dir / "stylized"
@@ -328,6 +347,7 @@ def stylize_source(
         input_image_path=str(library_dir / prep["composite_path"]),
         prompt=preset.prompt,
         negative_prompt=preset.negative_prompt,
+        style_reference_url=style_reference_url,
         seed=base_seed,
         strength=preset.strength,
         steps=preset.steps,

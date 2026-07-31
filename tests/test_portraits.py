@@ -8,6 +8,7 @@ from pathlib import Path
 
 from PIL import Image, ImageDraw
 
+from tools.cards.pipeline import card_payloads, list_templates, master_payloads, promote_master, render_card, update_master_composition, validate_cards
 from tools.portraits.cli import cmd_background, cmd_stylize, load_env_file, load_env_files
 from tools.portraits.img2img import (
     ExternalCommandBackend,
@@ -118,6 +119,52 @@ def test_preset_loading() -> None:
     assert preset.steps == 6
     assert "fantasy bureaucrat" in preset.prompt
     assert stable_seed(123, preset.name) == stable_seed(123, preset.name)
+
+
+def test_portrait_master_and_deterministic_card_render(tmp_path: Path) -> None:
+    library = tmp_path / "portrait-library"
+    stylized = library / "stylized"
+    stylized.mkdir(parents=True)
+    candidate_path = stylized / "pexels-123-estate-pixel-claimant-v1-42-final.png"
+    make_fixture_image(candidate_path)
+    save_manifest(
+        library,
+        {
+            "version": 1,
+            "sources": [{
+                "pexels_photo_id": 123,
+                "stylized_candidates": [{
+                    "candidate_id": "estate-pixel-claimant-v1:42",
+                    "final_output_path": str(candidate_path.relative_to(library)),
+                }],
+            }],
+        },
+    )
+
+    master = promote_master(library, "123", "estate-pixel-claimant-v1:42", "claimant-123")
+    assert master["master_path"] == "masters/claimant-123.png"
+    assert (library / master["master_path"]).exists()
+
+    updated = update_master_composition(library, "claimant-123", {"face_anchor": [0.48, 0.31], "preferred_archetype": "tall-silhouette"})
+    assert updated["composition"]["preferred_archetype"] == "tall-silhouette"
+    card = render_card(library, "claimant-123", archetype_id="tall-silhouette", label="Archive claimant")
+    card_path = library / card["output_path"]
+    assert card_path.exists()
+    assert Image.open(card_path).size == (420, 600)
+
+    second = render_card(library, "claimant-123", archetype_id="tall-silhouette", label="Archive claimant")
+    assert card["card_id"] == second["card_id"]
+    assert card_path.read_bytes() == (library / second["output_path"]).read_bytes()
+    payloads = card_payloads(library, {"cards": {card["card_id"]: {"status": "approved"}}})
+    assert payloads[0]["review"]["status"] == "approved"
+    assert payloads[0]["master_url"] == "asset/masters/claimant-123.png"
+    report = validate_cards(library)
+    assert report["ok"]
+    assert report["card_count"] == 1
+    masters = master_payloads(library)
+    assert masters[0]["master_url"] == "asset/masters/claimant-123.png"
+    assert masters[0]["renders"][0]["card_id"] == card["card_id"]
+    assert list_templates()[0]["archetypes"]["standard-bust"]["label"] == "Standard bust"
 
 
 def test_manifest_serialization_and_selection(tmp_path: Path) -> None:

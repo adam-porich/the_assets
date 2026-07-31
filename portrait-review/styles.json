@@ -1,0 +1,21 @@
+{
+  "styles": [
+    {
+      "created_at": "2026-07-07T14:53:46Z",
+      "filename": "eba013818158.png",
+      "id": "eba013818158",
+      "model": "openai/gpt-image-1-mini",
+      "prompt": "Looking for a structural reference for hero imagery in a card game",
+      "url": "asset/../portrait-review/styles/eba013818158.png"
+    },
+    {
+      "created_at": "2026-07-07T14:48:33Z",
+      "filename": "9ff3c44f945f.png",
+      "id": "9ff3c44f945f",
+      "model": "openai/gpt-image-1-mini",
+      "prompt": "Magic the Gathering card art, fantasy illustration, detailed character portrait, painterly style, dramatic lighting, rich colors, high quality",
+      "url": "asset/../portrait-review/styles/9ff3c44f945f.png"
+    }
+  ],
+  "version": 1
+}

@@ -2,8 +2,9 @@
 #
 # Install:
 #   cp deploy/the-assets-review-api.service ~/.config/systemd/user/
+#   cp deploy/the-assets-review-api-reload.service deploy/the-assets-review-api.path ~/.config/systemd/user/
 #   systemctl --user daemon-reload
-#   systemctl --user enable --now the-assets-review-api.service
+#   systemctl --user enable --now the-assets-review-api.service the-assets-review-api.path
 
 [Unit]
 Description=The Assets portrait review API
@@ -19,4 +20,3 @@ RestartSec=2
 
 [Install]
 WantedBy=default.target
-

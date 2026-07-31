@@ -298,6 +298,78 @@ uv run python -m tools.portraits review-server
 npm run dev
 ```
 
+For a second, temporary review server during local experimentation, point Vite
+at that port without changing source configuration:
+
+```bash
+ASSET_REVIEW_PORT=8876 npm run dev
+```
+
+## Experimental Card Context
+
+The portrait pipeline remains an experimental candidate generator. Once a
+candidate is acceptable, promote it to a reusable portrait master, then compose
+that master into a card preview. Card frames are never baked into portrait
+generation.
+
+```bash
+uv run python -m tools.portraits promote-master \
+  --input portrait-library \
+  --photo-id 123 \
+  --candidate-id 'estate-pixel-claimant-v1:42' \
+  --master-id claimant-123
+
+uv run python -m tools.portraits render-card \
+  --input portrait-library \
+  --master-id claimant-123 \
+  --archetype tall-silhouette \
+  --label "Archive Claimant"
+```
+
+`promote-master` copies the selected candidate into `portrait-library/masters/`
+and writes its source/style/composition metadata to `masters.json`. The initial
+composition anchors are intentionally editable experiment defaults. The review
+API exposes `POST /api/master-composition` for a small client to update them.
+
+`render-card` reads the master, its anchors, and the JSON template in
+`tools/cards/templates/`, then writes a deterministic preview and record to
+`portrait-library/cards/` and `cards.json`. The supported initial archetypes
+are `standard-bust`, `tall-silhouette`, and `wide-torso`.
+
+The React review app has a **Cards** tab for card-context approval or rejection.
+This is not a production card renderer; it exists to test framing, headroom,
+and silhouette across a small experimental set.
+
+Candidates can also be promoted directly from the source tab: use the chess-rook
+button, provide a readable master ID, and the app creates a standard-bust card
+preview before switching to **Cards**.
+
+The **Cards** tab is the full experimental composition surface: select a master,
+adjust its normalized face anchor, save it, choose an archetype and template,
+render a new preview, then approve/reject it in context. Use **Validate batch**
+to show the same lightweight validation report in the UI.
+
+The installed user service automatically restarts the review API after changes
+under `tools/portraits/` or `tools/cards/`. Install the companion path watcher
+once if it is not already enabled:
+
+```bash
+cp deploy/the-assets-review-api{,-reload}.service deploy/the-assets-review-api.path ~/.config/systemd/user/
+systemctl --user daemon-reload
+systemctl --user enable --now the-assets-review-api.service the-assets-review-api.path
+```
+
+Check the current small batch without changing its assets:
+
+```bash
+uv run python -m tools.portraits validate-cards --input portrait-library
+```
+
+This writes `portrait-library/cards/validation.json` and reports only
+explainable contract issues (missing assets, template dimensions, missing
+masters/anchors, and mixed style/template versions). It is a review aid, not an
+automatic art-quality gate.
+
 The Vite app follows the same hosting pattern as `the_estate_agent`: fixed port, no browser auto-open, and Tailnet host allow-list. It runs on:
 
 ```text

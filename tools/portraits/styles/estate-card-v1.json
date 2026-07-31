@@ -1,0 +1,18 @@
+{
+  "id": "estate-card-v1",
+  "version": 1,
+  "label": "Estate card portrait",
+  "intent": "Dark low-resolution fantasy-card portraits with a readable silhouette, subdued earth palette, and clear face at card scale.",
+  "generation_preset": "estate-pixel-claimant-v1",
+  "palette_roles": {
+    "background": "#403936",
+    "shadow": "#211a18",
+    "midtone": "#6d5141",
+    "highlight": "#c99569",
+    "outline": "#160f0d",
+    "accent": "#9b4636"
+  },
+  "logical_size": 128,
+  "palette_colors": 32,
+  "reference_images": []
+}

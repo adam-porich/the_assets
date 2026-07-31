@@ -1,0 +1,10 @@
+# Restarts the review API when its source watcher detects a code change.
+# This is intentionally separate from the long-running API service so normal
+# failure recovery remains simple and systemd owns the restart lifecycle.
+
+[Unit]
+Description=Reload The Assets portrait review API after source changes
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/systemctl --user restart the-assets-review-api.service

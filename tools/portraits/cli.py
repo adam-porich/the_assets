@@ -5,6 +5,8 @@ import os
 from dataclasses import asdict
 from pathlib import Path
 
+from tools.cards.pipeline import promote_master, render_card, write_validation_report
+
 from .img2img import ExternalCommandBackend, OpenRouterBackend, load_preset, stylize_source
 from .imaging import benchmark_background_source, process_source
 from .lookbook import generate_lookbook
@@ -43,7 +45,7 @@ def load_env_files() -> None:
 
 
 def library_dirs(root: Path) -> None:
-    for name in ("sources", "crops", "candidates", "lookbook", "masks", "foregrounds", "backgrounds", "composites", "prepared", "stylized"):
+    for name in ("sources", "crops", "candidates", "lookbook", "masks", "foregrounds", "backgrounds", "composites", "prepared", "stylized", "masters", "cards"):
         (root / name).mkdir(parents=True, exist_ok=True)
 
 
@@ -293,6 +295,41 @@ def cmd_review_server(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_promote_master(args: argparse.Namespace) -> int:
+    master = promote_master(
+        Path(args.input),
+        args.photo_id,
+        args.candidate_id,
+        args.master_id,
+        args.style,
+        args.note or "",
+    )
+    print(f"Promoted {master['candidate_id']} to portrait master {master['master_id']}")
+    return 0
+
+
+def cmd_render_card(args: argparse.Namespace) -> int:
+    card = render_card(
+        Path(args.input),
+        args.master_id,
+        args.template,
+        args.archetype,
+        args.label,
+    )
+    print(f"Rendered {card['card_id']} -> {card['output_path']}")
+    return 0
+
+
+def cmd_validate_cards(args: argparse.Namespace) -> int:
+    report = write_validation_report(Path(args.input), args.card_id or None)
+    for issue in report["issues"]:
+        prefix = issue["level"].upper()
+        card_id = f" [{issue['card_id']}]" if issue.get("card_id") else ""
+        print(f"{prefix}{card_id}: {issue['message']}")
+    print(f"Validated {report['card_count']} card render(s): {'ok' if report['ok'] else 'errors found'}")
+    return 0 if report["ok"] else 1
+
+
 def cmd_harvest(args: argparse.Namespace) -> int:
     cmd_fetch(args)
     if args.process:
@@ -405,6 +442,28 @@ def build_parser() -> argparse.ArgumentParser:
     review_server.add_argument("--host", default="127.0.0.1")
     review_server.add_argument("--port", type=int, default=8765)
     review_server.set_defaults(func=cmd_review_server)
+
+    promote = sub.add_parser("promote-master", help="Copy an approved portrait candidate into a reusable portrait master")
+    promote.add_argument("--input", default="portrait-library")
+    promote.add_argument("--photo-id", required=True)
+    promote.add_argument("--candidate-id", required=True)
+    promote.add_argument("--master-id", required=True)
+    promote.add_argument("--style", default="estate-card-v1")
+    promote.add_argument("--note")
+    promote.set_defaults(func=cmd_promote_master)
+
+    render = sub.add_parser("render-card", help="Compose a portrait master into a deterministic card preview")
+    render.add_argument("--input", default="portrait-library")
+    render.add_argument("--master-id", required=True)
+    render.add_argument("--template", default="estate-card-v1")
+    render.add_argument("--archetype", choices=["standard-bust", "tall-silhouette", "wide-torso"])
+    render.add_argument("--label", default="Experimental claimant")
+    render.set_defaults(func=cmd_render_card)
+
+    validate = sub.add_parser("validate-cards", help="Check a small card batch for deterministic contract problems")
+    validate.add_argument("--input", default="portrait-library")
+    validate.add_argument("--card-id", action="append")
+    validate.set_defaults(func=cmd_validate_cards)
 
     harvest = sub.add_parser("harvest")
     add_fetch_options(harvest)

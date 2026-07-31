@@ -12,8 +12,8 @@
   "department_tint": "#4f3d57",
   "post_processing": {
     "enabled": true,
-    "logical_size": 64,
-    "review_scale": 4,
+    "logical_size": 128,
+    "review_scale": 1,
     "palette_colors": 32
   }
 }
