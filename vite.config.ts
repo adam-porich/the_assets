@@ -2,7 +2,7 @@ import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 
 export default defineConfig(() => {
-  const reviewTarget = `http://127.0.0.1:${process.env.ASSET_REVIEW_PORT || "8765"}`;
+  const workbenchTarget = `http://127.0.0.1:${process.env.ASSET_REVIEW_PORT || "8765"}`;
   return {
     base: "/butler/assets/",
     plugins: [react()],
@@ -14,15 +14,15 @@ export default defineConfig(() => {
       allowedHosts: ["desktop-g62m1s8.taild55c40.ts.net"],
       proxy: {
         "/butler/assets/api": {
-          target: reviewTarget,
+          target: workbenchTarget,
           rewrite: (path) => path.replace(/^\/butler\/assets/, "")
         },
         "/butler/assets/asset": {
-          target: reviewTarget,
+          target: workbenchTarget,
           rewrite: (path) => path.replace(/^\/butler\/assets/, "")
         },
-        "/api": reviewTarget,
-        "/asset": reviewTarget
+        "/api": workbenchTarget,
+        "/asset": workbenchTarget
       }
     },
     test: {

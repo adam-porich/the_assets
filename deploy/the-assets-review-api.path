@@ -8,7 +8,7 @@
 #   systemctl --user enable --now the-assets-review-api.service the-assets-review-api.path
 
 [Unit]
-Description=Watch The Assets review API source
+Description=Watch Portrait Workbench API source
 
 [Path]
 PathModified=%h/dev/the_assets/tools/portraits

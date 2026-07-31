@@ -31,7 +31,7 @@ cp -p "$CONF" "$BACKUP"
 echo "Backed up $CONF -> $BACKUP"
 
 read -r -d '' BLOCK <<'EOF' || true
-    # --- the_assets portrait review (Vite on 127.0.0.1:5182, API on 127.0.0.1:8765) ---
+    # --- Portrait Workbench (Vite on 127.0.0.1:5182, API on 127.0.0.1:8765) ---
     location = /butler/assets {
         return 301 /butler/assets/;
     }
@@ -84,6 +84,5 @@ fi
 
 systemctl reload nginx
 echo
-echo "Done. The Assets portrait review app is now at:"
+echo "Done. Portrait Workbench is now at:"
 echo "  https://desktop-g62m1s8.taild55c40.ts.net/butler/assets/"
-
