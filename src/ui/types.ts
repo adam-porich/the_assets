@@ -143,4 +143,11 @@ export type Card = {
   updated_at: string;
 };
 
-export type Bootstrap = { ok: boolean; workspace: Workspace; runs: RunSummary[]; cards: Card[]; models: Model[] };
+export type Bootstrap = {
+  ok: boolean;
+  workspace: Workspace;
+  runs: RunSummary[];
+  cards: Card[];
+  models: Model[];
+  integrations: { pexels: { configured: boolean } };
+};

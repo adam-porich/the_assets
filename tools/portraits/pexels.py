@@ -22,6 +22,10 @@ def utc_now_iso() -> str:
 API_URL = "https://api.pexels.com/v1/search"
 
 
+def has_pexels_api_key() -> bool:
+    return bool(os.environ.get("PEXELS_API_KEY", "").strip())
+
+
 def parse_photo(photo: dict[str, Any], query: str) -> dict[str, Any]:
     src = photo.get("src") or {}
     original_url = src.get("original") or src.get("large2x") or src.get("large")

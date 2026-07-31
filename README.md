@@ -10,7 +10,7 @@ npm install
 npm run dev
 ```
 
-Open the Vite URL and use Style Lab. The Python service creates an ignored `portrait-library/` workspace on first start. Use the local upload path for a smoke test, or set `PEXELS_API_KEY` to search Pexels. Set `OPENROUTER_API_KEY` when using an image model; the default deterministic painterly model needs no key and is useful for UI validation.
+Open the Vite URL and use Style Lab. The Python service creates an ignored `portrait-library/` workspace on first start. Use the local upload path for a smoke test, or set `PEXELS_API_KEY` to search Pexels. When running the provided systemd user service, put that variable in `~/.env`; the service loads it on restart. Set `OPENROUTER_API_KEY` when using an image model; the default deterministic painterly model needs no key and is useful for UI validation.
 
 The Vite app keeps its existing `/butler/assets/` base path and the API defaults to `127.0.0.1:8765`. Set `ASSET_REVIEW_PORT` if the API uses another port.
 

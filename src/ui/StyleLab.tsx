@@ -19,13 +19,14 @@ type Props = {
   models: Model[];
   runs: RunSummary[];
   activeRun?: Run;
+  pexelsAvailable: boolean;
   onWorkspace: (workspace: Workspace) => void;
   onRefresh: () => Promise<void>;
   onNavigate: (hash: string) => void;
   onMessage: (message: string, kind?: "success" | "error") => void;
 };
 
-export function StyleLab({ workspace, models, runs, activeRun, onWorkspace, onRefresh, onNavigate, onMessage }: Props) {
+export function StyleLab({ workspace, models, runs, activeRun, pexelsAvailable, onWorkspace, onRefresh, onNavigate, onMessage }: Props) {
   const activeRecipe = workspace.recipes.find((recipe) => recipe.id === workspace.active_recipe_id) || workspace.recipes[0];
   const [recipe, setRecipe] = useState<Recipe | undefined>(activeRecipe);
   const [sourcePanel, setSourcePanel] = useState(false);
@@ -37,6 +38,7 @@ export function StyleLab({ workspace, models, runs, activeRun, onWorkspace, onRe
   const [runOutputs, setRunOutputs] = useState(1);
   const [runLaunching, setRunLaunching] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState("");
+  const [sourceError, setSourceError] = useState("");
 
   useEffect(() => setRecipe(workspace.recipes.find((item) => item.id === workspace.active_recipe_id) || workspace.recipes[0]), [workspace]);
   const benchmark = useMemo(() => workspace.benchmark_source_ids.map((id) => workspace.sources.find((source) => source.id === id)).filter(Boolean) as Source[], [workspace]);
@@ -58,7 +60,8 @@ export function StyleLab({ workspace, models, runs, activeRun, onWorkspace, onRe
   }
   async function search() {
     setBusy("search");
-    try { setSearchResults((await api.searchSources(query)).results); } catch (error) { onMessage((error as Error).message, "error"); } finally { setBusy(""); }
+    setSourceError("");
+    try { setSearchResults((await api.searchSources(query)).results); } catch (error) { const message = (error as Error).message; setSourceError(message); onMessage(message, "error"); } finally { setBusy(""); }
   }
   async function upload(kind: "sources" | "references", event: React.ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0]; if (!file) return;
@@ -67,7 +70,8 @@ export function StyleLab({ workspace, models, runs, activeRun, onWorkspace, onRe
   }
   async function importSearchResult(result: SearchResult) {
     setBusy(`import-${result.pexels_photo_id}`);
-    try { const response = await api.importSource(result); onWorkspace(response.workspace); onMessage("Source downloaded into the workspace", "success"); } catch (error) { onMessage((error as Error).message, "error"); } finally { setBusy(""); }
+    setSourceError("");
+    try { const response = await api.importSource(result); onWorkspace(response.workspace); onMessage("Source downloaded into the workspace", "success"); } catch (error) { const message = (error as Error).message; setSourceError(message); onMessage(message, "error"); } finally { setBusy(""); }
   }
   async function deleteSource(source: Source) {
     const token = `source:${source.id}`;
@@ -117,7 +121,7 @@ export function StyleLab({ workspace, models, runs, activeRun, onWorkspace, onRe
       <div className="section-heading"><div><p className="eyebrow">01 / Input set</p><h2>Benchmark portraits</h2></div><span className="recommendation">6–10 recommended · {benchmark.length} selected</span><button className="button secondary" onClick={() => setSourcePanel((value) => !value)}>{sourcePanel ? "Close source finder" : "Find or upload"}</button></div>
       <p className="section-help">Keep the people and order fixed while you compare recipes. A one-source smoke test is fine.</p>
       {sourcePanel && <div className="setup-drawer source-drawer">
-      <div className="drawer-column"><label className="field-label">Search Pexels<input value={query} onChange={(event) => setQuery(event.target.value)} onKeyDown={(event) => event.key === "Enter" && search()} placeholder="e.g. eccentric portrait hat" /></label><button className="button primary" onClick={search} disabled={busy === "search"}>{busy === "search" ? "Searching…" : "Search visually"}</button><div className="search-results">{searchResults.map((result) => <article className="search-result" key={result.pexels_photo_id}><img src={result.preview_url} alt="" /><div><strong>Pexels {result.pexels_photo_id}</strong><small>{result.photographer || "Pexels"}</small><button className="text-button" onClick={() => importSearchResult(result)} disabled={busy === `import-${result.pexels_photo_id}`}>{busy === `import-${result.pexels_photo_id}` ? "Adding…" : "Add source"}</button></div></article>)}</div></div>
+      <div className="drawer-column">{!pexelsAvailable && <div className="integration-warning" role="status"><strong>Pexels search is unavailable</strong><p>The API service has no PEXELS_API_KEY. Add it to the service environment and restart the API, or use a local upload.</p></div>}{sourceError && <div className="source-error" role="alert">{sourceError}</div>}<label className="field-label">Search Pexels<input value={query} onChange={(event) => setQuery(event.target.value)} onKeyDown={(event) => event.key === "Enter" && search()} placeholder="e.g. eccentric portrait hat" /></label><button className="button primary" onClick={search} disabled={busy === "search" || !pexelsAvailable}>{busy === "search" ? "Searching…" : "Search visually"}</button><div className="search-results">{searchResults.map((result) => <article className="search-result" key={result.pexels_photo_id}><img src={result.preview_url} alt="" /><div><strong>Pexels {result.pexels_photo_id}</strong><small>{result.photographer || "Pexels"}</small><button className="text-button" onClick={() => importSearchResult(result)} disabled={busy === `import-${result.pexels_photo_id}`}>{busy === `import-${result.pexels_photo_id}` ? "Adding…" : "Add source"}</button></div></article>)}</div></div>
         <div className="drawer-column upload-column"><p className="field-label">Local upload</p><p className="muted">Use a local image when Pexels is unavailable. Original filenames remain provenance only.</p><input className="text-input" value={uploadLabel} onChange={(event) => setUploadLabel(event.target.value)} placeholder="Optional source label" /><label className="file-button button secondary">{busy === "upload-sources" ? "Uploading…" : "Choose image"}<input type="file" accept="image/*" onChange={(event) => upload("sources", event)} disabled={Boolean(busy)} /></label></div>
       </div>}
       <div className="benchmark-row">{benchmark.map((source, index) => <article className="benchmark-card" key={source.id}><img src={source.image_url} alt={source.label} /><div className="benchmark-card-body"><span className="order-number">{String(index + 1).padStart(2, "0")}</span><strong>{source.label}</strong><small>{source.provenance.kind === "pexels" ? `Pexels · ${String(source.provenance.photographer || "")}` : "Local upload"}</small><div className="card-actions"><button className="icon-button" onClick={() => moveSource(index, -1)} disabled={index === 0} aria-label="Move left">←</button><button className="icon-button" onClick={() => moveSource(index, 1)} disabled={index === benchmark.length - 1} aria-label="Move right">→</button><button className="text-button danger-text" onClick={() => removeSource(source.id)}>Remove</button></div></div></article>)}{benchmark.length === 0 && <div className="empty-strip">No benchmark portraits yet. Add a local image or search Pexels to begin.</div>}</div>

@@ -17,7 +17,7 @@ import requests
 from tools.cards.pipeline import card_detail, create_card_draft, list_card_drafts, list_templates, update_card_draft
 
 from .generation import FALLBACK_MODELS
-from .pexels import is_plausible_portrait, search_pexels
+from .pexels import has_pexels_api_key, is_plausible_portrait, search_pexels
 from .recipes import STARTER_RECIPE, recipe_from_payload, resolve_recipe_instruction
 from .runs import RunManager
 from .workspace import WorkspaceError, WorkspaceStore, new_id, now_iso
@@ -60,7 +60,14 @@ def fetch_models() -> list[dict[str, Any]]:
 
 def _workspace_response(store: WorkspaceStore, manager: RunManager) -> dict[str, Any]:
     _ensure_starter_recipe(store)
-    return {"ok": True, "workspace": store.payload(), "runs": manager.list(), "cards": list_card_drafts(store), "models": fetch_models()}
+    return {
+        "ok": True,
+        "workspace": store.payload(),
+        "runs": manager.list(),
+        "cards": list_card_drafts(store),
+        "models": fetch_models(),
+        "integrations": {"pexels": {"configured": has_pexels_api_key()}},
+    }
 
 
 def _ensure_starter_recipe(store: WorkspaceStore) -> None:
