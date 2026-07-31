@@ -15,6 +15,7 @@ export function recipeIsDirty(saved: Recipe | undefined, draft: Recipe | undefin
     model: recipe.model,
     execution_mode: recipe.execution_mode,
     quality: recipe.quality,
+    change_note: recipe.change_note,
     direction: recipe.direction,
     avoid: recipe.avoid,
     reference_ids: recipe.reference_ids,
@@ -32,12 +33,11 @@ export function referenceLimitProblem(recipe: Recipe, model?: Model): string {
   return "";
 }
 
-export function makeRunPayload(recipe: Recipe, sourceIds: string[], outputsPerSource: number, confirmPaid: boolean) {
+export function makeRunPayload(recipe: Recipe, sourceIds: string[], outputsPerSource: number) {
   return {
     recipe,
     source_ids: sourceIds,
     outputs_per_source: outputsPerSource,
     execution_mode: recipe.execution_mode,
-    confirm_paid: confirmPaid,
   };
 }

@@ -82,7 +82,7 @@ def get_pexels_photo(photo_id: int, api_key: str | None = None) -> dict[str, Any
         raise RuntimeError("PEXELS_API_KEY is not set")
     response = requests.get(PHOTO_URL.format(photo_id=int(photo_id)), headers={"Authorization": key}, timeout=30)
     response.raise_for_status()
-    return parse_photo(response.json(), "starter benchmark")
+    return parse_photo(response.json(), "starter source images")
 
 
 def is_plausible_portrait(candidate: dict[str, Any]) -> bool:

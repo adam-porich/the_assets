@@ -45,6 +45,7 @@ export type Recipe = {
   model: string;
   execution_mode: "live" | "simulation";
   quality: "low" | "medium" | "high";
+  change_note: string;
   direction: Direction;
   avoid: string;
   aspect_policy: "card-window";
@@ -165,8 +166,24 @@ export type Card = {
   treatment_version: string;
   render_metadata?: Record<string, unknown>;
   source_run_provenance?: Record<string, unknown>;
+  selected_preview_id?: string;
   created_at: string;
   updated_at: string;
+};
+
+export type CardPreviewOption = {
+  option_id: string;
+  preset: "bust" | "tall" | "torso";
+  preset_label: string;
+  treatment: Card["treatment"];
+  treatment_label: string;
+  framing: Card["framing"];
+  render_path: string;
+  render_url: string;
+  art_render_path: string;
+  art_url: string;
+  render_dimensions: [number, number];
+  render_metadata: Record<string, unknown>;
 };
 
 export type Bootstrap = {

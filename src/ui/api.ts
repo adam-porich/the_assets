@@ -1,4 +1,4 @@
-import type { Bootstrap, Card, Recipe, Run, SearchResult, Workspace } from "./types";
+import type { Bootstrap, Card, CardPreviewOption, Recipe, Run, SearchResult, Workspace } from "./types";
 
 const base = import.meta.env.BASE_URL.replace(/\/$/, "");
 export const apiPath = (path: string) => `${base}/${path.replace(/^\//, "")}`;
@@ -38,10 +38,11 @@ export const api = {
   updateRecipe: (id: string, recipe: unknown) => request<{ workspace: Workspace }>(`/api/recipes/${id}`, json("PUT", recipe)),
   duplicateRecipe: (id: string) => request<{ workspace: Workspace; recipe: Recipe }>(`/api/recipes/${id}/duplicate`, json("POST", {})),
   selectRecipe: (id: string) => request<{ workspace: Workspace }>(`/api/recipes/${id}/select`, json("POST", {})),
-  startRun: (recipe: Recipe, source_ids: string[], outputs_per_source: number, execution_mode: Recipe["execution_mode"], confirm_paid = false) => request<{ run: Run; workspace: Workspace }>("/api/runs", json("POST", { recipe, source_ids, outputs_per_source, execution_mode, confirm_paid })),
+  startRun: (recipe: Recipe, source_ids: string[], outputs_per_source: number, execution_mode: Recipe["execution_mode"]) => request<{ run: Run; workspace: Workspace }>("/api/runs", json("POST", { recipe, source_ids, outputs_per_source, execution_mode })),
   reviewRun: (id: string, verdict: string, note: string) => request<{ run: Run }>(`/api/runs/${id}/review`, json("POST", { verdict, note })),
   duplicateRecipeFromRun: (id: string) => request<{ workspace: Workspace }>(`/api/runs/${id}/duplicate-recipe`, json("POST", {})),
   createCard: (run_id: string, run_item_id: string, label: string, preset: string, treatment: Card["treatment"] = "painterly") => request<{ card: Card }>("/api/cards", json("POST", { run_id, run_item_id, label, preset, treatment })),
+  getCardPreviews: (id: string) => request<{ previews: CardPreviewOption[] }>(`/api/cards/${id}/previews`, json("POST", {})),
   updateCard: (id: string, patch: unknown) => request<{ card: Card }>(`/api/cards/${id}`, json("PUT", patch)),
   decideCard: (id: string, decision: string) => request<{ card: Card }>(`/api/cards/${id}/decision`, json("POST", { decision })),
 };

@@ -14,7 +14,7 @@ from urllib.parse import parse_qs, unquote, urlparse
 
 import requests
 
-from tools.cards.pipeline import card_detail, create_card_draft, list_card_drafts, list_templates, update_card_draft
+from tools.cards.pipeline import card_detail, card_previews, create_card_draft, list_card_drafts, list_templates, update_card_draft
 
 from .generation import DEFAULT_LIVE_MODEL_ID, fetch_model_catalogue, simulation_model, unavailable_live_model
 from .pexels import STARTER_PHOTO_IDS, get_pexels_photo, has_pexels_api_key, is_plausible_portrait, search_pexels
@@ -303,7 +303,7 @@ class WorkbenchHandler(BaseHTTPRequestHandler):
                 def update(data: dict[str, Any]) -> None:
                     ids = {str(item["id"]) for item in data["sources"]}
                     if any(item not in ids for item in requested):
-                        raise ValueError("benchmark contains an unknown source")
+                        raise ValueError("source selection contains an unknown image")
                     data["benchmark_source_ids"] = requested
                 self.store.mutate(update)
                 self.send_json({"ok": True, "workspace": self.store.payload()})
@@ -342,7 +342,6 @@ class WorkbenchHandler(BaseHTTPRequestHandler):
                     int(payload.get("outputs_per_source", 1)),
                     str(payload.get("execution_mode") or ""),
                     _models_for_store(self.store),
-                    bool(payload.get("confirm_paid")),
                 )
                 self.send_json({"ok": True, "run": run, "workspace": self.store.payload()})
                 return
@@ -369,6 +368,10 @@ class WorkbenchHandler(BaseHTTPRequestHandler):
             if match:
                 payload = self._json()
                 self.send_json({"ok": True, "card": update_card_draft(self.store, match.group(1), {"decision": payload.get("decision")})})
+                return
+            match = re.fullmatch(r"/api/cards/([^/]+)/previews", path)
+            if match:
+                self.send_json({"ok": True, "previews": card_previews(self.store, match.group(1))})
                 return
             self.send_error(HTTPStatus.NOT_FOUND)
         except requests.RequestException as exc:
@@ -446,7 +449,7 @@ class WorkbenchHandler(BaseHTTPRequestHandler):
                 if not payload.get("confirm"):
                     raise ValueError("deletion needs explicit confirmation")
                 if collection == "sources" and item_id in data.get("benchmark_source_ids", []):
-                    raise ValueError("remove this source from the benchmark before deleting it")
+                    raise ValueError("remove this image from the project selection before deleting it")
                 if collection == "references" and any(item_id in recipe.get("reference_ids", []) for recipe in data.get("recipes", [])):
                     raise ValueError("remove this reference from recipes before deleting it")
                 data[collection] = [candidate for candidate in data[collection] if candidate.get("id") != item_id]

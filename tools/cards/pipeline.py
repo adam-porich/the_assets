@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import hashlib
 import json
+import shutil
 import uuid
 from pathlib import Path
 from typing import Any
@@ -15,6 +17,8 @@ ART_WINDOW = (336, 276)
 PIXEL_LOGICAL_SIZE = (112, 92)
 PIXEL_PALETTE_COLOURS = 32
 TREATMENTS = {"painterly", "estate-pixel-v1"}
+TREATMENT_VERSIONS = {"painterly": "painterly-source-v1", "estate-pixel-v1": "estate-pixel-v1"}
+PREVIEW_SCHEMA_VERSION = 1
 FRAME_PRESETS: dict[str, dict[str, float | str]] = {
     "bust": {"label": "Bust", "zoom": 1.0, "offset_x": 0.0, "offset_y": 0.02},
     "tall": {"label": "Tall", "zoom": 1.16, "offset_x": 0.0, "offset_y": -0.06},
@@ -129,7 +133,9 @@ def _render_image(
         "dimensions": [width, height], "transform": transform,
         "render_metadata": {
             "treatment": treatment,
-            "treatment_version": treatment if treatment == "estate-pixel-v1" else "painterly-source-v1",
+            "treatment_version": TREATMENT_VERSIONS[treatment],
+            "template_id": template["id"],
+            "template_version": template["version"],
             "art_window": list(ART_WINDOW),
             "logical_size": list(PIXEL_LOGICAL_SIZE) if treatment == "estate-pixel-v1" else list(ART_WINDOW),
             "palette_limit": PIXEL_PALETTE_COLOURS if treatment == "estate-pixel-v1" else None,
@@ -174,6 +180,11 @@ def _find_run_item(store: WorkspaceStore, run_id: str, item_id: str) -> tuple[di
 def _payload(store: WorkspaceStore, card: dict[str, Any]) -> dict[str, Any]:
     return {
         **card,
+        "archetype": card.get("archetype", "bust"),
+        "framing": card.get("framing") or {key: framing_preset("bust")[key] for key in ("zoom", "offset_x", "offset_y")},
+        "decision": card.get("decision", "working"),
+        "treatment": card.get("treatment", "painterly"),
+        "treatment_version": card.get("treatment_version", TREATMENT_VERSIONS[card.get("treatment", "painterly")]),
         "render_url": store.asset_url(card.get("render_path")),
         "art_url": store.asset_url(card.get("art_render_path")),
         "source_url": store.asset_url(card.get("source_output_path")),
@@ -190,6 +201,17 @@ def create_card_draft(
 ) -> dict[str, Any]:
     store.ensure()
     run, item = _find_run_item(store, run_id, item_id)
+    existing = next(
+        (
+            candidate for candidate in load_cards(store).get("cards", [])
+            if candidate.get("run_id") == run_id
+            and candidate.get("run_item_id") == item_id
+            and candidate.get("decision", "working") in {"working", "keep"}
+        ),
+        None,
+    )
+    if existing:
+        return _payload(store, existing)
     framing = framing_preset(preset)
     card_id = f"card_{uuid.uuid4().hex[:12]}"
     record = {
@@ -202,7 +224,7 @@ def create_card_draft(
         "framing": {key: framing[key] for key in ("zoom", "offset_x", "offset_y")},
         "decision": "working",
         "treatment": treatment,
-        "treatment_version": treatment if treatment == "estate-pixel-v1" else "painterly-source-v1",
+        "treatment_version": TREATMENT_VERSIONS[treatment],
         "render_path": f"cards/{card_id}.png",
         "art_render_path": f"cards/{card_id}-art.png",
         "source_output_path": item["output_path"],
@@ -215,6 +237,9 @@ def create_card_draft(
             "execution_mode": run.get("execution_mode"),
             "model": run.get("model"),
             "recipe_id": run.get("recipe_id"),
+            "recipe_name": run.get("recipe_name"),
+            "change_note": (run.get("recipe_snapshot") or {}).get("change_note", ""),
+            "source_label": item.get("source_label"),
             "source_output_checksum_sha256": checksum(item["_source_path"]),
         },
     }
@@ -231,11 +256,123 @@ def create_card_draft(
     return _payload(store, record)
 
 
+def _preview_cache_key(card: dict[str, Any], source_path: Path, template: dict[str, Any]) -> str:
+    payload = {
+        "schema": PREVIEW_SCHEMA_VERSION,
+        "source_checksum_sha256": checksum(source_path),
+        "template_id": template["id"],
+        "template_version": template["version"],
+        "frame_presets": FRAME_PRESETS,
+        "treatment_versions": TREATMENT_VERSIONS,
+        "label": card.get("label", "Experimental claimant"),
+    }
+    return hashlib.sha256(json.dumps(payload, sort_keys=True).encode("utf-8")).hexdigest()[:20]
+
+
+def card_previews(store: WorkspaceStore, card_id: str) -> list[dict[str, Any]]:
+    """Return the six exact, cached preset/treatment renders for a card draft."""
+    data = load_cards(store)
+    record = next((item for item in data.get("cards", []) if item.get("card_id") == card_id), None)
+    if not record:
+        raise ValueError(f"card {card_id} does not exist")
+    _, item = _find_run_item(store, str(record["run_id"]), str(record["run_item_id"]))
+    template = load_template(str(record.get("template_id") or "estate-card-v1"))
+    cache_key = _preview_cache_key(record, item["_source_path"], template)
+    cache_relative = Path("cards") / "previews" / card_id
+    cache_dir = store.absolute_path(cache_relative)
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    for stale in cache_dir.iterdir():
+        if stale.is_file() and not stale.name.startswith(f"{cache_key}-"):
+            stale.unlink()
+
+    previews: list[dict[str, Any]] = []
+    for preset in FRAME_PRESETS:
+        framing = framing_preset(preset)
+        frame = {key: framing[key] for key in ("zoom", "offset_x", "offset_y")}
+        for treatment in ("painterly", "estate-pixel-v1"):
+            stem = f"{cache_key}-{preset}-{treatment}"
+            render_relative = cache_relative / f"{stem}.png"
+            art_relative = cache_relative / f"{stem}-art.png"
+            metadata_relative = cache_relative / f"{stem}.json"
+            render_path = store.absolute_path(render_relative)
+            art_path = store.absolute_path(art_relative)
+            metadata_path = store.absolute_path(metadata_relative)
+            cached = store.read_json(metadata_path, {}) if metadata_path.exists() else {}
+            if not render_path.is_file() or not art_path.is_file() or not cached:
+                rendered = _render_image(
+                    item["_source_path"], render_path, art_path,
+                    str(record.get("label") or "Experimental claimant"), frame, template, treatment,
+                )
+                cached = {
+                    "dimensions": rendered["dimensions"],
+                    "transform": rendered["transform"],
+                    "render_metadata": {
+                        **rendered["render_metadata"],
+                        "preview_schema_version": PREVIEW_SCHEMA_VERSION,
+                        "preview_cache_key": cache_key,
+                    },
+                }
+                store.atomic_json(metadata_path, cached)
+            previews.append({
+                "option_id": f"{cache_key}:{preset}:{treatment}",
+                "preset": preset,
+                "preset_label": str(framing["label"]),
+                "treatment": treatment,
+                "treatment_label": "Estate Pixel" if treatment == "estate-pixel-v1" else "Painterly",
+                "framing": frame,
+                "render_path": render_relative.as_posix(),
+                "render_url": store.asset_url(render_relative),
+                "art_render_path": art_relative.as_posix(),
+                "art_url": store.asset_url(art_relative),
+                "render_dimensions": cached["dimensions"],
+                "render_metadata": cached["render_metadata"],
+            })
+    return previews
+
+
+def _copy_preview(store: WorkspaceStore, source_relative: str, destination_relative: str) -> None:
+    source = store.absolute_path(source_relative)
+    destination = store.absolute_path(destination_relative)
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    temporary = destination.with_name(f".{destination.name}.{uuid.uuid4().hex}.tmp")
+    shutil.copy2(source, temporary)
+    temporary.replace(destination)
+
+
 def update_card_draft(store: WorkspaceStore, card_id: str, patch: dict[str, Any]) -> dict[str, Any]:
     data = load_cards(store)
     record = next((item for item in data.get("cards", []) if item.get("card_id") == card_id), None)
     if not record:
         raise ValueError(f"card {card_id} does not exist")
+    if patch.get("preview_id"):
+        preview = next((item for item in card_previews(store, card_id) if item["option_id"] == patch["preview_id"]), None)
+        if not preview:
+            raise ValueError("preview_id is stale or unknown; reload the frame previews")
+        decision = str(patch.get("decision", record.get("decision", "working")))
+        if decision not in {"working", "keep", "discard"}:
+            raise ValueError("decision must be working, keep, or discard")
+        _copy_preview(store, preview["render_path"], str(record["render_path"]))
+        art_render_path = str(record.get("art_render_path") or f"cards/{card_id}-art.png")
+        _copy_preview(store, preview["art_render_path"], art_render_path)
+        updated = {
+            **record,
+            "archetype": preview["preset"],
+            "framing": preview["framing"],
+            "treatment": preview["treatment"],
+            "treatment_version": TREATMENT_VERSIONS[preview["treatment"]],
+            "decision": decision,
+            "art_render_path": art_render_path,
+            "selected_preview_id": preview["option_id"],
+            "updated_at": now_iso(),
+            "render_dimensions": preview["render_dimensions"],
+            "transform": calculate_cover_transform(
+                record.get("source_dimensions") or [336, 276], ART_WINDOW, **preview["framing"]
+            ),
+            "render_metadata": preview["render_metadata"],
+        }
+        data["cards"] = [updated if item.get("card_id") == card_id else item for item in data.get("cards", [])]
+        _save_cards(store, data)
+        return _payload(store, updated)
     run, item = _find_run_item(store, str(record["run_id"]), str(record["run_item_id"]))
     framing = dict(record.get("framing") or {})
     incoming = patch.get("framing") or {}
@@ -259,7 +396,7 @@ def update_card_draft(store: WorkspaceStore, card_id: str, patch: dict[str, Any]
         **record, "label": label, "framing": framing, "decision": decision,
         "archetype": patch.get("archetype", record.get("archetype", "bust")),
         "treatment": treatment,
-        "treatment_version": treatment if treatment == "estate-pixel-v1" else "painterly-source-v1",
+        "treatment_version": TREATMENT_VERSIONS[treatment],
         "art_render_path": art_render_path,
         "updated_at": now_iso(), "render_dimensions": rendered["dimensions"],
         "transform": rendered["transform"], "render_metadata": rendered["render_metadata"],

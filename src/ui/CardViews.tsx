@@ -1,131 +1,91 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { api } from "./api";
-import { calculateCoverTransform } from "./framing";
-import type { Card, Run, Workspace } from "./types";
+import type { Card, CardPreviewOption, Run } from "./types";
 
-const presets = {
-  bust: { zoom: 1, offset_x: 0, offset_y: 0.02 },
-  tall: { zoom: 1.16, offset_x: 0, offset_y: -0.06 },
-  torso: { zoom: 1.28, offset_x: 0, offset_y: 0.08 },
-} as const;
+type StageProps = {
+  cards: Card[];
+  onNavigate: (hash: string) => void;
+  onMessage: (message: string, kind?: "success" | "error") => void;
+  onRefresh: () => Promise<void>;
+};
 
-export function CardGallery({ cards, newestCompletedRunId, onNavigate, onRefresh }: { cards: Card[]; newestCompletedRunId?: string; onNavigate: (hash: string) => void; onRefresh: () => Promise<void> }) {
-  const [includeDiscarded, setIncludeDiscarded] = useState(false);
-  const [allCards, setAllCards] = useState(cards);
-  useEffect(() => setAllCards(cards), [cards]);
+export function FramesStage({ cards, initialCard, onNavigate, onMessage, onRefresh }: StageProps & { initialCard?: Card }) {
+  const [card, setCard] = useState<Card | undefined>(initialCard);
+  const [previews, setPreviews] = useState<CardPreviewOption[]>([]);
+  const [sourceRun, setSourceRun] = useState<Run>();
+  const [busy, setBusy] = useState("");
+  const [error, setError] = useState("");
+  const working = cards.filter((item) => item.decision === "working");
+
+  useEffect(() => setCard(initialCard), [initialCard?.card_id, initialCard?.updated_at]);
   useEffect(() => {
-    if (includeDiscarded) void api.listCards(true).then((body) => setAllCards(body.cards)).catch(() => setAllCards(cards));
-    else setAllCards(cards);
-  }, [includeDiscarded, cards]);
-  return <section className="gallery-view">
-    <div className="page-heading"><div><p className="eyebrow">Saved explorations</p><h2>Card drafts</h2><p className="muted">Reopen a frame with its treatment and trace it to the immutable painterly run source.</p></div><label className="toggle"><input type="checkbox" checked={includeDiscarded} onChange={(event) => setIncludeDiscarded(event.target.checked)} /> Show discarded</label></div>
-    {allCards.length === 0 ? <div className="empty-panel large-empty"><div className="empty-glyph">◇</div><h3>No card drafts yet</h3><p>Choose a completed run result, then use its visible “Frame this portrait” action.</p>{newestCompletedRunId ? <button className="button primary" onClick={() => onNavigate(`#run/${newestCompletedRunId}`)}>Open newest completed run</button> : <button className="button primary" onClick={() => onNavigate("#lab")}>Set up a run in Style Lab</button>}</div> : <div className="gallery-grid">{allCards.map((card) => <article className="draft-card" key={card.card_id} onClick={() => onNavigate(`#card/${card.card_id}`)}><div className="draft-image"><img src={`${card.render_url}?v=${encodeURIComponent(card.updated_at)}`} alt={card.label} /><span className={`decision-badge ${card.decision}`}>{card.decision}</span></div><div className="draft-meta"><strong>{card.label}</strong><span>{card.archetype} · {card.treatment === "estate-pixel-v1" ? "Estate Pixel" : "Painterly"} · zoom {card.framing.zoom.toFixed(2)}</span><small>Updated {new Date(card.updated_at).toLocaleDateString()}</small></div></article>)}</div>}
-    <button className="button secondary refresh-gallery" onClick={() => onRefresh()}>Refresh drafts</button>
+    if (!card) { setPreviews([]); return; }
+    setBusy("previews"); setError("");
+    void Promise.all([api.getCardPreviews(card.card_id), api.getRun(card.run_id)])
+      .then(([previewResponse, runResponse]) => { setPreviews(previewResponse.previews); setSourceRun(runResponse.run); })
+      .catch((nextError) => setError((nextError as Error).message))
+      .finally(() => setBusy(""));
+  }, [card?.card_id]);
+
+  async function selectPreview(option: CardPreviewOption) {
+    if (!card || busy === "select") return;
+    setBusy("select");
+    try {
+      const response = await api.updateCard(card.card_id, { preview_id: option.option_id });
+      setCard(response.card); onMessage(`${option.preset_label} · ${option.treatment_label} selected`); await onRefresh();
+    } catch (nextError) { onMessage((nextError as Error).message, "error"); }
+    finally { setBusy(""); }
+  }
+
+  async function decide(value: "keep" | "discard") {
+    if (!card) return;
+    setBusy(value);
+    try {
+      await api.decideCard(card.card_id, value);
+      await onRefresh();
+      if (value === "keep") {
+        onMessage("Kept as completed"); onNavigate("#completed");
+      } else {
+        const next = working.find((item) => item.card_id !== card.card_id);
+        onMessage("Candidate marked ‘Not this one’"); onNavigate(next ? `#frames/${next.card_id}` : "#frames");
+      }
+    } catch (nextError) { onMessage((nextError as Error).message, "error"); }
+    finally { setBusy(""); }
+  }
+
+  if (!card) return <section className="stage-page frames-page"><div className="page-heading"><div><p className="eyebrow">Stage 3 of 4</p><h2>Frame your candidates</h2><p>Working candidates sent from Styles wait here. Choose one to answer two visual questions.</p></div><button className="button secondary" onClick={() => onNavigate("#styles")}>← Back to Styles</button></div>{working.length ? <div className="candidate-grid">{working.map((item) => <article className="candidate-card" key={item.card_id}><img src={`${item.render_url}?v=${encodeURIComponent(item.updated_at)}`} alt={item.label} /><div><strong>{summary(item, "source_label") || item.label}</strong><small>{summary(item, "change_note") || "Structured style direction"}</small><button className="button primary" onClick={() => onNavigate(`#frames/${item.card_id}`)}>Choose frame →</button></div></article>)}</div> : <div className="empty-panel"><span className="empty-glyph">▱</span><h3>No working candidates</h3><p>Send a successful result from Styles. Sending the same result again reopens its existing working or kept card.</p><button className="button primary" onClick={() => onNavigate("#styles")}>Open Styles</button></div>}<div className="stage-actions"><button className="button secondary" onClick={() => onNavigate("#styles")}>← Back to Styles</button><button className="button primary" onClick={() => onNavigate("#completed")}>View Completed →</button></div></section>;
+
+  const chosenPreset = card.archetype || "bust";
+  const chosenTreatment = card.treatment || "painterly";
+  const compositionOptions = (["bust", "tall", "torso"] as const).map((preset) => previews.find((item) => item.preset === preset && item.treatment === chosenTreatment)).filter(Boolean) as CardPreviewOption[];
+  const treatmentOptions = previews.filter((item) => item.preset === chosenPreset);
+
+  return <section className="stage-page frames-page"><div className="page-heading"><div><p className="eyebrow">Stage 3 of 4</p><h2>Choose the card frame</h2><p>These are exact saved renders, not approximations. Pick a composition, then its finish.</p></div><button className="button secondary" onClick={() => onNavigate("#frames")}>← Candidate list</button></div>
+    {error && <div className="inline-error" role="alert">{error}</div>}
+    <section className="frame-context surface"><img src={card.source_url} alt="Generated portrait before framing" /><div><p className="eyebrow">Working candidate</p><h3>{summary(card, "source_label") || card.label}</h3><p>{summary(card, "change_note") || sourceRun?.recipe_snapshot.change_note || "Structured style direction"}</p><span>{sourceRun?.recipe_name || summary(card, "recipe_name") || card.run_id}</span></div></section>
+    {busy === "previews" ? <div className="loading-inline"><span className="spinner" /> Rendering six exact previews…</div> : <>
+      <section className="visual-question"><div><span className="question-number">1</span><div><p className="eyebrow">Composition</p><h3>Which crop feels right?</h3></div></div><div className="preview-grid composition-grid">{compositionOptions.map((option) => <button key={option.option_id} className={chosenPreset === option.preset ? "selected" : ""} onClick={() => void selectPreview(option)} disabled={busy === "select"}><img src={option.render_url} alt={`${option.preset_label} ${option.treatment_label} card preview`} /><span><strong>{option.preset_label}</strong><small>Exact preset</small></span></button>)}</div></section>
+      <section className="visual-question"><div><span className="question-number">2</span><div><p className="eyebrow">Treatment</p><h3>Which finish belongs on it?</h3></div></div><div className="preview-grid treatment-grid">{treatmentOptions.map((option) => <button key={option.option_id} className={chosenTreatment === option.treatment ? "selected" : ""} onClick={() => void selectPreview(option)} disabled={busy === "select"}><img src={option.render_url} alt={`${option.preset_label} ${option.treatment_label} card preview`} /><span><strong>{option.treatment_label}</strong><small>{option.treatment === "estate-pixel-v1" ? "32 colours · no dither" : "Original painterly render"}</small></span></button>)}</div></section>
+    </>}
+    <section className="selected-render surface"><div><p className="eyebrow">Chosen render</p><h3>{card.archetype[0].toUpperCase() + card.archetype.slice(1)} · {card.treatment === "estate-pixel-v1" ? "Estate Pixel" : "Painterly"}</h3><p>The saved PNG now matches the selected preview byte for byte.</p></div><img src={`${card.render_url}?v=${encodeURIComponent(card.updated_at)}`} alt="Chosen final card render" /></section>
+    <details className="surface provenance-panel"><summary>Read-only provenance and numeric transform</summary><dl><dt>Run</dt><dd>{card.run_id}</dd><dt>Run item</dt><dd>{card.run_item_id}</dd><dt>Model</dt><dd>{sourceRun?.model || "—"}</dd><dt>Preset</dt><dd>{card.archetype}</dd><dt>Framing</dt><dd><code>{JSON.stringify(card.framing)}</code></dd><dt>Transform</dt><dd><code>{JSON.stringify(card.transform || {})}</code></dd><dt>Treatment version</dt><dd>{card.treatment_version}</dd><dt>Render metadata</dt><dd><code>{JSON.stringify(card.render_metadata || {})}</code></dd></dl>{sourceRun && <div className="reference-thumbs">{sourceRun.references_snapshot.map((reference) => <img key={reference.id} src={reference.input_url} alt={reference.label} title={reference.label} />)}</div>}</details>
+    <div className="decision-bar"><button className="button secondary" disabled={Boolean(busy)} onClick={() => void decide("discard")}>{busy === "discard" ? "Saving…" : "Not this one"}</button><button className="button primary large" disabled={Boolean(busy) || !previews.length} onClick={() => void decide("keep")}>{busy === "keep" ? "Saving…" : "Keep as completed →"}</button></div>
   </section>;
 }
 
-export function CardWorkbench({ card: initialCard, onNavigate, onMessage }: { card: Card; workspace: Workspace; onNavigate: (hash: string) => void; onMessage: (message: string, kind?: "success" | "error") => void; onRefresh: () => Promise<void> }) {
-  const [card, setCard] = useState(initialCard);
-  const [frame, setFrame] = useState(initialCard.framing);
-  const [saving, setSaving] = useState<"idle" | "saving" | "saved" | "error">("idle");
-  const [interactivePreview, setInteractivePreview] = useState(false);
-  const [showDetails, setShowDetails] = useState(false);
-  const [sourceRun, setSourceRun] = useState<Run>();
-  const drag = useRef<{ x: number; y: number; frame: typeof frame } | undefined>(undefined);
-  const saveTimer = useRef<number | undefined>(undefined);
-  useEffect(() => { setCard(initialCard); setFrame(initialCard.framing); }, [initialCard]);
-  useEffect(() => { if (showDetails) void api.getRun(card.run_id).then((response) => setSourceRun(response.run)).catch(() => undefined); }, [showDetails, card.run_id]);
-  useEffect(() => () => { if (saveTimer.current) window.clearTimeout(saveTimer.current); }, []);
+export function CompletedStage({ cards, onNavigate, onMessage, onRefresh }: StageProps) {
+  const kept = useMemo(() => cards.filter((card) => card.decision === "keep"), [cards]);
 
-  function scheduleSave(next: typeof frame, archetype = card.archetype) {
-    setSaving("saving");
-    setInteractivePreview(true);
-    if (saveTimer.current) window.clearTimeout(saveTimer.current);
-    saveTimer.current = window.setTimeout(async () => {
-      try {
-        const response = await api.updateCard(card.card_id, { framing: next, archetype });
-        setCard(response.card);
-        setFrame(response.card.framing);
-        setSaving("saved");
-        setInteractivePreview(false);
-      } catch (error) {
-        setSaving("error");
-        onMessage((error as Error).message, "error");
-      }
-    }, 280);
-  }
-  function updateFrame(next: typeof frame, persist = true, archetype = card.archetype) {
-    const clamped = { zoom: Math.max(1, Math.min(3, next.zoom)), offset_x: Math.max(-0.8, Math.min(0.8, next.offset_x)), offset_y: Math.max(-0.8, Math.min(0.8, next.offset_y)) };
-    setFrame(clamped);
-    setInteractivePreview(true);
-    if (persist) scheduleSave(clamped, archetype);
-  }
-  function applyPreset(name: keyof typeof presets) {
-    setCard((current) => ({ ...current, archetype: name }));
-    updateFrame(presets[name], true, name);
-  }
-  function nudge(axis: "offset_x" | "offset_y", amount: number) {
-    updateFrame({ ...frame, [axis]: frame[axis] + amount });
-  }
-  function onPointerDown(event: React.PointerEvent<HTMLDivElement>) {
-    event.currentTarget.setPointerCapture(event.pointerId);
-    drag.current = { x: event.clientX, y: event.clientY, frame };
-    setInteractivePreview(true);
-  }
-  function onPointerMove(event: React.PointerEvent<HTMLDivElement>) {
-    if (!drag.current) return;
-    const bounds = event.currentTarget.getBoundingClientRect();
-    updateFrame({ ...drag.current.frame, offset_x: drag.current.frame.offset_x + (event.clientX - drag.current.x) / bounds.width, offset_y: drag.current.frame.offset_y + (event.clientY - drag.current.y) / bounds.height });
-  }
-  function onPointerUp() {
-    drag.current = undefined;
-    scheduleSave(frame);
-  }
-  function onKeyDown(event: React.KeyboardEvent<HTMLDivElement>) {
-    const amount = event.shiftKey ? 0.04 : event.altKey ? 0.002 : 0.012;
-    if (event.key === "ArrowLeft") { event.preventDefault(); nudge("offset_x", -amount); }
-    if (event.key === "ArrowRight") { event.preventDefault(); nudge("offset_x", amount); }
-    if (event.key === "ArrowUp") { event.preventDefault(); nudge("offset_y", -amount); }
-    if (event.key === "ArrowDown") { event.preventDefault(); nudge("offset_y", amount); }
-  }
-  async function editLabel(value: string) {
-    setCard((current) => ({ ...current, label: value }));
-    try { const response = await api.updateCard(card.card_id, { label: value }); setCard(response.card); setSaving("saved"); } catch (error) { onMessage((error as Error).message, "error"); }
-  }
-  async function changeTreatment(treatment: Card["treatment"]) {
-    if (treatment === card.treatment) return;
-    setSaving("saving");
+  async function reconsider(card: Card) {
     try {
-      const response = await api.updateCard(card.card_id, { treatment, framing: frame });
-      setCard(response.card);
-      setFrame(response.card.framing);
-      setSaving("saved");
-      setInteractivePreview(false);
-      onMessage(treatment === "estate-pixel-v1" ? "Estate Pixel treatment applied after framing" : "Painterly source treatment restored", "success");
-    } catch (error) {
-      setSaving("error");
-      onMessage((error as Error).message, "error");
-    }
-  }
-  async function decision(value: "keep" | "discard") {
-    try {
-      const response = await api.decideCard(card.card_id, value);
-      setCard(response.card);
-      onMessage(value === "keep" ? "Card kept with framing, treatment, and provenance" : "Card marked discarded", "success");
+      await api.decideCard(card.card_id, "working"); await onRefresh(); onMessage("Moved back to Frames"); onNavigate(`#frames/${card.card_id}`);
     } catch (error) { onMessage((error as Error).message, "error"); }
   }
 
-  const transform = calculateCoverTransform(card.source_dimensions || [336, 276], [336, 276], frame);
-  const imageStyle = { width: `${(transform.scaled_width / 336) * 100}%`, height: `${(transform.scaled_height / 276) * 100}%`, left: `${(transform.left / 336) * 100}%`, top: `${(transform.top / 276) * 100}%`, objectFit: "fill" as const };
-  return <section className="card-workbench-view">
-    <div className="workbench-top"><button className="back-link" onClick={() => onNavigate(`#run/${card.run_id}`)}>← Try another result</button><div><p className="eyebrow">Card Workbench</p><h2>Frame and treat one result</h2><p className="muted">Painterly generation stays immutable. Framing and the selected post-frame treatment belong to this draft.</p></div><button className="button secondary" onClick={() => setShowDetails((value) => !value)}>{showDetails ? "Hide details" : "Details"}</button></div>
-    <div className="card-workbench-layout"><div className="live-card-column"><div className="live-card-shell"><div className="live-card-heading">{card.label}</div><div className={`live-art-window ${card.treatment}`} tabIndex={0} role="application" aria-label="Portrait framing surface. Use arrow keys to nudge." onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={onPointerUp} onPointerCancel={onPointerUp} onKeyDown={onKeyDown}>{interactivePreview || !card.art_url ? <img src={card.source_url} alt="Selected immutable run output" style={imageStyle} /> : <img className="treated-art" src={`${card.art_url}?v=${encodeURIComponent(card.updated_at)}`} alt={`${card.treatment === "estate-pixel-v1" ? "Estate Pixel" : "Painterly"} framed preview`} />}<span className="center-line horizontal" /><span className="center-line vertical" /></div><div className="live-card-copy"><strong>Experimental card-context preview</strong><span>336 × 276 art window · {card.treatment === "estate-pixel-v1" ? "112 × 92 logical, 3× nearest" : "painterly source"}</span></div></div><div className="save-state" role="status"><span className={`save-dot ${saving}`} />{saving === "saving" ? "Rendering exact preview…" : saving === "error" ? "Could not save" : saving === "saved" ? "Saved · preview matches Pillow render" : "Ready"}</div><p className="keyboard-help">Focus the art window. Arrow keys nudge · Alt = fine · Shift = large.</p></div>
-      <aside className="frame-controls surface"><p className="eyebrow">Visible framing</p><h3>Choose a starting frame</h3><div className="preset-buttons">{(Object.keys(presets) as Array<keyof typeof presets>).map((name) => <button key={name} className={card.archetype === name ? "selected" : ""} onClick={() => applyPreset(name)}>{name[0].toUpperCase() + name.slice(1)}<small>{presets[name].zoom.toFixed(2)}× start</small></button>)}</div><label className="field-label zoom-field">Zoom <output>{frame.zoom.toFixed(2)}×</output><input type="range" min="1" max="3" step="0.01" value={frame.zoom} onChange={(event) => updateFrame({ ...frame, zoom: Number(event.target.value) })} /></label><div className="nudge-grid"><button onClick={() => nudge("offset_y", -0.012)} aria-label="Nudge up">↑</button><button onClick={() => nudge("offset_y", 0.012)} aria-label="Nudge down">↓</button><button onClick={() => nudge("offset_x", -0.012)} aria-label="Nudge left">←</button><button onClick={() => nudge("offset_x", 0.012)} aria-label="Nudge right">→</button></div><button className="button secondary full-width" onClick={() => applyPreset("bust")}>Reset to Bust</button><div className="treatment-control"><span className="field-label">Art treatment</span><div className="mode-switch compact" role="group" aria-label="Art treatment"><button className={card.treatment === "painterly" ? "selected" : ""} onClick={() => changeTreatment("painterly")}>Painterly<small>Immutable source crop</small></button><button className={card.treatment === "estate-pixel-v1" ? "selected" : ""} onClick={() => changeTreatment("estate-pixel-v1")}>Estate Pixel<small>32 colours · no dither</small></button></div></div><label className="field-label">Card label<input value={card.label} onChange={(event) => editLabel(event.target.value)} /></label><div className="decision-actions"><button className={`button ${card.decision === "keep" ? "keep-active" : "primary"}`} onClick={() => decision("keep")}>Keep card</button><button className={`button ${card.decision === "discard" ? "discard-active" : "secondary"}`} onClick={() => decision("discard")}>Discard</button></div><button className="button secondary full-width" onClick={() => onNavigate(`#run/${card.run_id}`)}>Try another result</button></aside>
-    </div>
-    {showDetails && <CardDetails card={card} run={sourceRun} onNavigate={onNavigate} />}
-  </section>;
+  return <section className="stage-page completed-page"><div className="page-heading"><div><p className="eyebrow">Stage 4 of 4</p><h2>Completed cards</h2><p>Only cards you chose to keep appear here. Each PNG is the exact deterministic render from Frames.</p></div><button className="button secondary" onClick={() => onNavigate("#frames")}>← Back to Frames</button></div>{kept.length ? <div className="completed-grid">{kept.map((card) => <article className="completed-card surface" key={card.card_id}><img src={`${card.render_url}?v=${encodeURIComponent(card.updated_at)}`} alt={card.label} /><div><p className="eyebrow">Completed</p><h3>{summary(card, "source_label") || card.label}</h3><p>{summary(card, "change_note") || "Structured style direction"}</p><span>{summary(card, "recipe_name") || card.run_id} · {card.archetype} · {card.treatment === "estate-pixel-v1" ? "Estate Pixel" : "Painterly"}</span><div><a className="button primary" href={card.render_url} download={`${card.label.replace(/[^a-z0-9]+/gi, "-").toLowerCase() || card.card_id}.png`}>Download PNG</a><button className="button secondary" onClick={() => void reconsider(card)}>Reconsider in Frames</button></div></div></article>)}</div> : <div className="empty-panel"><span className="empty-glyph">✓</span><h3>Nothing completed yet</h3><p>Keep a framed candidate and its full render will appear here.</p><button className="button primary" onClick={() => onNavigate("#frames")}>Open Frames</button></div>}</section>;
 }
 
-function CardDetails({ card, run, onNavigate }: { card: Card; run?: Run; onNavigate: (hash: string) => void }) {
-  return <aside className="details-panel surface"><div><p className="eyebrow">Traceable provenance</p><h3>Source, framing, and render details</h3></div><dl><dt>Run</dt><dd><button className="text-button" onClick={() => onNavigate(`#run/${card.run_id}`)}>{run?.recipe_snapshot.name || card.run_id}</button></dd><dt>Run item</dt><dd>{card.run_item_id}</dd><dt>Execution</dt><dd>{run?.execution_mode || "—"}</dd><dt>Model</dt><dd>{run?.model || "—"}</dd><dt>Reference pack</dt><dd>{run ? `${run.references_snapshot.length} ordered references` : "Loading…"}</dd><dt>Treatment</dt><dd>{card.treatment_version}</dd><dt>Source dimensions</dt><dd>{card.source_dimensions?.join(" × ") || "—"}</dd><dt>Framing transform</dt><dd><code>{JSON.stringify(card.framing)}</code></dd><dt>Render metadata</dt><dd><code>{JSON.stringify(card.render_metadata || {})}</code></dd></dl>{run && <div className="reference-thumbs">{run.references_snapshot.map((reference) => <img key={reference.id} src={reference.input_url} alt={reference.label} title={reference.label} />)}</div>}<p className="muted">Keep and reopen preserve the run source, frame, treatment version, and rendered output.</p></aside>;
+function summary(card: Card, key: string): string {
+  const value = card.source_run_provenance?.[key];
+  return typeof value === "string" ? value : "";
 }

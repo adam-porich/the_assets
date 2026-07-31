@@ -83,7 +83,7 @@ class WorkspaceStore:
                 raise WorkspaceError(f"{key} must be a list")
         source_ids = {str(item.get("id")) for item in normalized["sources"]}
         if any(str(item) not in source_ids for item in normalized["benchmark_source_ids"]):
-            raise WorkspaceError("benchmark_source_ids contains an unknown source")
+            raise WorkspaceError("the saved source selection contains an unknown source")
         reference_ids = {str(item.get("id")) for item in normalized["references"]}
         for recipe in normalized["recipes"]:
             if not isinstance(recipe, dict):
@@ -180,6 +180,7 @@ class WorkspaceStore:
         refs = {str(item["id"]): item for item in self.read().get("references", [])}
         return {
             **recipe,
+            "change_note": str(recipe.get("change_note") or ""),
             "references": [self.reference_payload(refs[ref_id]) for ref_id in recipe.get("reference_ids", []) if ref_id in refs],
         }
 
@@ -193,6 +194,7 @@ class WorkspaceStore:
             "recipes": [
                 {
                     **recipe,
+                    "change_note": str(recipe.get("change_note") or ""),
                     "references": [
                         self.reference_payload(reference)
                         for reference in data["references"]

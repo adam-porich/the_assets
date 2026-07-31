@@ -3,357 +3,306 @@ import { api } from "./api";
 import { modelsForMode, recipeIsDirty, referenceLimitProblem, selectedModel } from "./runDraft";
 import type { Model, Recipe, Run, RunSummary, SearchResult, Source, Workspace } from "./types";
 
-const directionLabels: Array<[keyof Recipe["direction"], string, string]> = [
-  ["medium_brushwork", "Medium & brushwork", "What the paint should feel like."],
-  ["lighting", "Lighting", "Set the light source and temperature."],
-  ["background", "Background", "Describe the quiet field behind the subject."],
-  ["composition", "Composition", "Control the portrait's shape in the card window."],
-  ["colour", "Colour", "Choose the palette relationships."],
-  ["detail", "Detail", "Say what earns crisp attention."],
-  ["identity", "Identity retention", "Describe what must remain recognizable."],
-];
 const searchPresets = ["character portrait", "older face portrait", "dramatic side light", "distinctive clothing portrait"];
+const directionLabels: Array<[keyof Recipe["direction"], string]> = [
+  ["medium_brushwork", "Medium & brushwork"],
+  ["lighting", "Lighting"],
+  ["background", "Background"],
+  ["composition", "Composition"],
+  ["colour", "Colour"],
+  ["detail", "Detail"],
+  ["identity", "Identity retention"],
+];
 
 function formatTime(value: string) {
   return new Date(value).toLocaleString([], { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
 }
 
-type Props = {
+type SharedProps = {
   workspace: Workspace;
-  models: Model[];
-  runs: RunSummary[];
-  activeRun?: Run;
-  pexelsAvailable: boolean;
-  openrouterAvailable: boolean;
   onWorkspace: (workspace: Workspace) => void;
-  onRefresh: () => Promise<void>;
   onNavigate: (hash: string) => void;
   onMessage: (message: string, kind?: "success" | "error") => void;
 };
 
-export function StyleLab({ workspace, models, runs, activeRun, pexelsAvailable, openrouterAvailable, onWorkspace, onRefresh, onNavigate, onMessage }: Props) {
-  const savedRecipe = workspace.recipes.find((item) => item.id === workspace.active_recipe_id) || workspace.recipes[0];
-  const [recipe, setRecipe] = useState<Recipe | undefined>(savedRecipe);
-  const [sourcePanel, setSourcePanel] = useState(false);
-  const [referencePanel, setReferencePanel] = useState(false);
+export function SourcesStage({ workspace, pexelsAvailable, onWorkspace, onNavigate, onMessage }: SharedProps & { pexelsAvailable: boolean }) {
   const [query, setQuery] = useState(searchPresets[0]);
   const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
   const [selectedSearch, setSelectedSearch] = useState<number[]>([]);
   const [searchPage, setSearchPage] = useState(1);
   const [hasMore, setHasMore] = useState(false);
-  const [busy, setBusy] = useState("");
   const [uploadLabel, setUploadLabel] = useState("");
-  const [runOutputs, setRunOutputs] = useState(1);
+  const [busy, setBusy] = useState("");
+  const [error, setError] = useState("");
   const [confirmDelete, setConfirmDelete] = useState("");
-  const [sourceError, setSourceError] = useState("");
-  const [runIntent, setRunIntent] = useState<"smoke" | "benchmark">();
+  const selected = useMemo(() => workspace.benchmark_source_ids.map((id) => workspace.sources.find((source) => source.id === id)).filter(Boolean) as Source[], [workspace]);
 
-  useEffect(() => setRecipe(savedRecipe), [savedRecipe?.id, savedRecipe?.updated_at]);
-  const benchmark = useMemo(
-    () => workspace.benchmark_source_ids.map((id) => workspace.sources.find((source) => source.id === id)).filter(Boolean) as Source[],
-    [workspace],
-  );
-  const unselected = workspace.sources.filter((source) => !workspace.benchmark_source_ids.includes(source.id));
-  const model = recipe ? selectedModel(models, recipe) : undefined;
-  const dirty = recipeIsDirty(savedRecipe, recipe);
-  const referenceProblem = recipe ? referenceLimitProblem(recipe, model) : "Recipe unavailable";
-  const liveSmokeComplete = Boolean(recipe && runs.some((run) => run.status === "complete" && run.execution_mode === "live" && run.model === recipe.model && run.source_count === 1));
-
-  function patchRecipe(patch: Partial<Recipe>) {
-    setRecipe((current) => current ? { ...current, ...patch } : current);
-  }
-  function patchDirection(key: keyof Recipe["direction"], value: string) {
-    setRecipe((current) => current ? { ...current, direction: { ...current.direction, [key]: value } } : current);
-  }
-  function changeMode(mode: Recipe["execution_mode"]) {
-    if (!recipe || mode === recipe.execution_mode) return;
-    const candidates = modelsForMode(models, mode);
-    const replacement = candidates.find((candidate) => candidate.available && candidate.id === "openai/gpt-image-1-mini") || candidates.find((candidate) => candidate.available) || candidates[0];
-    patchRecipe({ execution_mode: mode, model: replacement?.id || recipe.model, quality: "low" });
-  }
-  async function updateBenchmark(ids: string[]) {
-    setBusy("benchmark");
+  async function updateSelection(ids: string[]) {
+    setBusy("selection");
     try {
       const result = await api.updateBenchmark(ids);
       onWorkspace(result.workspace);
-      onMessage("Benchmark order saved", "success");
-    } catch (error) {
-      onMessage((error as Error).message, "error");
-    } finally {
-      setBusy("");
-    }
+      onMessage("Source selection saved");
+    } catch (nextError) { onMessage((nextError as Error).message, "error"); }
+    finally { setBusy(""); }
   }
+
   async function moveSource(index: number, direction: -1 | 1) {
-    const next = [...workspace.benchmark_source_ids];
+    const ids = [...workspace.benchmark_source_ids];
     const target = index + direction;
-    if (target < 0 || target >= next.length) return;
-    [next[index], next[target]] = [next[target], next[index]];
-    await updateBenchmark(next);
+    if (target < 0 || target >= ids.length) return;
+    [ids[index], ids[target]] = [ids[target], ids[index]];
+    await updateSelection(ids);
   }
+
   async function search(page = 1) {
-    setBusy("search");
-    setSourceError("");
+    setBusy("search"); setError("");
     try {
       const response = await api.searchSources(query, 12, page);
-      setSearchResults(response.results);
-      setSelectedSearch([]);
-      setSearchPage(response.page);
-      setHasMore(response.has_more);
-    } catch (error) {
-      const message = (error as Error).message;
-      setSourceError(message);
-      onMessage(message, "error");
-    } finally {
-      setBusy("");
-    }
+      setSearchResults(response.results); setSearchPage(response.page); setHasMore(response.has_more); setSelectedSearch([]);
+    } catch (nextError) { setError((nextError as Error).message); }
+    finally { setBusy(""); }
   }
+
   async function loadStarter() {
-    setBusy("starter");
-    setSourceError("");
+    setBusy("starter"); setError("");
     try {
       const response = await api.loadStarterSources();
       onWorkspace(response.workspace);
       const summary = `${response.imported} imported, ${response.deduplicated} already present`;
       if (response.failed) {
-        const errors = response.results.filter((item) => item.status === "failed").map((item) => `Pexels ${item.photo_id}: ${item.error}`).join(" · ");
-        setSourceError(`Starter benchmark partially loaded: ${summary}. ${errors}`);
-        onMessage(`Starter benchmark partially loaded (${response.failed} failed)`, "error");
-      } else {
-        onMessage(`Starter benchmark ready: ${summary}`, "success");
-      }
-    } catch (error) {
-      const message = (error as Error).message;
-      setSourceError(message);
-      onMessage(message, "error");
-    } finally {
-      setBusy("");
-    }
+        const details = response.results.filter((item) => item.status === "failed").map((item) => item.error).join(" · ");
+        setError(`${summary}; ${response.failed} failed. ${details}`);
+      } else onMessage(`Starter source images ready: ${summary}`);
+    } catch (nextError) { setError((nextError as Error).message); }
+    finally { setBusy(""); }
   }
-  async function bulkImport() {
-    const candidates = searchResults.filter((result) => selectedSearch.includes(result.pexels_photo_id));
+
+  async function importSelected() {
+    const candidates = searchResults.filter((item) => selectedSearch.includes(item.pexels_photo_id));
     if (!candidates.length) return;
-    setBusy("bulk-import");
+    setBusy("import"); setError("");
     try {
       const response = await api.importSources(candidates);
-      onWorkspace(response.workspace);
-      setSelectedSearch([]);
-      if (response.failed) {
-        const errors = response.results.filter((item) => item.status === "failed").map((item) => `Pexels ${item.photo_id}: ${item.error}`).join(" · ");
-        setSourceError(`${response.imported} imported; ${response.failed} failed. ${errors}`);
-        onMessage("Some selected portraits could not be downloaded", "error");
-      } else {
-        onMessage(`${response.imported} imported; ${response.deduplicated} duplicates skipped`, "success");
-      }
-    } catch (error) {
-      onMessage((error as Error).message, "error");
-    } finally {
-      setBusy("");
-    }
+      onWorkspace(response.workspace); setSelectedSearch([]);
+      if (response.failed) setError(`${response.imported} imported and ${response.failed} failed. ${response.results.filter((item) => item.error).map((item) => item.error).join(" · ")}`);
+      else onMessage(`${response.imported} source images imported`);
+    } catch (nextError) { setError((nextError as Error).message); }
+    finally { setBusy(""); }
   }
-  async function upload(kind: "sources" | "references", event: React.ChangeEvent<HTMLInputElement>) {
+
+  async function upload(event: React.ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
     if (!file) return;
-    setBusy(`upload-${kind}`);
+    setBusy("upload");
     try {
-      const result = await api.upload(kind, file, uploadLabel);
-      onWorkspace(result.workspace);
-      setUploadLabel("");
-      onMessage(`${kind === "sources" ? "Source" : "Reference"} added`, "success");
-    } catch (error) {
-      onMessage((error as Error).message, "error");
-    } finally {
-      setBusy("");
-      event.target.value = "";
-    }
+      const response = await api.upload("sources", file, uploadLabel);
+      onWorkspace(response.workspace); setUploadLabel(""); onMessage("Source image added");
+    } catch (nextError) { onMessage((nextError as Error).message, "error"); }
+    finally { setBusy(""); event.target.value = ""; }
   }
-  async function removeItem(kind: "source" | "reference", id: string) {
-    const token = `${kind}:${id}`;
-    if (confirmDelete !== token) {
-      setConfirmDelete(token);
-      return;
-    }
+
+  async function deleteSource(source: Source) {
+    if (confirmDelete !== source.id) { setConfirmDelete(source.id); return; }
     try {
-      const response = kind === "source" ? await api.deleteSource(id) : await api.deleteReference(id);
+      let current = workspace;
+      if (current.benchmark_source_ids.includes(source.id)) current = (await api.updateBenchmark(current.benchmark_source_ids.filter((id) => id !== source.id))).workspace;
+      const response = await api.deleteSource(source.id);
+      onWorkspace(response.workspace); setConfirmDelete(""); onMessage("Source image deleted");
+    } catch (nextError) { onMessage((nextError as Error).message, "error"); }
+  }
+
+  return <section className="stage-page sources-page">
+    <div className="page-heading"><div><p className="eyebrow">Stage 1 of 4</p><h2>Choose source images</h2><p>Build the ordered set of people you want to explore. Search, upload, provenance, and selection all live here.</p></div><button className="button primary next-action" onClick={() => onNavigate("#styles")}>Continue to Styles →</button></div>
+
+    <div className="source-tools">
+      <section className="surface tool-panel"><div className="panel-heading"><div><p className="eyebrow">Pexels library</p><h3>Find source images</h3></div>{!pexelsAvailable && <span className="status-chip warning">API key needed</span>}</div>
+        <div className="search-presets">{searchPresets.map((preset) => <button key={preset} className={query === preset ? "selected" : ""} onClick={() => setQuery(preset)}>{preset}</button>)}</div>
+        <div className="inline-form"><input value={query} onChange={(event) => setQuery(event.target.value)} onKeyDown={(event) => event.key === "Enter" && void search(1)} aria-label="Search Pexels" /><button className="button primary" disabled={!pexelsAvailable || busy === "search"} onClick={() => void search(1)}>{busy === "search" ? "Searching…" : "Search"}</button></div>
+        <button className="button secondary" disabled={!pexelsAvailable || busy === "starter"} onClick={() => void loadStarter()}>{busy === "starter" ? "Loading starters…" : "Load six starter images"}</button>
+      </section>
+      <section className="surface tool-panel"><p className="eyebrow">Local library</p><h3>Upload an image</h3><p className="muted">Uploads retain their filename, checksum, dimensions, and local provenance.</p><label className="field-label">Optional label<input value={uploadLabel} onChange={(event) => setUploadLabel(event.target.value)} /></label><label className="button secondary file-button">{busy === "upload" ? "Uploading…" : "Choose image"}<input type="file" accept="image/*" disabled={Boolean(busy)} onChange={upload} /></label></section>
+    </div>
+    {error && <div className="inline-error" role="alert">{error}</div>}
+
+    {searchResults.length > 0 && <section className="surface search-panel"><div className="panel-heading"><div><p className="eyebrow">Search results · page {searchPage}</p><h3>Select images to import</h3></div><button className="button primary" disabled={!selectedSearch.length || busy === "import"} onClick={() => void importSelected()}>{busy === "import" ? "Importing…" : `Import ${selectedSearch.length || "selected"}`}</button></div><div className="image-library search-library">{searchResults.map((result) => <label key={result.pexels_photo_id} className={`library-card ${selectedSearch.includes(result.pexels_photo_id) ? "selected" : ""}`}><input type="checkbox" checked={selectedSearch.includes(result.pexels_photo_id)} onChange={(event) => setSelectedSearch((current) => event.target.checked ? [...current, result.pexels_photo_id] : current.filter((id) => id !== result.pexels_photo_id))} /><img src={result.preview_url} alt={`Portrait by ${result.photographer || "Pexels"}`} /><span><strong>{result.photographer || "Pexels photographer"}</strong><small>Pexels {result.pexels_photo_id}</small></span></label>)}</div><div className="pagination"><button className="button secondary" disabled={searchPage <= 1} onClick={() => void search(searchPage - 1)}>Previous</button><button className="button secondary" disabled={!hasMore} onClick={() => void search(searchPage + 1)}>Next</button></div></section>}
+
+    <section className="surface library-panel"><div className="panel-heading"><div><p className="eyebrow">Project library</p><h3>{selected.length} selected source image{selected.length === 1 ? "" : "s"}</h3></div><span className="muted">Click a card to include or remove it. Arrows set generation order.</span></div>
+      {workspace.sources.length ? <div className="image-library">{workspace.sources.map((source) => { const index = workspace.benchmark_source_ids.indexOf(source.id); const isSelected = index >= 0; return <article key={source.id} className={`library-card source-card ${isSelected ? "selected" : ""}`}><button className="image-select" onClick={() => void updateSelection(isSelected ? workspace.benchmark_source_ids.filter((id) => id !== source.id) : [...workspace.benchmark_source_ids, source.id])} aria-pressed={isSelected}><img src={source.image_url} alt={source.label} /><span className="selection-mark">{isSelected ? `✓ ${index + 1}` : "+"}</span></button><div className="library-meta"><strong>{source.label}</strong><small>{source.provenance.kind === "pexels" ? "Pexels source" : "Local upload"}</small>{isSelected && <div className="order-actions"><button onClick={() => void moveSource(index, -1)} disabled={index === 0} aria-label={`Move ${source.label} earlier`}>←</button><button onClick={() => void moveSource(index, 1)} disabled={index === selected.length - 1} aria-label={`Move ${source.label} later`}>→</button></div>}<details><summary>Provenance</summary><code>{JSON.stringify(source.provenance)}</code></details><button className="text-button danger" onClick={() => void deleteSource(source)}>{confirmDelete === source.id ? "Confirm delete" : "Delete"}</button></div></article>; })}</div> : <div className="empty-panel"><span className="empty-glyph">◇</span><h3>No source images yet</h3><p>Load the starter set, search Pexels, or upload an image. You can still visit later stages to see what they need.</p></div>}
+    </section>
+    <div className="stage-actions"><span /><button className="button primary large" onClick={() => onNavigate("#styles")}>Continue to Styles →</button></div>
+  </section>;
+}
+
+type StylesProps = SharedProps & {
+  models: Model[];
+  runs: RunSummary[];
+  initialRun?: Run;
+  openrouterAvailable: boolean;
+  onRun: (run: Run) => void;
+  onRefresh: () => Promise<void>;
+};
+
+export function StylesStage({ workspace, models, runs, initialRun, openrouterAvailable, onWorkspace, onRun, onRefresh, onNavigate, onMessage }: StylesProps) {
+  const savedRecipe = workspace.recipes.find((item) => item.id === workspace.active_recipe_id) || workspace.recipes[0];
+  const [recipe, setRecipe] = useState<Recipe | undefined>(savedRecipe);
+  const [sourceIds, setSourceIds] = useState<string[]>(workspace.benchmark_source_ids.slice(0, 1));
+  const [variants, setVariants] = useState(4);
+  const [currentRun, setCurrentRun] = useState<Run | undefined>(initialRun);
+  const [busy, setBusy] = useState("");
+  const [referenceLabel, setReferenceLabel] = useState("");
+  const [compareId, setCompareId] = useState("");
+
+  useEffect(() => setRecipe(savedRecipe), [savedRecipe?.id, savedRecipe?.updated_at]);
+  useEffect(() => { if (initialRun) setCurrentRun(initialRun); }, [initialRun]);
+  useEffect(() => {
+    const allowed = new Set(workspace.benchmark_source_ids);
+    setSourceIds((current) => {
+      const kept = current.filter((id) => allowed.has(id));
+      return kept.length ? kept : workspace.benchmark_source_ids.slice(0, 1);
+    });
+  }, [workspace.benchmark_source_ids.join("|")]);
+  useEffect(() => {
+    if (!currentRun || !["queued", "running"].includes(currentRun.status)) return;
+    const timer = window.setInterval(async () => {
+      try {
+        const next = (await api.getRun(currentRun.run_id)).run;
+        setCurrentRun(next); onRun(next);
+        if (!["queued", "running"].includes(next.status)) await onRefresh();
+      } catch (error) { onMessage((error as Error).message, "error"); }
+    }, 800);
+    return () => window.clearInterval(timer);
+  }, [currentRun?.run_id, currentRun?.status]);
+
+  const selectedSources = workspace.benchmark_source_ids.map((id) => workspace.sources.find((source) => source.id === id)).filter(Boolean) as Source[];
+  const model = recipe ? selectedModel(models, recipe) : undefined;
+  const referenceProblem = recipe ? referenceLimitProblem(recipe, model) : "No style recipe is available.";
+  const dirty = recipeIsDirty(savedRecipe, recipe);
+  const activeRun = runs.some((item) => ["queued", "running"].includes(item.status)) || Boolean(currentRun && ["queued", "running"].includes(currentRun.status));
+  const runProblem = !recipe ? "No style recipe is available." : !sourceIds.length ? "Choose at least one source image." : referenceProblem || (recipe.execution_mode === "live" && !openrouterAvailable ? "OPENROUTER_API_KEY is not configured." : "");
+  const allSourcesProblem = !workspace.benchmark_source_ids.length ? "Choose at least one source image." : referenceProblem || (recipe?.execution_mode === "live" && !openrouterAvailable ? "OPENROUTER_API_KEY is not configured." : "");
+  const resolvedPrompt = recipe ? [recipe.change_note && `Requested change: ${recipe.change_note}`, ...directionLabels.map(([key, label]) => recipe.direction[key] && `${label}: ${recipe.direction[key]}`), recipe.avoid && `Avoid: ${recipe.avoid}`].filter(Boolean).join("\n") : "";
+
+  function patchRecipe(patch: Partial<Recipe>) { setRecipe((current) => current ? { ...current, ...patch } : current); }
+  function patchDirection(key: keyof Recipe["direction"], value: string) { setRecipe((current) => current ? { ...current, direction: { ...current.direction, [key]: value } } : current); }
+  function changeMode(mode: Recipe["execution_mode"]) {
+    if (!recipe || recipe.execution_mode === mode) return;
+    const candidates = modelsForMode(models, mode);
+    const replacement = candidates.find((item) => item.available && item.id === "openai/gpt-image-1-mini") || candidates.find((item) => item.available) || candidates[0];
+    patchRecipe({ execution_mode: mode, model: replacement?.id || recipe.model, quality: "low" });
+  }
+
+  async function saveRecipe() {
+    if (!recipe) return;
+    setBusy("save");
+    try { const response = await api.updateRecipe(recipe.id, recipe); onWorkspace(response.workspace); onMessage("Style changes saved"); }
+    catch (error) { onMessage((error as Error).message, "error"); }
+    finally { setBusy(""); }
+  }
+
+  async function generate(allSources = false) {
+    if (!recipe) return;
+    if (activeRun) { onMessage("One generation batch is already active.", "error"); return; }
+    const ids = allSources ? workspace.benchmark_source_ids : sourceIds;
+    const problem = !ids.length ? "Choose at least one source image." : referenceProblem || (recipe.execution_mode === "live" && !openrouterAvailable ? "OPENROUTER_API_KEY is not configured." : "");
+    if (problem) { onMessage(problem, "error"); return; }
+    setBusy(allSources ? "test-all" : "generate");
+    try {
+      const response = await api.startRun(recipe, ids, allSources ? 1 : variants, recipe.execution_mode);
+      onWorkspace(response.workspace); setRecipe(response.run.recipe_snapshot); setCurrentRun(response.run); onRun(response.run);
+      onMessage(allSources ? "Consistency test queued" : `${variants}-variant exploration queued`);
+    } catch (error) { onMessage((error as Error).message, "error"); }
+    finally { setBusy(""); }
+  }
+
+  async function uploadReference(event: React.ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    if (!file || !recipe) return;
+    setBusy("reference");
+    try {
+      const response = await api.upload("references", file, referenceLabel);
+      const newest = response.workspace.references.find((item) => !workspace.references.some((old) => old.id === item.id));
       onWorkspace(response.workspace);
-      setConfirmDelete("");
-    } catch (error) {
-      onMessage((error as Error).message, "error");
-    }
+      if (newest) setRecipe((current) => current ? { ...current, reference_ids: [...current.reference_ids, newest.id] } : current);
+      setReferenceLabel(""); onMessage("Style reference added");
+    } catch (error) { onMessage((error as Error).message, "error"); }
+    finally { setBusy(""); event.target.value = ""; }
   }
+
+  function moveReference(index: number, direction: -1 | 1) {
+    if (!recipe) return;
+    const ids = [...recipe.reference_ids]; const target = index + direction;
+    if (target < 0 || target >= ids.length) return;
+    [ids[index], ids[target]] = [ids[target], ids[index]]; patchRecipe({ reference_ids: ids });
+  }
+
   async function duplicateRecipe() {
     if (!recipe) return;
-    try {
-      const response = await api.duplicateRecipe(recipe.id);
-      const selected = await api.selectRecipe(response.recipe.id);
-      onWorkspace(selected.workspace);
-      onMessage("Recipe duplicated", "success");
-    } catch (error) {
-      onMessage((error as Error).message, "error");
-    }
+    try { const created = await api.duplicateRecipe(recipe.id); const selected = await api.selectRecipe(created.recipe.id); onWorkspace(selected.workspace); onMessage("Style recipe duplicated"); }
+    catch (error) { onMessage((error as Error).message, "error"); }
   }
+
   async function selectRecipe(id: string) {
+    try { onWorkspace((await api.selectRecipe(id)).workspace); }
+    catch (error) { onMessage((error as Error).message, "error"); }
+  }
+
+  async function openRun(id: string) {
+    try { const run = (await api.getRun(id)).run; setCurrentRun(run); onRun(run); }
+    catch (error) { onMessage((error as Error).message, "error"); }
+  }
+
+  async function sendToFrames(run: Run, itemId: string) {
     try {
-      onWorkspace((await api.selectRecipe(id)).workspace);
-    } catch (error) {
-      onMessage((error as Error).message, "error");
-    }
-  }
-  async function confirmRun() {
-    if (!recipe || !runIntent) return;
-    const sourceIds = runIntent === "smoke" ? workspace.benchmark_source_ids.slice(0, 1) : workspace.benchmark_source_ids;
-    setBusy("run");
-    try {
-      const response = await api.startRun(recipe, sourceIds, runOutputs, recipe.execution_mode, recipe.execution_mode === "live");
-      onWorkspace(response.workspace);
-      setRunIntent(undefined);
-      onNavigate(`#run/${response.run.run_id}`);
-      onMessage(`${recipe.execution_mode === "live" ? "Live generation" : "Simulation"} queued`, "success");
-    } catch (error) {
-      onMessage((error as Error).message, "error");
-    } finally {
-      setBusy("");
-    }
-  }
-  async function reviewRun(verdict: string) {
-    if (!activeRun) return;
-    try {
-      await api.reviewRun(activeRun.run_id, verdict, activeRun.note || "");
-      await onRefresh();
-      onMessage("Sheet verdict saved", "success");
-    } catch (error) {
-      onMessage((error as Error).message, "error");
-    }
-  }
-  async function framePortrait(itemId: string) {
-    if (!activeRun) return;
-    try {
-      const response = await api.createCard(activeRun.run_id, itemId, "Experimental claimant", "bust", "painterly");
-      onNavigate(`#card/${response.card.card_id}`);
-    } catch (error) {
-      onMessage((error as Error).message, "error");
-    }
+      const response = await api.createCard(run.run_id, itemId, "Experimental claimant", "bust", "painterly");
+      await onRefresh(); onNavigate(`#frames/${response.card.card_id}`);
+    } catch (error) { onMessage((error as Error).message, "error"); }
   }
 
-  if (activeRun) {
-    return <RunSheet run={activeRun} runs={runs} onReview={reviewRun} onFramePortrait={framePortrait} onNavigate={onNavigate} onRefresh={onRefresh} onMessage={onMessage} />;
-  }
+  const references = recipe?.reference_ids.map((id) => workspace.references.find((item) => item.id === id)).filter(Boolean) || [];
+  const otherReferences = workspace.references.filter((item) => !recipe?.reference_ids.includes(item.id));
+  const grouped = currentRun?.benchmark_source_ids.map((sourceId) => ({ source: currentRun.sources_snapshot.find((item) => item.id === sourceId), items: currentRun.items.filter((item) => item.source_id === sourceId) })) || [];
+  const compareCandidates = runs.filter((item) => item.run_id !== currentRun?.run_id && item.status === "complete");
 
-  const modeModels = recipe ? modelsForMode(models, recipe.execution_mode) : [];
-  const runBlocked = !recipe || !benchmark.length || Boolean(referenceProblem) || (recipe.execution_mode === "live" && !openrouterAvailable);
-  const runSources = runIntent === "smoke" ? 1 : benchmark.length;
-  return <div className="lab-layout">
-    <div className="readiness surface" aria-label="Style Lab readiness">
-      <span className={benchmark.length ? "ready" : ""}>1 · Sources <b>{benchmark.length || "needed"}</b></span>
-      <span className={recipe?.reference_ids.length ? "ready" : ""}>2 · Style pack <b>{recipe?.reference_ids.length || "needed"}</b></span>
-      <span className={recipe && !dirty ? "ready" : ""}>3 · Art direction <b>{dirty ? "unsaved draft" : "ready"}</b></span>
-      <span className={!runBlocked ? "ready" : ""}>4 · Generate <b>{recipe?.execution_mode || "blocked"}</b></span>
-    </div>
+  return <section className="stage-page styles-page">
+    <div className="page-heading"><div><p className="eyebrow">Stage 2 of 4</p><h2>Explore a style</h2><p>Say what should change, choose a few source images, and generate. Technical controls remain available under Advanced.</p></div><button className="button secondary" onClick={() => onNavigate("#sources")}>← Back to Sources</button></div>
+    {!recipe ? <div className="empty-panel"><h3>No style recipe is available</h3><p>Refresh the workspace to seed its starter recipe.</p></div> : <>
+      <section className="surface style-setup">
+        <div className="setup-block"><div className="panel-heading"><div><p className="eyebrow">Source images</p><h3>Choose a few to explore</h3></div><span className="status-chip">{sourceIds.length} chosen</span></div>{selectedSources.length ? <div className="choice-thumbs">{selectedSources.map((source) => <button key={source.id} className={sourceIds.includes(source.id) ? "selected" : ""} onClick={() => setSourceIds((current) => current.includes(source.id) ? current.filter((id) => id !== source.id) : [...current, source.id])}><img src={source.image_url} alt={source.label} /><span>{source.label}</span></button>)}</div> : <div className="mini-empty">No project sources yet. <button className="text-button" onClick={() => onNavigate("#sources")}>Add source images</button></div>}</div>
+        <div className="setup-block"><div className="panel-heading"><div><p className="eyebrow">Ordered style references</p><h3>{references.length} visual reference{references.length === 1 ? "" : "s"}</h3></div></div><div className="reference-list">{references.map((reference, index) => <article key={reference!.id}><img src={reference!.image_url} alt={reference!.label} /><span><strong>{index + 1}. {reference!.label}</strong><small>{String(reference!.provenance?.kind || "upload")}</small></span><div><button onClick={() => moveReference(index, -1)} disabled={index === 0} aria-label="Move reference earlier">←</button><button onClick={() => moveReference(index, 1)} disabled={index === references.length - 1} aria-label="Move reference later">→</button><button onClick={() => patchRecipe({ reference_ids: recipe.reference_ids.filter((id) => id !== reference!.id) })} aria-label="Remove reference">×</button></div></article>)}</div>{otherReferences.length > 0 && <div className="reference-add">{otherReferences.map((reference) => <button key={reference.id} onClick={() => patchRecipe({ reference_ids: [...recipe.reference_ids, reference.id] })}><img src={reference.image_url} alt="" />+ {reference.label}</button>)}</div>}<div className="inline-form compact"><input value={referenceLabel} onChange={(event) => setReferenceLabel(event.target.value)} placeholder="Optional reference label" /><label className="button secondary file-button">Upload reference<input type="file" accept="image/*" onChange={uploadReference} /></label></div></div>
+        <label className="change-field"><span>What should change?</span><textarea value={recipe.change_note} onChange={(event) => patchRecipe({ change_note: event.target.value })} placeholder="For example: warmer evening light, looser brushwork, and a quieter background." rows={4} /><small>This plain-language note is appended to the art direction and snapshotted into every run.</small></label>
+        <div className="generation-bar"><label>Variants<select value={variants} onChange={(event) => setVariants(Number(event.target.value))}>{[1, 2, 3, 4].map((count) => <option key={count} value={count}>{count}</option>)}</select></label><button className="button primary generate-button" disabled={Boolean(runProblem) || activeRun || Boolean(busy)} onClick={() => void generate(false)}>{busy === "generate" ? "Starting…" : `Generate ${variants} variant${variants === 1 ? "" : "s"}`}</button><button className="button secondary" disabled={Boolean(allSourcesProblem) || activeRun || Boolean(busy)} onClick={() => void generate(true)}>{busy === "test-all" ? "Starting…" : "Test across all sources"}</button></div>
+        {runProblem && <p className="validation-note" role="status">{runProblem}</p>}
+      </section>
 
-    <section className="benchmark-strip surface">
-      <div className="section-heading">
-        <div><p className="eyebrow">01 / Sources</p><h2>Benchmark portraits</h2></div>
-        <span className="recommendation">6 fixed starters · {benchmark.length} selected</span>
-        <button className="button secondary" onClick={() => setSourcePanel((value) => !value)}>{sourcePanel ? "Close source finder" : "Find or upload"}</button>
-      </div>
-      <p className="section-help">Load the standard six in one operation, or build an ordered set with paged search and bulk selection.</p>
-      <div className="starter-action">
-        <button className="button primary" onClick={loadStarter} disabled={!pexelsAvailable || busy === "starter"}>{busy === "starter" ? "Loading six portraits…" : "Load starter benchmark"}</button>
-        {!pexelsAvailable && <span>Pexels needs a configured API key; local upload remains available.</span>}
-      </div>
-      {sourceError && <div className="source-error" role="alert">{sourceError}</div>}
-      {sourcePanel && <div className="setup-drawer source-drawer">
-        <div className="drawer-column">
-          <div className="search-presets" aria-label="Search presets">{searchPresets.map((preset) => <button key={preset} className={query === preset ? "selected" : ""} onClick={() => setQuery(preset)}>{preset}</button>)}</div>
-          <label className="field-label">Search Pexels<input value={query} onChange={(event) => setQuery(event.target.value)} onKeyDown={(event) => event.key === "Enter" && void search(1)} /></label>
-          <button className="button primary" onClick={() => search(1)} disabled={busy === "search" || !pexelsAvailable}>{busy === "search" ? "Searching…" : "Search portraits"}</button>
-          {searchResults.length > 0 && <>
-            <div className="bulk-bar"><span>{selectedSearch.length} selected</span><button className="button primary" disabled={!selectedSearch.length || busy === "bulk-import"} onClick={bulkImport}>{busy === "bulk-import" ? "Importing…" : "Import selected"}</button></div>
-            <div className="search-results">{searchResults.map((result) => <label className={`search-result ${selectedSearch.includes(result.pexels_photo_id) ? "selected" : ""}`} key={result.pexels_photo_id}><input type="checkbox" checked={selectedSearch.includes(result.pexels_photo_id)} onChange={(event) => setSelectedSearch((current) => event.target.checked ? [...current, result.pexels_photo_id] : current.filter((id) => id !== result.pexels_photo_id))} /><img src={result.preview_url} alt={`Portrait by ${result.photographer || "Pexels"}`} /><span><strong>Pexels {result.pexels_photo_id}</strong><small>{result.photographer || "Pexels"}</small></span></label>)}</div>
-            <div className="pagination"><button className="button secondary" disabled={searchPage <= 1 || busy === "search"} onClick={() => search(searchPage - 1)}>Previous</button><span>Page {searchPage}</span><button className="button secondary" disabled={!hasMore || busy === "search"} onClick={() => search(searchPage + 1)}>Next</button></div>
-          </>}
-        </div>
-        <div className="drawer-column upload-column"><p className="field-label">Local upload</p><p className="muted">Uploaded sources are added to the current benchmark automatically.</p><input className="text-input" value={uploadLabel} onChange={(event) => setUploadLabel(event.target.value)} placeholder="Optional source label" /><label className="file-button button secondary">{busy === "upload-sources" ? "Uploading…" : "Choose image"}<input type="file" accept="image/*" onChange={(event) => upload("sources", event)} disabled={Boolean(busy)} /></label></div>
-      </div>}
-      <div className="benchmark-row">{benchmark.map((source, index) => <article className="benchmark-card" key={source.id}><img src={source.image_url} alt={source.label} /><div className="benchmark-card-body"><span className="order-number">{String(index + 1).padStart(2, "0")}</span><strong>{source.label}</strong><small>{source.provenance.kind === "pexels" ? `Pexels · ${String(source.provenance.photographer || "")}` : "Local upload"}</small><div className="card-actions"><button className="icon-button" onClick={() => moveSource(index, -1)} disabled={index === 0} aria-label={`Move ${source.label} left`}>←</button><button className="icon-button" onClick={() => moveSource(index, 1)} disabled={index === benchmark.length - 1} aria-label={`Move ${source.label} right`}>→</button><button className="text-button danger-text" onClick={() => updateBenchmark(workspace.benchmark_source_ids.filter((id) => id !== source.id))}>Remove</button></div></div></article>)}{!benchmark.length && <div className="empty-strip">Load the starter benchmark, upload a source, or bulk-import search results.</div>}</div>
-      {unselected.length > 0 && <div className="available-sources"><span>Imported, not selected:</span>{unselected.map((source) => <button className="source-chip" key={source.id} onClick={() => updateBenchmark([...workspace.benchmark_source_ids, source.id])}><img src={source.image_url} alt="" />{source.label}<b>+</b></button>)}</div>}
-      {workspace.sources.length > 0 && <details className="secondary-list"><summary>All imported sources ({workspace.sources.length})</summary><div>{workspace.sources.map((source) => <span key={source.id}>{source.label} <button className="text-button danger-text" onClick={() => removeItem("source", source.id)}>{confirmDelete === `source:${source.id}` ? "Confirm delete" : "Delete"}</button></span>)}</div></details>}
+      <details className="surface advanced-panel"><summary><span>Advanced</span><small>Model, quality, execution, structured direction, prompt, recipes, and provider</small></summary><div className="advanced-content">
+        <div className="mode-switch"><button className={recipe.execution_mode === "live" ? "selected" : ""} onClick={() => changeMode("live")}>Live generation<small>OpenRouter · usage recorded</small></button><button className={recipe.execution_mode === "simulation" ? "selected" : ""} onClick={() => changeMode("simulation")}>Simulation<small>Local workflow fixture</small></button></div>
+        <div className="form-grid"><label className="field-label">Recipe name<input value={recipe.name} onChange={(event) => patchRecipe({ name: event.target.value })} /></label><label className="field-label">Model<select value={recipe.model} onChange={(event) => patchRecipe({ model: event.target.value })}>{modelsForMode(models, recipe.execution_mode).map((item) => <option key={item.id} value={item.id}>{item.name}{item.available ? "" : " · unavailable"}</option>)}</select></label><label className="field-label">Quality<select value={recipe.quality} onChange={(event) => patchRecipe({ quality: event.target.value as Recipe["quality"] })}>{(["low", "medium", "high"] as const).filter((quality) => !model?.qualities.length || model.qualities.includes(quality)).map((quality) => <option key={quality}>{quality}</option>)}</select></label></div>
+        <div className="direction-grid">{directionLabels.map(([key, label]) => <label className="field-label" key={key}>{label}<textarea rows={3} value={recipe.direction[key]} onChange={(event) => patchDirection(key, event.target.value)} /></label>)}</div><label className="field-label">Avoid<textarea rows={3} value={recipe.avoid} onChange={(event) => patchRecipe({ avoid: event.target.value })} /></label>
+        <div className="prompt-preview"><strong>Resolved instruction preview</strong><pre>{resolvedPrompt || "No instruction text yet."}</pre></div>
+        <dl className="provider-details"><dt>Provider</dt><dd>{model?.provider_name || model?.provider_slug || (recipe.execution_mode === "simulation" ? "Local deterministic adapter" : "Unavailable")}</dd><dt>Reference limit</dt><dd>{model?.max_input_references ?? "—"} total images</dd><dt>Streaming</dt><dd>{model?.supports_streaming ? "Supported" : "Buffered"}</dd><dt>Pricing</dt><dd>{model?.pricing.length ? model.pricing.map((item) => `$${item.cost_usd}/${item.unit}`).join(", ") : "Usage response is the source of truth"}</dd></dl>
+        {workspace.recipes.length > 1 && <label className="field-label recipe-select">Saved recipe<select value={recipe.id} onChange={(event) => void selectRecipe(event.target.value)}>{workspace.recipes.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>}
+        <div className="advanced-actions"><button className="button secondary" onClick={() => void duplicateRecipe()}>Duplicate recipe</button><button className="button primary" disabled={!dirty || busy === "save"} onClick={() => void saveRecipe()}>{busy === "save" ? "Saving…" : dirty ? "Save style changes" : "Saved"}</button></div>
+      </div></details>
+    </>}
+
+    <section className="results-section"><div className="panel-heading"><div><p className="eyebrow">Generation batches</p><h3>{currentRun ? currentRun.recipe_snapshot.change_note || currentRun.recipe_name : "Results appear here"}</h3></div>{currentRun && <span className={`status-chip ${currentRun.status}`}>{currentRun.status} · {currentRun.completed_calls}/{currentRun.total_calls}</span>}</div>
+      {!currentRun ? <div className="empty-panel"><span className="empty-glyph">✦</span><h3>No generation batch selected</h3><p>Generate above, or open a previous batch from history.</p></div> : <>
+        <div className="progress-track" aria-label={`${currentRun.completed_calls} of ${currentRun.total_calls} results complete`}><span style={{ width: `${currentRun.total_calls ? (currentRun.completed_calls / currentRun.total_calls) * 100 : 0}%` }} /></div>
+        <div className="batch-groups">{grouped.map((group) => <article className="surface batch-group" key={group.source?.id}><header><img src={group.source?.input_url} alt={group.source?.label || "Source"} /><div><p className="eyebrow">Source batch</p><h4>{group.source?.label}</h4></div><details><summary>Batch details</summary><p><strong>Style note:</strong> {currentRun.recipe_snapshot.change_note || "Structured art direction only"}</p><div className="reference-thumbs">{currentRun.references_snapshot.map((reference) => <img src={reference.input_url} alt={reference.label} key={reference.id} />)}</div><p>Cost: ${group.items.reduce((total, item) => total + Number(item.cost_usd || 0), 0).toFixed(4)}</p></details></header><div className="result-grid">{group.items.map((item) => <div className={`result-card ${item.status}`} key={item.item_id}>{item.output_url ? <img src={item.output_url} alt={`${item.source_label} variant ${item.output_index + 1}`} /> : <div className="result-placeholder"><span className="spinner" />{item.status}</div>}<div><strong>Variant {item.output_index + 1}</strong>{item.error && <small className="error-text">{item.error}</small>}{item.status === "complete" && <button className="button primary" onClick={() => void sendToFrames(currentRun, item.item_id)}>Send to Frames →</button>}<details><summary>Details</summary><small>{item.elapsed_seconds ?? "—"}s · ${Number(item.cost_usd || 0).toFixed(4)} · seed {item.seed ?? "—"}</small></details></div></div>)}</div></article>)}</div>
+      </>}
+      {runs.length > 0 && <details className="run-history"><summary>Run history ({runs.length})</summary><div>{runs.map((run) => <button key={run.run_id} onClick={() => void openRun(run.run_id)}><span className={`status-dot ${run.status}`} /><span><strong>{run.recipe_name}</strong><small>{formatTime(run.created_at)} · {run.source_count} source{run.source_count === 1 ? "" : "s"} · ${Number(run.cost_usd || 0).toFixed(4)}</small></span></button>)}</div></details>}
+      {currentRun && compareCandidates.length > 0 && <div className="compare-tool"><label>Compare this batch with<select value={compareId} onChange={(event) => setCompareId(event.target.value)}><option value="">Choose a completed batch</option>{compareCandidates.map((run) => <option key={run.run_id} value={run.run_id}>{run.recipe_name} · {formatTime(run.created_at)}</option>)}</select></label><button className="button secondary" disabled={!compareId} onClick={() => onNavigate(`#compare/${currentRun.run_id}/${compareId}`)}>Compare sources</button></div>}
     </section>
-
-    <section className="style-pack-panel surface">
-      <div className="section-heading"><div><p className="eyebrow">02 / Style pack</p><h2>Ordered estate references</h2></div><span className="recommendation">{recipe?.reference_ids.length || 0} selected · identity image also counts</span><button className="button secondary" onClick={() => setReferencePanel((value) => !value)}>{referencePanel ? "Close controls" : "Manage references"}</button></div>
-      <p className="section-help">New workspaces include the two restored estate-card-v1 references. Their order and provenance are recorded in every run.</p>
-      <div className="reference-gallery">{workspace.references.map((reference) => <article className={recipe?.reference_ids.includes(reference.id) ? "selected" : ""} key={reference.id}><img src={reference.image_url} alt={reference.label} /><strong>{reference.label}</strong><small>{String(reference.provenance?.kind || "upload")}</small></article>)}</div>
-      {recipe && referencePanel && <ReferenceManager workspace={workspace} recipe={recipe} onWorkspace={onWorkspace} onRecipe={setRecipe} onUpload={upload} onDelete={(id) => removeItem("reference", id)} confirmDelete={confirmDelete} onMessage={onMessage} uploadBusy={busy === "upload-references"} />}
-    </section>
-
-    <section className="recipe-panel surface">
-      <div className="section-heading"><div><p className="eyebrow">03 / Art direction</p><h2>Generation recipe</h2></div><span className={`draft-state ${dirty ? "dirty" : "saved"}`}>{dirty ? "Unsaved visible edits" : "Saved"}</span><button className="button secondary" onClick={duplicateRecipe} disabled={!recipe}>Duplicate</button></div>
-      {workspace.recipes.length > 1 && <label className="field-label compact-field">Recipe version<select value={recipe?.id || ""} onChange={(event) => selectRecipe(event.target.value)}>{workspace.recipes.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>}
-      {recipe ? <>
-        <div className="mode-switch" role="group" aria-label="Execution mode"><button className={recipe.execution_mode === "live" ? "selected" : ""} onClick={() => changeMode("live")}>Live generation<small>OpenRouter · paid</small></button><button className={recipe.execution_mode === "simulation" ? "selected" : ""} onClick={() => changeMode("simulation")}>Simulation<small>Local · zero cost · not artwork</small></button></div>
-        <div className="recipe-basics"><label className="field-label">Name<input value={recipe.name} onChange={(event) => patchRecipe({ name: event.target.value })} /></label><label className="field-label">Model<select value={recipe.model} onChange={(event) => patchRecipe({ model: event.target.value })}>{modeModels.map((candidate) => <option key={candidate.id} value={candidate.id}>{candidate.name}{candidate.available ? "" : " · unavailable"}</option>)}</select></label><label className="field-label">Quality<select value={recipe.quality} onChange={(event) => patchRecipe({ quality: event.target.value as Recipe["quality"] })}>{(model?.qualities.length ? model.qualities.filter((quality): quality is Recipe["quality"] => ["low", "medium", "high"].includes(quality)) : ["low", "medium", "high"]).map((quality) => <option key={quality} value={quality}>{quality}</option>)}</select></label></div>
-        {model && !model.available && <div className="source-error" role="alert">Saved model <code>{recipe.model}</code> is unavailable. It remains visible so a different model cannot be submitted silently.</div>}
-        {recipe.execution_mode === "live" && !openrouterAvailable && <div className="source-error" role="alert">OPENROUTER_API_KEY is not configured. Live controls remain visible, but only explicit simulation can run.</div>}
-        <details className="advanced-direction"><summary>Advanced art direction</summary><div className="advanced-fields">{directionLabels.map(([key, label, help]) => <label className="field-label" key={key}>{label}<span className="field-help">{help}</span><textarea rows={2} value={recipe.direction[key]} onChange={(event) => patchDirection(key, event.target.value)} /></label>)}<label className="field-label">Avoid<span className="field-help">Mapped into the instruction when the provider has no negative-prompt field.</span><textarea rows={2} value={recipe.avoid} onChange={(event) => patchRecipe({ avoid: event.target.value })} /></label><div className="instruction-preview"><span className="eyebrow">Resolved instruction preview</span><pre>{resolveInstruction(recipe)}</pre></div></div></details>
-      </> : <div className="empty-panel">Starter recipe unavailable.</div>}
-    </section>
-
-    <section className="experiment-panel surface">
-      <div className="section-heading"><div><p className="eyebrow">04 / Generate</p><h2>Save and run this exact draft</h2></div><span className={`mode-badge ${recipe?.execution_mode}`}>{recipe?.execution_mode === "live" ? "Paid live generation" : "Zero-cost simulation"}</span></div>
-      <p className="section-help">The run request normalizes and saves every visible edit, then snapshots that exact recipe, ordered sources, and style pack.</p>
-      {referenceProblem && recipe && <div className="source-error" role="alert">{referenceProblem}</div>}
-      {recipe && <div className="run-preflight"><div><span>Selected model</span><strong>{recipe.model}</strong></div><div><span>Style images</span><strong>{recipe.reference_ids.length} + identity</strong></div><div><span>Outputs / source</span><select value={runOutputs} onChange={(event) => setRunOutputs(Number(event.target.value))}><option value={1}>1</option><option value={2}>2</option></select></div><div><span>Streaming</span><strong>{model?.supports_streaming ? "Supported" : "Buffered"}</strong></div><button className="button secondary large-button" onClick={() => setRunIntent("smoke")} disabled={runBlocked}>{recipe.execution_mode === "live" ? "Save and run 1-source smoke test" : "Save and run 1-source simulation"}</button><button className="button primary large-button" onClick={() => setRunIntent("benchmark")} disabled={runBlocked || (recipe.execution_mode === "live" && !liveSmokeComplete)}>{recipe.execution_mode === "live" ? "Save and run paid benchmark" : "Save and run full simulation"}</button></div>}
-      {recipe?.execution_mode === "live" && !liveSmokeComplete && <div className="setup-guidance"><strong>The full paid benchmark is locked.</strong><span>Complete one live source successfully with {recipe.model} first.</span></div>}
-      {!benchmark.length && <div className="setup-guidance"><strong>Add at least one benchmark source.</strong><span>The smoke test uses the first selected portrait.</span></div>}
-      <RunHistory runs={runs} onNavigate={onNavigate} />
-    </section>
-
-    {runIntent && recipe && <div className="modal-backdrop" role="presentation"><div className="run-confirm surface" role="dialog" aria-modal="true" aria-labelledby="run-confirm-title"><p className="eyebrow">Confirm {recipe.execution_mode} execution</p><h2 id="run-confirm-title">{runIntent === "smoke" ? "One-source smoke test" : "Full benchmark"}</h2><dl><dt>Mode</dt><dd>{recipe.execution_mode === "live" ? "Live OpenRouter generation (cost-bearing)" : "Local deterministic simulation (not generated artwork)"}</dd><dt>Model</dt><dd>{recipe.model}</dd><dt>Sources</dt><dd>{runSources}</dd><dt>Style references</dt><dd>{recipe.reference_ids.length}</dd><dt>Image calls</dt><dd>{runSources * runOutputs}</dd><dt>Pricing metadata</dt><dd>{model?.pricing.length ? model.pricing.map((line) => `$${line.cost_usd}/${line.unit} ${line.billable}`).join(", ") : "No estimate available; exact usage is recorded after each call."}</dd></dl><p>{dirty ? "Your unsaved visible edits will be saved atomically and used by this run." : "The saved draft shown above will be snapshotted into this run."}</p><div className="modal-actions"><button className="button secondary" onClick={() => setRunIntent(undefined)} disabled={busy === "run"}>Cancel</button><button className="button primary" onClick={confirmRun} disabled={busy === "run"}>{busy === "run" ? "Starting…" : recipe.execution_mode === "live" ? "Confirm paid generation" : "Confirm simulation"}</button></div></div></div>}
-  </div>;
-}
-
-function resolveInstruction(recipe: Recipe) {
-  return Object.entries(recipe.direction).filter(([, value]) => value).map(([key, value]) => `${key.replace(/_/g, " ").replace(/\b\w/g, (letter: string) => letter.toUpperCase())}: ${value}`).concat(recipe.avoid ? [`Avoid: ${recipe.avoid}`] : []).join("\n");
-}
-
-function ReferenceManager({ workspace, recipe, onWorkspace, onRecipe, onUpload, onDelete, confirmDelete, onMessage, uploadBusy }: { workspace: Workspace; recipe: Recipe; onWorkspace: (workspace: Workspace) => void; onRecipe: (recipe: Recipe) => void; onUpload: (kind: "sources" | "references", event: React.ChangeEvent<HTMLInputElement>) => void; onDelete: (id: string) => void; confirmDelete: string; onMessage: (message: string, kind?: "success" | "error") => void; uploadBusy: boolean }) {
-  function toggle(id: string) {
-    onRecipe({ ...recipe, reference_ids: recipe.reference_ids.includes(id) ? recipe.reference_ids.filter((value) => value !== id) : [...recipe.reference_ids, id] });
-  }
-  async function updateReference(id: string, patch: { label?: string; position?: number }) {
-    try { onWorkspace((await api.updateReference(id, patch)).workspace); } catch (error) { onMessage((error as Error).message, "error"); }
-  }
-  async function replace(id: string, event: React.ChangeEvent<HTMLInputElement>) {
-    const file = event.target.files?.[0];
-    if (!file) return;
-    try { onWorkspace((await api.replaceReference(id, file)).workspace); onMessage("Reference image replaced; provenance updated", "success"); } catch (error) { onMessage((error as Error).message, "error"); }
-    event.target.value = "";
-  }
-  return <div className="reference-manager"><label className="file-button button secondary">{uploadBusy ? "Uploading…" : "Upload another reference"}<input type="file" accept="image/*" onChange={(event) => onUpload("references", event)} disabled={uploadBusy} /></label>{workspace.references.map((reference, index) => <div className="reference-row" key={reference.id}><img src={reference.image_url} alt="" /><button className={`reference-select ${recipe.reference_ids.includes(reference.id) ? "selected" : ""}`} onClick={() => toggle(reference.id)}>{recipe.reference_ids.includes(reference.id) ? "Included" : "Include"}</button><input className="reference-label" value={reference.label} onChange={(event) => onWorkspace({ ...workspace, references: workspace.references.map((item) => item.id === reference.id ? { ...item, label: event.target.value } : item) })} onBlur={(event) => updateReference(reference.id, { label: event.target.value })} /><button className="icon-button" disabled={index === 0} onClick={() => updateReference(reference.id, { position: index - 1 })} aria-label={`Move ${reference.label} up`}>↑</button><button className="icon-button" disabled={index === workspace.references.length - 1} onClick={() => updateReference(reference.id, { position: index + 1 })} aria-label={`Move ${reference.label} down`}>↓</button><label className="text-button replace-button">Replace<input type="file" accept="image/*" onChange={(event) => replace(reference.id, event)} /></label><button className="text-button danger-text" onClick={() => onDelete(reference.id)}>{confirmDelete === `reference:${reference.id}` ? "Confirm delete" : "Delete"}</button></div>)}</div>;
-}
-
-function RunHistory({ runs, onNavigate }: { runs: RunSummary[]; onNavigate: (hash: string) => void }) {
-  return <div className="run-history"><div className="history-heading"><h3>Run history</h3><span>Newest first</span></div>{runs.length === 0 ? <p className="muted">Runs will appear here with explicit live/simulation provenance.</p> : runs.map((run) => <button className="history-row" key={run.run_id} onClick={() => onNavigate(`#run/${run.run_id}`)}><span className={`status-dot ${run.status}`} /><span className="history-main"><strong>{run.recipe_name}</strong><small>{formatTime(run.created_at)} · {run.execution_mode} · {run.source_count} sources · {run.completed_calls}/{run.total_calls} calls · ${run.cost_usd.toFixed(4)}</small></span><span className="verdict-pill">{run.verdict}</span><span>→</span></button>)}</div>;
-}
-
-function RunSheet({ run, runs, onReview, onFramePortrait, onNavigate, onRefresh, onMessage }: { run: Run; runs: RunSummary[]; onReview: (verdict: string) => void; onFramePortrait: (itemId: string) => void; onNavigate: (hash: string) => void; onRefresh: () => Promise<void>; onMessage: (message: string, kind?: "success" | "error") => void }) {
-  const [selectedItem, setSelectedItem] = useState<Run["items"][number]>();
-  useEffect(() => { if (["queued", "running"].includes(run.status)) { const timer = window.setInterval(() => onRefresh(), 1500); return () => window.clearInterval(timer); } }, [run.status, onRefresh]);
-  async function duplicate() { try { await api.duplicateRecipeFromRun(run.run_id); onMessage("Recipe duplicated from the immutable run snapshot", "success"); } catch (error) { onMessage((error as Error).message, "error"); } }
-  return <section className="run-view"><div className="run-toolbar"><button className="back-link" onClick={() => onNavigate("#lab")}>← Back to Style Lab</button><div><p className="eyebrow">Run sheet · {run.execution_mode}</p><h2>{run.recipe_snapshot.name}</h2><p className="muted">{run.status} · {run.completed_calls}/{run.total_calls} calls · requested {run.requested_aspect_ratio}, effective {run.effective_aspect_ratio}</p></div><div className="toolbar-actions"><button className="button secondary" onClick={duplicate}>Duplicate recipe</button><button className="button secondary" onClick={() => onRefresh()}>Refresh</button></div></div><div className={`run-summary surface ${run.execution_mode}`}><span><b>{run.sources_snapshot.length}</b> portraits</span><span><b>{run.references_snapshot.length}</b> style refs</span><span><b>{run.model}</b></span><span><b>{run.execution_mode}</b> execution</span><span><b>${run.cost_usd.toFixed(6)}</b> recorded cost</span>{run.execution_mode === "simulation" && <strong>Simulation output is a filtered workflow fixture, not generated artwork.</strong>}{run.status === "failed" && <strong className="error-text">Some calls failed. Inspect the affected cells.</strong>}</div><div className="sheet-question"><p className="eyebrow">Sheet verdict</p><h3>Do these look like illustrations commissioned for the same set?</h3><div className="verdict-actions"><button className={run.verdict === "coherent" ? "selected" : ""} onClick={() => onReview("coherent")}>Coherent</button><button className={run.verdict === "mixed" ? "selected" : ""} onClick={() => onReview("mixed")}>Mixed</button><button className={run.verdict === "not-useful" ? "selected" : ""} onClick={() => onReview("not-useful")}>Not useful</button></div></div><div className="sheet-grid">{run.items.map((item) => <article className={`sheet-cell ${item.status} ${selectedItem?.item_id === item.item_id ? "selected" : ""}`} key={item.item_id} onClick={() => setSelectedItem(item)}>{item.thumbnail_url || item.output_url ? <img src={item.thumbnail_url || item.output_url} alt={item.source_label} /> : <div className="cell-placeholder"><span>{item.status === "running" ? (run.execution_mode === "live" ? "Generating…" : "Simulating…") : item.status}</span><i className={item.status === "running" ? "spinner" : ""} /></div>}<div className="sheet-cell-caption"><strong>{item.source_label}</strong><small>{item.status === "complete" ? `${item.dimensions?.join(" × ")} · ${item.elapsed_seconds}s · $${Number(item.cost_usd || 0).toFixed(5)}` : item.error || item.status}</small>{item.status === "complete" && <button className="button primary frame-action" onClick={(event) => { event.stopPropagation(); onFramePortrait(item.item_id); }}>Frame this portrait</button>}</div></article>)}</div>{selectedItem && <div className="detail-drawer"><button className="close-drawer" onClick={() => setSelectedItem(undefined)} aria-label="Close details">×</button><p className="eyebrow">Result details</p><h3>{selectedItem.source_label}</h3>{selectedItem.output_url && <img className="detail-output" src={selectedItem.output_url} alt={`${run.execution_mode} result`} />}<dl><dt>Execution</dt><dd>{run.execution_mode}</dd><dt>Source input</dt><dd>{selectedItem.source_url ? <a href={selectedItem.source_url} target="_blank" rel="noreferrer">Open exact input</a> : "Not ready"}</dd><dt>Dimensions</dt><dd>{selectedItem.dimensions?.join(" × ") || "—"}</dd><dt>Seed</dt><dd>{selectedItem.seed || "—"}</dd><dt>Model</dt><dd>{selectedItem.model || run.model}</dd><dt>Usage</dt><dd><code>{JSON.stringify(selectedItem.usage || {})}</code></dd><dt>Reference mapping</dt><dd>{String(run.backend_mapping.references || "—")}</dd></dl><details><summary>Resolved instruction</summary><pre>{run.resolved_instruction}</pre></details>{selectedItem.status === "complete" && <div className="sticky-frame-action"><button className="button primary full-width" onClick={() => onFramePortrait(selectedItem.item_id)}>Frame this portrait</button></div>}</div>}<ComparePanel runs={runs} current={run} onNavigate={onNavigate} /></section>;
-}
-
-function ComparePanel({ runs, current, onNavigate }: { runs: RunSummary[]; current: Run; onNavigate: (hash: string) => void }) {
-  const candidates = runs.filter((run) => run.run_id !== current.run_id && run.status === "complete");
-  const [other, setOther] = useState(candidates[0]?.run_id || "");
-  return candidates.length ? <div className="compare-bar surface"><div><p className="eyebrow">Compare sheets</p><strong>See this benchmark source-for-source</strong></div><select value={other} onChange={(event) => setOther(event.target.value)}>{candidates.map((run) => <option key={run.run_id} value={run.run_id}>{run.recipe_name} · {run.execution_mode} · {formatTime(run.created_at)}</option>)}</select><button className="button secondary" onClick={() => other && onNavigate(`#compare/${current.run_id}/${other}`)}>Compare</button></div> : null;
+    <div className="stage-actions"><button className="button secondary" onClick={() => onNavigate("#sources")}>← Back to Sources</button><button className="button primary" onClick={() => onNavigate("#frames")}>Continue to Frames →</button></div>
+  </section>;
 }
 
 export function CompareView({ firstId, secondId, onNavigate }: { firstId: string; secondId: string; onNavigate: (hash: string) => void }) {
   const [comparison, setComparison] = useState<Awaited<ReturnType<typeof api.compareRuns>>["comparison"]>();
   const [error, setError] = useState("");
-  useEffect(() => { void api.compareRuns(firstId, secondId).then((result) => setComparison(result.comparison)).catch((reason) => setError((reason as Error).message)); }, [firstId, secondId]);
-  if (error) return <section className="compare-view"><button className="back-link" onClick={() => onNavigate(`#run/${firstId}`)}>← Back to run</button><div className="empty-panel large-empty"><h2>Comparison unavailable</h2><p>{error}</p></div></section>;
-  if (!comparison) return <section className="compare-view"><p className="muted">Loading comparison…</p></section>;
-  return <section className="compare-view"><div className="run-toolbar"><button className="back-link" onClick={() => onNavigate(`#run/${firstId}`)}>← Back to run</button><div><p className="eyebrow">Source-for-source comparison</p><h2>{comparison.first.recipe_snapshot.name} <span className="compare-vs">vs</span> {comparison.second.recipe_snapshot.name}</h2><p className="muted">Two immutable benchmark sheets, aligned by source order.</p></div></div>{!comparison.same_benchmark && <div className="compare-warning">These runs use different benchmark membership or order. Rows are shown by source ID where possible.</div>}<div className="compare-table"><div className="compare-table-head"><span>Source</span><strong>{comparison.first.recipe_snapshot.name}</strong><strong>{comparison.second.recipe_snapshot.name}</strong></div>{comparison.rows.map((row) => <div className="compare-table-row" key={row.source_id}><span>{row.source_id}</span>{row.first?.thumbnail_url ? <img src={row.first.thumbnail_url} alt={row.first.source_label} /> : <div className="compare-missing">Missing</div>}{row.second?.thumbnail_url ? <img src={row.second.thumbnail_url} alt={row.second.source_label} /> : <div className="compare-missing">Missing</div>}</div>)}</div><div className="recipe-diff surface"><p className="eyebrow">Recipe changes</p>{comparison.recipe_changes.length ? comparison.recipe_changes.map((change) => <div key={change.field}><strong>{change.field}</strong><span>{String(change.first || "—")}</span><span>{String(change.second || "—")}</span></div>) : <p className="muted">No recipe fields changed between these snapshots.</p>}</div></section>;
+  useEffect(() => { void api.compareRuns(firstId, secondId).then((response) => setComparison(response.comparison)).catch((nextError) => setError((nextError as Error).message)); }, [firstId, secondId]);
+  if (error) return <section className="stage-page"><div className="inline-error">{error}</div></section>;
+  if (!comparison) return <section className="stage-page loading-inline"><span className="spinner" /> Loading comparison…</section>;
+  return <section className="stage-page compare-view"><button className="back-link" onClick={() => onNavigate("#styles")}>← Back to Styles</button><div className="page-heading"><div><p className="eyebrow">Secondary tool</p><h2>{comparison.first.recipe_snapshot.name} vs {comparison.second.recipe_snapshot.name}</h2><p>Immutable results aligned by source image.</p></div></div>{!comparison.same_benchmark && <div className="inline-error">These batches use different source membership or order.</div>}<div className="compare-table"><div className="compare-row head"><span>Source</span><strong>{comparison.first.recipe_snapshot.name}</strong><strong>{comparison.second.recipe_snapshot.name}</strong></div>{comparison.rows.map((row) => <div className="compare-row" key={row.source_id}><span>{row.source_id}</span>{row.first?.thumbnail_url ? <img src={row.first.thumbnail_url} alt={row.first.source_label} /> : <i>Missing</i>}{row.second?.thumbnail_url ? <img src={row.second.thumbnail_url} alt={row.second.source_label} /> : <i>Missing</i>}</div>)}</div><div className="surface recipe-diff"><h3>Recipe changes</h3>{comparison.recipe_changes.length ? comparison.recipe_changes.map((change) => <div key={change.field}><strong>{change.field}</strong><span>{String(change.first || "—")}</span><span>{String(change.second || "—")}</span></div>) : <p>No recipe fields changed.</p>}</div></section>;
 }

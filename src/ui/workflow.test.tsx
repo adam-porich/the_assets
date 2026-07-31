@@ -1,36 +1,41 @@
-import { act } from "react";
+import React, { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { api } from "./api";
-import { CardGallery, CardWorkbench } from "./CardViews";
-import { StyleLab } from "./StyleLab";
-import type { Card, Model, Recipe, Run, Source, Workspace } from "./types";
+import { readRoute } from "./App";
+import { CompletedStage, FramesStage } from "./CardViews";
+import { SourcesStage, StylesStage } from "./StyleLab";
+import type { Card, CardPreviewOption, Model, Recipe, Run, Source, Workspace } from "./types";
 
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
 const reference = (id: string) => ({ id, label: id, relative_path: `references/${id}.png`, image_url: `/asset/${id}.png`, checksum_sha256: id, provenance: { kind: "bundled" } });
 const recipe: Recipe = {
-  id: "recipe_1", name: "Estate", model: "openai/gpt-image-1-mini", execution_mode: "live", quality: "low",
+  id: "recipe_1", name: "Estate", model: "openai/gpt-image-1-mini", execution_mode: "live", quality: "low", change_note: "",
   direction: { medium_brushwork: "paint", lighting: "quiet", background: "stone", composition: "bust", colour: "umber", detail: "eyes", identity: "retain" },
   avoid: "type", aspect_policy: "card-window", reference_ids: ["ref_1", "ref_2"], references: [], created_at: "2026-01-01", updated_at: "2026-01-01",
 };
-const source: Source = { id: "source_1", label: "Portrait one", relative_path: "sources/one.jpg", image_url: "/asset/one.jpg", dimensions: [160, 220], created_at: "2026-01-01", provenance: { kind: "pexels", photo_id: 1 } };
-const workspace: Workspace = { version: 1, sources: [], benchmark_source_ids: [], references: [reference("ref_1"), reference("ref_2")], recipes: [recipe], active_recipe_id: recipe.id, links: { runs: "api/runs", cards: "api/cards" } };
-const loadedWorkspace: Workspace = { ...workspace, sources: [source], benchmark_source_ids: [source.id] };
+const source = (id: string): Source => ({ id, label: `Portrait ${id}`, relative_path: `sources/${id}.jpg`, image_url: `/asset/${id}.jpg`, dimensions: [160, 220], created_at: "2026-01-01", provenance: { kind: "pexels", photo_id: id } });
+const sourceOne = source("one");
+const sourceTwo = source("two");
+const emptyWorkspace: Workspace = { version: 1, sources: [], benchmark_source_ids: [], references: [reference("ref_1"), reference("ref_2")], recipes: [recipe], active_recipe_id: recipe.id, links: { runs: "api/runs", cards: "api/cards" } };
+const workspace: Workspace = { ...emptyWorkspace, sources: [sourceOne, sourceTwo], benchmark_source_ids: [sourceOne.id, sourceTwo.id] };
 const liveModel: Model = { id: recipe.model, name: "GPT Image Mini", execution_mode: "live", available: true, supported_parameters: { input_references: { type: "range", max: 16 }, quality: { type: "enum", values: ["low", "medium", "high"] } }, max_input_references: 16, aspect_ratios: ["3:2"], qualities: ["low", "medium", "high"], supports_negative_prompt: false, supports_reference_roles: false, supports_streaming: true, pricing: [{ billable: "output_image", unit: "token", cost_usd: 0.000008 }] };
-const simulationModel: Model = { ...liveModel, id: "fake/painterly-deterministic", name: "Simulation", execution_mode: "simulation", supports_streaming: false, pricing: [{ billable: "output_image", unit: "image", cost_usd: 0 }] };
 
-function runFixture(draft: Recipe): Run {
+function runFixture(draft: Recipe = recipe, sourceIds = [sourceOne.id], outputs = 4): Run {
+  const sources = sourceIds.map((id) => workspace.sources.find((item) => item.id === id)!);
   return {
-    run_id: "run_1", recipe_id: draft.id, recipe_name: draft.name, status: "complete", source_count: 1, verdict: "unreviewed", created_at: "2026-01-01", completed_calls: 1, total_calls: 1, execution_mode: draft.execution_mode, model: draft.model, cost_usd: 0,
-    updated_at: "2026-01-01", recipe_snapshot: draft, resolved_instruction: "paint", benchmark_source_ids: [source.id], sources_snapshot: [{ ...source, input_url: source.image_url }], references_snapshot: workspace.references.map((item) => ({ ...item, input_url: item.image_url })), quality: "low", requested_aspect_ratio: "28:23", effective_aspect_ratio: "5:4", backend_capabilities: {}, backend_mapping: { references: "identity_first_style_after" }, outputs_per_source: 1, usage: {}, model_metadata: draft.execution_mode === "live" ? liveModel : simulationModel,
-    items: [{ item_id: "item_1", source_id: source.id, source_label: source.label, output_index: 0, status: "complete", output_url: "/asset/output.png", thumbnail_url: "/asset/thumb.jpg", source_url: source.image_url, dimensions: [320, 256], elapsed_seconds: 0.2, cost_usd: 0 }], note: "",
+    run_id: "run_1", recipe_id: draft.id, recipe_name: draft.name, status: "complete", source_count: sourceIds.length, verdict: "unreviewed", created_at: "2026-01-01", completed_calls: sourceIds.length * outputs, total_calls: sourceIds.length * outputs, execution_mode: draft.execution_mode, model: draft.model, cost_usd: 0,
+    updated_at: "2026-01-01", recipe_snapshot: draft, resolved_instruction: `Requested change: ${draft.change_note}`, benchmark_source_ids: sourceIds, sources_snapshot: sources.map((item) => ({ ...item, input_url: item.image_url })), references_snapshot: workspace.references.map((item) => ({ ...item, input_url: item.image_url })), quality: "low", requested_aspect_ratio: "28:23", effective_aspect_ratio: "5:4", backend_capabilities: {}, backend_mapping: { references: "identity_first_style_after" }, outputs_per_source: outputs, usage: {}, model_metadata: liveModel,
+    items: sourceIds.flatMap((id) => Array.from({ length: outputs }, (_, index) => ({ item_id: `item_${id}_${index}`, source_id: id, source_label: `Portrait ${id}`, output_index: index, status: "complete", output_url: `/asset/output-${id}-${index}.png`, thumbnail_url: `/asset/thumb-${id}-${index}.jpg`, source_url: `/asset/${id}.jpg`, dimensions: [320, 256] as [number, number], elapsed_seconds: 0.2, cost_usd: 0 }))), note: "",
   };
 }
 
-function cardFixture(treatment: Card["treatment"] = "painterly", decision: Card["decision"] = "working"): Card {
-  return { card_id: "card_1", run_id: "run_1", run_item_id: "item_1", label: "Claimant", template_id: "estate-card-v1", archetype: "bust", framing: { zoom: 1, offset_x: 0, offset_y: 0.02 }, decision, render_path: "cards/card.png", render_url: "/asset/card.png", art_render_path: "cards/art.png", art_url: "/asset/art.png", source_output_path: "runs/output.png", source_url: "/asset/output.png", source_dimensions: [320, 256], render_dimensions: [400, 560], treatment, treatment_version: treatment === "painterly" ? "painterly-source-v1" : treatment, render_metadata: { palette_colours: treatment === "estate-pixel-v1" ? 32 : null }, created_at: "2026-01-01", updated_at: `2026-01-01-${treatment}-${decision}` };
+function cardFixture(decision: Card["decision"] = "working", preset: Card["archetype"] = "bust", treatment: Card["treatment"] = "painterly", id = "card_1"): Card {
+  return { card_id: id, run_id: "run_1", run_item_id: "item_one_0", label: "Claimant", template_id: "estate-card-v1", archetype: preset, framing: preset === "tall" ? { zoom: 1.16, offset_x: 0, offset_y: -0.06 } : { zoom: 1, offset_x: 0, offset_y: 0.02 }, decision, render_path: `cards/${id}.png`, render_url: `/asset/${id}.png`, art_render_path: `cards/${id}-art.png`, art_url: `/asset/${id}-art.png`, source_output_path: "runs/output.png", source_url: "/asset/output.png", source_dimensions: [320, 256], render_dimensions: [420, 600], treatment, treatment_version: treatment === "painterly" ? "painterly-source-v1" : treatment, render_metadata: {}, source_run_provenance: { source_label: "Portrait one", change_note: "Warmer light", recipe_name: "Estate" }, created_at: "2026-01-01", updated_at: `2026-01-01-${preset}-${treatment}-${decision}` };
 }
+
+const previews: CardPreviewOption[] = (["bust", "tall", "torso"] as const).flatMap((preset) => (["painterly", "estate-pixel-v1"] as const).map((treatment) => ({ option_id: `cache:${preset}:${treatment}`, preset, preset_label: preset[0].toUpperCase() + preset.slice(1), treatment, treatment_label: treatment === "painterly" ? "Painterly" : "Estate Pixel", framing: preset === "tall" ? { zoom: 1.16, offset_x: 0, offset_y: -0.06 } : preset === "torso" ? { zoom: 1.28, offset_x: 0, offset_y: 0.08 } : { zoom: 1, offset_x: 0, offset_y: 0.02 }, render_path: `cards/previews/${preset}-${treatment}.png`, render_url: `/asset/${preset}-${treatment}.png`, art_render_path: `cards/previews/${preset}-${treatment}-art.png`, art_url: `/asset/${preset}-${treatment}-art.png`, render_dimensions: [420, 600] as [number, number], render_metadata: {} })));
 
 let container: HTMLDivElement;
 let root: Root;
@@ -38,77 +43,119 @@ afterEach(() => {
   if (root) act(() => root.unmount());
   container?.remove();
   vi.restoreAllMocks();
+  window.history.replaceState(null, "", "#sources");
 });
 
 function mount(node: React.ReactNode) {
-  container = document.createElement("div");
-  document.body.append(container);
-  root = createRoot(container);
-  act(() => root.render(node));
+  container = document.createElement("div"); document.body.append(container); root = createRoot(container); act(() => root.render(node));
 }
 
 function clickButton(text: string, index = 0) {
   const buttons = [...container.querySelectorAll("button")].filter((candidate) => candidate.textContent?.includes(text));
-  expect(buttons.length).toBeGreaterThan(index);
-  act(() => (buttons[index] as HTMLButtonElement).click());
+  expect(buttons.length).toBeGreaterThan(index); act(() => (buttons[index] as HTMLButtonElement).click());
 }
 
-describe("visible portrait workflow", () => {
-  it("loads sources, confirms explicit simulation, frames, treats, keeps, and reopens", async () => {
-    vi.spyOn(api, "loadStarterSources").mockResolvedValue({ workspace: loadedWorkspace, imported: 1, deduplicated: 0, failed: 0, results: [{ status: "imported" }] });
-    let submitted: Recipe | undefined;
-    vi.spyOn(api, "startRun").mockImplementation(async (draft) => { submitted = draft; return { run: runFixture(draft), workspace: { ...loadedWorkspace, recipes: [draft] } }; });
-    const navigate = vi.fn();
-    function Harness() {
-      const [value, setValue] = React.useState(workspace);
-      return <StyleLab workspace={value} models={[simulationModel, liveModel]} runs={[]} pexelsAvailable openrouterAvailable onWorkspace={setValue} onRefresh={async () => undefined} onNavigate={navigate} onMessage={() => undefined} />;
-    }
-    const React = await import("react");
-    mount(<Harness />);
-    await act(async () => clickButton("Load starter benchmark"));
-    expect(container.textContent).toContain("Portrait one");
+function setText(element: HTMLInputElement | HTMLTextAreaElement, value: string) {
+  const prototype = element instanceof HTMLTextAreaElement ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype;
+  Object.getOwnPropertyDescriptor(prototype, "value")?.set?.call(element, value);
+  act(() => element.dispatchEvent(new Event("input", { bubbles: true })));
+}
 
-    clickButton("Save and run 1-source smoke test");
-    expect(container.querySelector('[role="dialog"]')?.textContent).toContain("Live OpenRouter generation (cost-bearing)");
-    clickButton("Cancel");
-    clickButton("Simulation");
-    clickButton("Save and run full simulation");
-    expect(container.querySelector('[role="dialog"]')?.textContent).toContain("not generated artwork");
-    await act(async () => clickButton("Confirm simulation"));
-    expect(submitted?.model).toBe("fake/painterly-deterministic");
-    expect(submitted?.execution_mode).toBe("simulation");
-    expect(navigate).toHaveBeenCalledWith("#run/run_1");
+async function flush() { await act(async () => { await Promise.resolve(); await Promise.resolve(); }); }
 
-    act(() => root.unmount());
-    const simulatedRun = runFixture(submitted!);
-    vi.spyOn(api, "createCard").mockResolvedValue({ card: cardFixture() });
-    root = createRoot(container);
-    act(() => root.render(<StyleLab workspace={{ ...loadedWorkspace, recipes: [submitted!] }} models={[simulationModel, liveModel]} runs={[simulatedRun]} activeRun={simulatedRun} pexelsAvailable openrouterAvailable onWorkspace={() => undefined} onRefresh={async () => undefined} onNavigate={navigate} onMessage={() => undefined} />));
-    await act(async () => clickButton("Frame this portrait"));
-    expect(navigate).toHaveBeenCalledWith("#card/card_1");
-
-    act(() => root.unmount());
-    let currentCard = cardFixture();
-    vi.spyOn(api, "updateCard").mockImplementation(async (_id, patch: unknown) => { const value = patch as Partial<Card>; currentCard = { ...currentCard, ...value, treatment_version: value.treatment === "estate-pixel-v1" ? "estate-pixel-v1" : currentCard.treatment_version, updated_at: `${currentCard.updated_at}-updated` }; return { card: currentCard }; });
-    vi.spyOn(api, "decideCard").mockImplementation(async (_id, decision) => { currentCard = { ...currentCard, decision: decision as Card["decision"] }; return { card: currentCard }; });
-    root = createRoot(container);
-    act(() => root.render(<CardWorkbench card={currentCard} workspace={loadedWorkspace} onNavigate={navigate} onMessage={() => undefined} onRefresh={async () => undefined} />));
-    await act(async () => clickButton("Estate Pixel"));
-    await act(async () => clickButton("Keep card"));
-    expect(currentCard.treatment).toBe("estate-pixel-v1");
-    expect(currentCard.decision).toBe("keep");
-
-    act(() => root.unmount());
-    root = createRoot(container);
-    act(() => root.render(<CardGallery cards={[currentCard]} newestCompletedRunId="run_1" onNavigate={navigate} onRefresh={async () => undefined} />));
-    act(() => (container.querySelector(".draft-card") as HTMLElement).click());
-    expect(navigate).toHaveBeenCalledWith("#card/card_1");
+describe("guided four-stage graphics workflow", () => {
+  it("keeps the new stage hashes refreshable and redirects legacy hashes", () => {
+    window.location.hash = "#frames/card_7";
+    expect(readRoute()).toEqual({ view: "frames", id: "card_7" });
+    window.location.hash = "#completed";
+    expect(readRoute()).toEqual({ view: "completed" });
+    window.location.hash = "#lab";
+    expect(readRoute()).toEqual({ view: "styles" });
+    expect(window.location.hash).toBe("#styles");
+    window.location.hash = "#run/run_9";
+    expect(readRoute()).toEqual({ view: "styles", runId: "run_9" });
+    expect(window.location.hash).toBe("#styles");
+    window.location.hash = "#cards";
+    expect(readRoute()).toEqual({ view: "frames" });
+    expect(window.location.hash).toBe("#frames");
   });
 
-  it("links an empty gallery directly to the newest completed run", () => {
+  it("shows an accessible Sources empty state, loads the library, and continues freely", async () => {
+    vi.spyOn(api, "loadStarterSources").mockResolvedValue({ workspace, imported: 2, deduplicated: 0, failed: 0, results: [{ status: "imported" }, { status: "imported" }] });
     const navigate = vi.fn();
-    mount(<CardGallery cards={[]} newestCompletedRunId="run_newest" onNavigate={navigate} onRefresh={async () => undefined} />);
-    clickButton("Open newest completed run");
-    expect(navigate).toHaveBeenCalledWith("#run/run_newest");
+    function Harness() { const [value, setValue] = React.useState(emptyWorkspace); return <SourcesStage workspace={value} pexelsAvailable onWorkspace={setValue} onNavigate={navigate} onMessage={() => undefined} />; }
+    mount(<Harness />);
+    expect(container.textContent).toContain("No source images yet");
+    clickButton("Continue to Styles");
+    expect(navigate).toHaveBeenCalledWith("#styles");
+    await act(async () => clickButton("Load six starter images"));
+    expect(container.textContent).toContain("2 selected source images");
+    expect(container.textContent).not.toContain("Benchmark portraits");
+  });
+
+  it("edits a plain-language style and generates four quick variants without a modal", async () => {
+    let submitted: { draft?: Recipe; ids?: string[]; outputs?: number } = {};
+    vi.spyOn(api, "startRun").mockImplementation(async (draft, ids, outputs) => { submitted = { draft, ids, outputs }; return { run: runFixture(draft, ids, outputs), workspace: { ...workspace, recipes: [draft] } }; });
+    vi.spyOn(api, "createCard").mockResolvedValue({ card: cardFixture() });
+    const navigate = vi.fn();
+    mount(<StylesStage workspace={workspace} models={[liveModel]} runs={[]} openrouterAvailable onWorkspace={() => undefined} onRun={() => undefined} onRefresh={async () => undefined} onNavigate={navigate} onMessage={() => undefined} />);
+    const note = container.querySelector(".change-field textarea") as HTMLTextAreaElement;
+    setText(note, "Warmer light and looser edges");
+    await act(async () => clickButton("Generate 4 variants"));
+    expect(submitted.draft?.change_note).toBe("Warmer light and looser edges");
+    expect(submitted.ids).toEqual([sourceOne.id]);
+    expect(submitted.outputs).toBe(4);
+    expect(container.querySelector('[role="dialog"]')).toBeNull();
+    expect(container.querySelectorAll(".result-card")).toHaveLength(4);
+    await act(async () => clickButton("Send to Frames"));
+    expect(navigate).toHaveBeenCalledWith("#frames/card_1");
+  });
+
+  it("tests consistency once per project source", async () => {
+    const start = vi.spyOn(api, "startRun").mockImplementation(async (draft, ids, outputs) => ({ run: runFixture(draft, ids, outputs), workspace }));
+    mount(<StylesStage workspace={workspace} models={[liveModel]} runs={[]} openrouterAvailable onWorkspace={() => undefined} onRun={() => undefined} onRefresh={async () => undefined} onNavigate={() => undefined} onMessage={() => undefined} />);
+    await act(async () => clickButton("Test across all sources"));
+    expect(start).toHaveBeenCalledWith(expect.anything(), [sourceOne.id, sourceTwo.id], 1, "live");
+  });
+
+  it("shows exact composition and treatment choices, then keeps the selected render", async () => {
+    let current = cardFixture();
+    vi.spyOn(api, "getCardPreviews").mockResolvedValue({ previews });
+    vi.spyOn(api, "getRun").mockResolvedValue({ run: runFixture() });
+    vi.spyOn(api, "updateCard").mockImplementation(async (_id, patch: unknown) => { const option = previews.find((item) => item.option_id === (patch as { preview_id: string }).preview_id)!; current = { ...current, archetype: option.preset, framing: option.framing, treatment: option.treatment, updated_at: `${current.updated_at}-selected` }; return { card: current }; });
+    vi.spyOn(api, "decideCard").mockImplementation(async (_id, decision) => ({ card: { ...current, decision: decision as Card["decision"] } }));
+    const navigate = vi.fn();
+    mount(<FramesStage cards={[current]} initialCard={current} onNavigate={navigate} onMessage={() => undefined} onRefresh={async () => undefined} />);
+    await flush();
+    expect(container.querySelectorAll(".composition-grid button")).toHaveLength(3);
+    clickButton("Tall"); await flush();
+    expect(current.archetype).toBe("tall");
+    clickButton("Estate Pixel"); await flush();
+    expect(current.treatment).toBe("estate-pixel-v1");
+    await act(async () => clickButton("Keep as completed"));
+    expect(api.decideCard).toHaveBeenCalledWith("card_1", "keep");
+    expect(navigate).toHaveBeenCalledWith("#completed");
+  });
+
+  it("discards and advances, while Completed shows only kept cards with download and reconsider", async () => {
+    const first = cardFixture("working", "bust", "painterly", "card_1");
+    const second = cardFixture("working", "bust", "painterly", "card_2");
+    const kept = cardFixture("keep", "tall", "estate-pixel-v1", "card_kept");
+    vi.spyOn(api, "getCardPreviews").mockResolvedValue({ previews });
+    vi.spyOn(api, "getRun").mockResolvedValue({ run: runFixture() });
+    vi.spyOn(api, "decideCard").mockImplementation(async (id, decision) => ({ card: { ...(id === kept.card_id ? kept : first), decision: decision as Card["decision"] } }));
+    const navigate = vi.fn();
+    mount(<FramesStage cards={[first, second, kept]} initialCard={first} onNavigate={navigate} onMessage={() => undefined} onRefresh={async () => undefined} />);
+    await flush();
+    await act(async () => clickButton("Not this one"));
+    expect(navigate).toHaveBeenCalledWith("#frames/card_2");
+
+    act(() => root.unmount()); root = createRoot(container);
+    act(() => root.render(<CompletedStage cards={[first, kept]} onNavigate={navigate} onMessage={() => undefined} onRefresh={async () => undefined} />));
+    expect(container.querySelectorAll(".completed-card")).toHaveLength(1);
+    expect(container.querySelector<HTMLAnchorElement>('a[download]')?.textContent).toContain("Download PNG");
+    await act(async () => clickButton("Reconsider in Frames"));
+    expect(api.decideCard).toHaveBeenCalledWith("card_kept", "working");
+    expect(navigate).toHaveBeenCalledWith("#frames/card_kept");
   });
 });

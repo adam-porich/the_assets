@@ -1,55 +1,70 @@
 # Portrait Workbench
 
-The supported path is deliberately short:
+The supported browser path is always visible:
 
 ```text
-Sources → Style pack → Art direction → Generate → Frame this portrait → Keep
+1 Sources → 2 Styles → 3 Frames → 4 Completed
 ```
 
-Live generation and local simulation are distinct execution modes. A simulation is a deterministic, lightly painterly image-processing fixture used to exercise the workflow; it must not be judged or described as generated artwork.
+The Back/Continue actions suggest a path, but hashes are refreshable and no stage is locked. Empty stages explain what is missing. Old `#lab`, `#run/<id>`, and `#cards` links redirect to their closest current stage; old `#card/<id>` links reopen the equivalent `#frames/<id>` view.
 
-## Fast setup
+## Sources
 
-New workspaces start with:
+New workspaces begin with no source images, two bundled `estate-card-v1` style references, and a low-quality live `openai/gpt-image-1-mini` recipe.
 
-- a live `openai/gpt-image-1-mini` recipe at low quality;
-- the two checked-in `estate-card-v1` style references, copied into the workspace with bundled provenance;
-- no source portraits.
+With `PEXELS_API_KEY` configured, **Load six starter images** downloads and selects Pexels photos `11013487`, `14468344`, `23024613`, `9009504`, `14650121`, and `35918726`. Loading and importing are idempotent by photo ID and checksum. Search supports presets, paging, multi-selection, bulk import, and per-photo errors. Local uploads remain available without Pexels.
 
-With `PEXELS_API_KEY` configured, **Load starter benchmark** downloads and selects Pexels photos `11013487`, `14468344`, `23024613`, `9009504`, `14650121`, and `35918726`. The operation is idempotent. Search also supports presets, paging, multi-selection, bulk import, automatic benchmark inclusion, and per-photo errors when only part of a selection downloads.
+`benchmark_source_ids` remains the stored ordered project selection for compatibility, but the browser presents it only as selected source images. Pexels and local-upload provenance stays attached to each source record.
 
-Style references can be selected, reordered, renamed, replaced, and uploaded. The identity source counts alongside them for model reference limits.
+## Styles and generation
 
-## Trustworthy execution
+The main controls are selected source thumbnails, ordered visual references, **What should change?**, variant count, **Generate**, and **Test across all sources**.
 
-The server reads OpenRouter's image-model catalogue and resolves each image-to-image model to one definitive provider endpoint. Model metadata retains the endpoint's exact typed `supported_parameters`, reference limit, provider tag, streaming support, and pricing lines. The generation request pins that provider and sends only fields present in its descriptor. See [OpenRouter image generation and model discovery](https://openrouter.ai/docs/guides/overview/multimodal/image-generation).
+- Quick exploration starts with the first selected project source and four variants.
+- Variant count accepts 1–4.
+- A user can choose a few project sources for a generation batch.
+- The all-sources test always creates one output per selected project source.
+- `change_note` defaults to an empty string for existing recipes, is added to the resolved instruction as `Requested change: …`, and is preserved in the immutable recipe snapshot.
 
-A saved model that disappears from the catalogue stays visible as unavailable. The browser never replaces it with the first returned model. Live execution also requires `OPENROUTER_API_KEY`; an environment setting cannot silently turn it into simulation.
+Model, quality, live/simulation mode, structured direction, negative direction, resolved instruction, recipe duplication, provider capabilities, and pricing metadata are under **Advanced**.
 
-**Save and run** submits the complete visible recipe draft with explicit source IDs, output count, and execution mode. The server normalizes and persists that draft, then snapshots the same value into the run. Every run records:
+Starting a run submits the complete visible recipe plus explicit source IDs, output count, and execution mode. There is no `confirm_paid` field, paid confirmation dialog, or completed-smoke prerequisite. Live execution still requires `OPENROUTER_API_KEY`, the selected model must be available for the chosen execution mode, identity plus style references must fit its exact endpoint limit, and only one run may be active.
 
-- live or simulation provenance;
-- recipe, instruction, sources, references, and input checksums;
-- exact endpoint capabilities and adapter mappings;
-- requested 28:23 and effective provider aspect ratios;
-- per-call usage and cost plus aggregated run usage and cost.
+Every immutable run records:
 
-Before a multi-source paid benchmark is allowed for a model, one live source must complete successfully with that model. Every live launch has a confirmation showing mode, model, source count, style-reference count, image calls, and available pricing metadata. Exact response cost remains the accounting source of truth.
+- recipe, change note, resolved instruction, sources, references, and input checksums;
+- live or simulation execution and exact model/provider capability mappings;
+- requested and effective aspect ratios;
+- per-call status, seed, timing, usage, and returned cost;
+- aggregate usage and returned cost.
 
-## Run review and framing
+Progress and source-grouped results appear on Styles. Each batch shows its source, style note, reference thumbnails, and cost details. A completed result exposes **Send to Frames**. History and source-for-source comparison remain secondary tools and verdicts do not gate progress.
 
-Every completed result tile exposes **Frame this portrait**. The details drawer repeats that action and retains run provenance. Selecting it creates a card draft directly from the immutable full painterly run output; there are no masters, promotion stages, or approval gates.
+## Frames
 
-The workbench stores cover framing as zoom plus normalized x/y offsets. Both browser and Pillow use the shared 336 × 276 art window contract and clamp the image so the window cannot expose empty pixels. Bust, Tall, and Torso are editable starting frames.
+Sending a run item creates a working card draft. Re-sending an item that already has a working or kept card returns that existing card instead of creating a duplicate. A previously discarded item may start a fresh draft.
 
-Card drafts offer two treatments:
+`POST /api/cards/{id}/previews` returns six `CardPreviewOption` records: Bust, Tall, and Torso crossed with Painterly and Estate Pixel. Each record contains the preset, treatment, derived framing, render URL, art URL, dimensions, and render metadata.
 
-- `painterly`: the framed generation source;
-- `estate-pixel-v1`: crop the 336 × 276 art window, downsample to 112 × 92, quantize deterministically to at most 32 adaptive colours without dithering, then upscale 3× with nearest-neighbour sampling.
+Preview files are cached below ignored `portrait-library/cards/previews/<card-id>/`. The cache key includes:
 
-The server writes a treated art-window file and the browser displays that exact Pillow artifact after each debounced framing save. While dragging, the browser temporarily displays the immutable source transform. Keep and reopen preserve framing, treatment version, source-run provenance, render checksums, and output paths.
+- the current source-output checksum;
+- template ID and version;
+- the exact frame preset definitions;
+- treatment versions;
+- preview schema and card label.
 
-## Workspace
+Stale files are removed when the key changes. Selecting a preview copies that exact cached card and art render into the draft's saved output paths, then persists its preset, derived numeric framing, treatment, treatment version, metadata, and preview ID. This makes the chosen preview and saved render byte-identical.
+
+The browser asks only two visual questions: crop, then finish. Numeric framing and provenance remain read-only under details. **Keep as completed** sets `decision: keep`; **Not this one** sets `decision: discard` and advances to the next working candidate.
+
+Estate Pixel uses the established deterministic pipeline: crop the 336 × 276 art window, downsample to 112 × 92, quantize to at most 32 adaptive colours without dithering, and upscale 3× with nearest-neighbour sampling.
+
+## Completed
+
+Completed filters strictly to `decision: keep`. Working and discarded drafts never appear. Each entry shows the full render, stored source/style summary, a direct PNG download, and **Reconsider in Frames**. Reconsidering first changes the decision to `working`, then opens `#frames/<card-id>`.
+
+## Workspace and compatibility
 
 ```text
 portrait-library/
@@ -58,12 +73,15 @@ portrait-library/
   references/
   runs/<run-id>/
   cards/
+    previews/<card-id>/
 ```
 
-Writes use a temporary sibling followed by `Path.replace`, with process-local locking around metadata mutation. Asset requests reject absolute paths and traversal.
+Existing workspace, run, and card files remain readable. `benchmark_source_ids`, run verdicts, and persisted numeric framing remain in storage. Missing `change_note`, treatment, framing, and decision values receive compatible payload defaults. Writes use a temporary sibling followed by `Path.replace`, with process-local locking around metadata mutation. Asset requests reject absolute paths and traversal.
 
-This experimental workspace has no backwards migration. To reset it, stop the API service, delete only the repository's `portrait-library/`, restart the service, and load the starter benchmark in the browser. Never automate a paid smoke test; confirm and run that manually in the UI.
+To reset the experimental workspace, stop the API service, delete only the repository's `portrait-library/`, and restart the service. The directory is ignored by Git.
 
-## Pexels
+## External services
+
+OpenRouter model discovery resolves each image-to-image model to a definitive provider endpoint and retains its exact typed parameters, reference limit, provider tag, streaming support, and pricing lines. Generation pins that provider and sends only supported fields. Exact response usage and cost remain the accounting source of truth.
 
 Pexels records retain photo, photographer, source-page, query, and license-page provenance. Review the [Pexels license](https://www.pexels.com/license/) before using an image beyond this experiment.

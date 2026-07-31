@@ -57,18 +57,6 @@ class RunManager:
         except OSError:
             shutil.copy2(source, destination)
 
-    def has_completed_live_smoke(self, model: str) -> bool:
-        for path in (self.store.root / "runs").glob("*/run.json"):
-            run = self.store.read_json(path, {})
-            if (
-                run.get("status") == "complete"
-                and run.get("execution_mode") == "live"
-                and run.get("model") == model
-                and len(run.get("benchmark_source_ids") or []) == 1
-            ):
-                return True
-        return False
-
     def create(
         self,
         recipe_draft: dict[str, Any],
@@ -76,10 +64,9 @@ class RunManager:
         outputs_per_source: int,
         execution_mode: str,
         models: list[dict[str, Any]],
-        confirm_paid: bool = False,
     ) -> dict[str, Any]:
-        if outputs_per_source not in {1, 2}:
-            raise ValueError("outputs_per_source must be 1 or 2")
+        if outputs_per_source not in {1, 2, 3, 4}:
+            raise ValueError("outputs_per_source must be between 1 and 4")
         if execution_mode not in {"live", "simulation"}:
             raise ValueError("execution_mode must be live or simulation")
         if not isinstance(recipe_draft, dict) or not recipe_draft.get("id"):
@@ -122,11 +109,6 @@ class RunManager:
             if missing_references:
                 raise ValueError("recipe contains a missing style reference")
             mapping = validate_request(normalized_recipe, len(reference_ids), capabilities)
-            if execution_mode == "live" and not confirm_paid:
-                raise ValueError("live generation needs explicit paid-run confirmation")
-            if execution_mode == "live" and len(source_ids) > 1 and not self.has_completed_live_smoke(normalized_recipe["model"]):
-                raise ValueError("complete a one-source live smoke test with this model before starting a paid benchmark")
-
             def persist(data: dict[str, Any]) -> None:
                 data["recipes"] = [normalized_recipe if item.get("id") == normalized_recipe["id"] else item for item in data["recipes"]]
                 data["active_recipe_id"] = normalized_recipe["id"]
@@ -299,7 +281,7 @@ class RunManager:
             }
             for source_id in source_ids
         ]
-        fields = ("medium_brushwork", "lighting", "background", "composition", "colour", "detail", "identity", "avoid", "model", "quality", "execution_mode")
+        fields = ("change_note", "medium_brushwork", "lighting", "background", "composition", "colour", "detail", "identity", "avoid", "model", "quality", "execution_mode")
         first_recipe, second_recipe = first.get("recipe_snapshot", {}), second.get("recipe_snapshot", {})
         changes = []
         for field in fields:

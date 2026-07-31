@@ -4,6 +4,7 @@ import type { Model, Recipe } from "./types";
 
 const recipe = {
   id: "recipe_1", name: "Draft", model: "saved/stale", execution_mode: "live", quality: "low",
+  change_note: "Warmer light",
   direction: { medium_brushwork: "paint", lighting: "", background: "", composition: "", colour: "", detail: "", identity: "" },
   avoid: "type", aspect_policy: "card-window", reference_ids: ["one", "two"], references: [], created_at: "now", updated_at: "now",
 } satisfies Recipe;
@@ -22,10 +23,12 @@ describe("atomic run drafts", () => {
   it("submits visible edits as the recipe snapshot payload", () => {
     const draft = { ...recipe, name: "Visible unsaved name" };
     expect(recipeIsDirty(recipe, draft)).toBe(true);
-    const payload = makeRunPayload(draft, ["source_1"], 2, true);
+    const payload = makeRunPayload(draft, ["source_1"], 4);
     expect(payload.recipe.name).toBe("Visible unsaved name");
     expect(payload.recipe.model).toBe("saved/stale");
     expect(payload.source_ids).toEqual(["source_1"]);
     expect(payload.execution_mode).toBe("live");
+    expect(payload.outputs_per_source).toBe(4);
+    expect(payload).not.toHaveProperty("confirm_paid");
   });
 });

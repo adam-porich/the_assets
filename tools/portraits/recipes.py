@@ -18,6 +18,7 @@ STARTER_RECIPE: dict[str, Any] = {
     "model": "openai/gpt-image-1-mini",
     "execution_mode": "live",
     "quality": "low",
+    "change_note": "",
     "direction": {
         "medium_brushwork": "Opaque gouache and oil-brush modelling with visible, confident strokes and softened edges.",
         "lighting": "Quiet single-source light from upper left, with warm skin planes and cool reflected shadow.",
@@ -35,7 +36,10 @@ STARTER_RECIPE: dict[str, Any] = {
 
 def resolve_recipe_instruction(recipe: dict[str, Any]) -> str:
     direction = recipe.get("direction") or {}
-    lines = [f"{label.replace('_', ' ').title()}: {direction.get(label, '').strip()}" for label in RECIPE_FIELDS if direction.get(label)]
+    lines = []
+    if str(recipe.get("change_note") or "").strip():
+        lines.append(f"Requested change: {str(recipe['change_note']).strip()}")
+    lines.extend(f"{label.replace('_', ' ').title()}: {direction.get(label, '').strip()}" for label in RECIPE_FIELDS if direction.get(label))
     if recipe.get("avoid"):
         lines.append(f"Avoid: {str(recipe['avoid']).strip()}")
     return "\n".join(lines)
@@ -58,6 +62,7 @@ def recipe_from_payload(payload: dict[str, Any], recipe_id: str, now: str) -> di
         "model": str(payload["model"]).strip(),
         "execution_mode": execution_mode,
         "quality": payload["quality"],
+        "change_note": str(payload.get("change_note") or "").strip(),
         "direction": direction,
         "avoid": str(payload.get("avoid") or "").strip(),
         "aspect_policy": "card-window",

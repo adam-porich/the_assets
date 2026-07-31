@@ -16,6 +16,7 @@ from tools.cards.pipeline import (
     PIXEL_LOGICAL_SIZE,
     apply_estate_pixel_treatment,
     calculate_cover_transform,
+    card_previews,
     card_detail,
     create_card_draft,
     update_card_draft,
@@ -33,7 +34,7 @@ from tools.portraits.generation import (
 from tools.portraits.recipes import resolve_recipe_instruction
 from tools.portraits.runs import RunManager
 from tools.portraits.server import _ensure_starter_recipe, bulk_import_sources
-from tools.portraits.workspace import WorkspaceError, WorkspaceStore
+from tools.portraits.workspace import WorkspaceError, WorkspaceStore, checksum
 
 
 def fixture_image(path: Path, size: tuple[int, int] = (160, 220), colour: str = "#996b55") -> None:
@@ -183,34 +184,49 @@ def test_execution_mode_never_uses_environment_to_substitute_simulation(monkeypa
 def test_atomic_run_persists_visible_draft_snapshot_and_explicit_sources(tmp_path: Path) -> None:
     store, source = ready_store(tmp_path)
     manager = RunManager(store)
-    draft = simulation_draft(store, name="Visible unsaved name")
+    draft = simulation_draft(store, name="Visible unsaved name", change_note="Warmer light and looser edges")
     draft["direction"] = {**draft["direction"], "lighting": "Visible new light"}
     completed = wait_for(manager, create_simulation(manager, store, [source["id"]], draft)["run_id"])
     assert completed["status"] == "complete"
     assert completed["execution_mode"] == "simulation"
     assert completed["recipe_snapshot"]["name"] == "Visible unsaved name"
     assert completed["recipe_snapshot"]["direction"]["lighting"] == "Visible new light"
+    assert completed["recipe_snapshot"]["change_note"] == "Warmer light and looser edges"
+    assert completed["resolved_instruction"].startswith("Requested change: Warmer light and looser edges")
     assert store.read()["recipes"][0]["name"] == "Visible unsaved name"
     assert completed["benchmark_source_ids"] == [source["id"]]
     assert completed["items"][0]["backend"] == "simulation"
     assert completed["cost_usd"] == 0
 
 
-def test_live_full_benchmark_requires_paid_confirmation_and_completed_smoke(tmp_path: Path) -> None:
+def test_live_generation_has_no_confirmation_or_smoke_prerequisite(tmp_path: Path) -> None:
     store, source = ready_store(tmp_path)
     second_path = tmp_path / "second.png"
     fixture_image(second_path, colour="blue")
     second = store.add_image_record("source", "Second", second_path.name, second_path.read_bytes(), "image/png")
-    manager = RunManager(store)
+    manager = RunManager(store, lambda _mode, capabilities: CostAdapter(capabilities))
     live_model = normalize_live_model(
         {"id": "vendor/live", "name": "Live"},
         {"provider_slug": "vendor", "provider_tag": "vendor", "supported_parameters": {"input_references": {"type": "range", "max": 9}, "quality": {"type": "enum", "values": ["low"]}}, "pricing": []},
     )
     draft = {**store.read()["recipes"][0], "model": "vendor/live", "execution_mode": "live"}
-    with pytest.raises(ValueError, match="paid-run confirmation"):
-        manager.create(draft, [source["id"]], 1, "live", [live_model], False)
-    with pytest.raises(ValueError, match="one-source live smoke"):
-        manager.create(draft, [source["id"], second["id"]], 1, "live", [live_model], True)
+    completed = wait_for(manager, manager.create(draft, [source["id"], second["id"]], 1, "live", [live_model])["run_id"])
+    assert completed["status"] == "complete"
+    assert completed["benchmark_source_ids"] == [source["id"], second["id"]]
+
+
+def test_outputs_per_source_accepts_one_through_four(tmp_path: Path) -> None:
+    store, source = ready_store(tmp_path)
+    for count in range(1, 5):
+        manager = RunManager(store)
+        run = wait_for(manager, manager.create(simulation_draft(store), [source["id"]], count, "simulation", [simulation_model()])["run_id"])
+        assert run["status"] == "complete"
+        assert len(run["items"]) == count
+    manager = RunManager(store)
+    with pytest.raises(ValueError, match="between 1 and 4"):
+        manager.create(simulation_draft(store), [source["id"]], 0, "simulation", [simulation_model()])
+    with pytest.raises(ValueError, match="between 1 and 4"):
+        manager.create(simulation_draft(store), [source["id"]], 5, "simulation", [simulation_model()])
 
 
 class CostAdapter:
@@ -280,24 +296,64 @@ def test_estate_pixel_treatment_is_deterministic_palette_limited_and_nearest_ups
             assert len(block) == 1
 
 
-def test_full_simulation_to_frame_pixel_keep_and_reopen(tmp_path: Path) -> None:
+def test_six_frame_previews_are_deterministic_invalidate_and_become_final_render(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     store, source = ready_store(tmp_path)
     manager = RunManager(store)
     run = wait_for(manager, create_simulation(manager, store, [source["id"]])["run_id"])
-    card = create_card_draft(store, run["run_id"], run["items"][0]["item_id"], preset="tall")
-    updated = update_card_draft(store, card["card_id"], {"framing": {"zoom": 1.4, "offset_x": 0.2, "offset_y": -0.1}, "treatment": "estate-pixel-v1", "decision": "keep"})
+    card = create_card_draft(store, run["run_id"], run["items"][0]["item_id"])
+    previews = card_previews(store, card["card_id"])
+    assert len(previews) == 6
+    assert {(item["preset"], item["treatment"]) for item in previews} == {
+        (preset, treatment) for preset in ("bust", "tall", "torso") for treatment in ("painterly", "estate-pixel-v1")
+    }
+    assert card_previews(store, card["card_id"]) == previews
+    chosen = next(item for item in previews if item["preset"] == "tall" and item["treatment"] == "estate-pixel-v1")
+    updated = update_card_draft(store, card["card_id"], {"preview_id": chosen["option_id"], "decision": "keep"})
     reopened = card_detail(store, card["card_id"])
     assert reopened["decision"] == "keep"
-    assert reopened["framing"] == updated["framing"]
+    assert reopened["archetype"] == "tall"
+    assert reopened["framing"] == chosen["framing"] == updated["framing"]
     assert reopened["treatment"] == "estate-pixel-v1"
     assert reopened["treatment_version"] == "estate-pixel-v1"
     assert reopened["source_run_provenance"]["run_id"] == run["run_id"]
     assert reopened["render_metadata"]["palette_colours"] <= 32
     assert store.absolute_path(reopened["render_path"]).is_file()
     assert store.absolute_path(reopened["art_render_path"]).is_file()
+    assert checksum(store.absolute_path(reopened["render_path"])) == checksum(store.absolute_path(chosen["render_path"]))
+    assert checksum(store.absolute_path(reopened["art_render_path"])) == checksum(store.absolute_path(chosen["art_render_path"]))
+
+    old_paths = [store.absolute_path(item["render_path"]) for item in previews]
+    output_path = store.absolute_path(reopened["source_output_path"])
+    fixture_image(output_path, (320, 256), "#123456")
+    changed_source = card_previews(store, card["card_id"])
+    assert changed_source[0]["option_id"] != previews[0]["option_id"]
+    assert not any(path.exists() for path in old_paths)
+
+    import tools.cards.pipeline as pipeline
+    original_load_template = pipeline.load_template
+    monkeypatch.setattr(pipeline, "load_template", lambda template_id="estate-card-v1": {**original_load_template(template_id), "version": 2})
+    changed_template = card_previews(store, card["card_id"])
+    assert changed_template[0]["option_id"] != changed_source[0]["option_id"]
+    monkeypatch.setitem(pipeline.TREATMENT_VERSIONS, "painterly", "painterly-source-v2")
+    changed_treatment = card_previews(store, card["card_id"])
+    assert changed_treatment[0]["option_id"] != changed_template[0]["option_id"]
 
 
-def test_recipe_instruction_keeps_avoid_as_explicit_direction() -> None:
-    instruction = resolve_recipe_instruction({"direction": {"lighting": "quiet"}, "avoid": "No type"})
-    assert instruction.startswith("Lighting:")
+def test_sending_same_run_item_deduplicates_working_and_kept_cards(tmp_path: Path) -> None:
+    store, source = ready_store(tmp_path)
+    manager = RunManager(store)
+    run = wait_for(manager, create_simulation(manager, store, [source["id"]])["run_id"])
+    item_id = run["items"][0]["item_id"]
+    first = create_card_draft(store, run["run_id"], item_id)
+    assert create_card_draft(store, run["run_id"], item_id)["card_id"] == first["card_id"]
+    update_card_draft(store, first["card_id"], {"decision": "keep"})
+    assert create_card_draft(store, run["run_id"], item_id)["card_id"] == first["card_id"]
+    update_card_draft(store, first["card_id"], {"decision": "discard"})
+    assert create_card_draft(store, run["run_id"], item_id)["card_id"] != first["card_id"]
+
+
+def test_recipe_instruction_keeps_change_note_and_avoid_as_explicit_direction() -> None:
+    instruction = resolve_recipe_instruction({"change_note": "Warmer light", "direction": {"lighting": "quiet"}, "avoid": "No type"})
+    assert instruction.startswith("Requested change: Warmer light")
+    assert "Lighting: quiet" in instruction
     assert "Avoid: No type" in instruction
