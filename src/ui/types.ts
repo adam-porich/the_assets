@@ -62,6 +62,8 @@ export type Workspace = {
   references: Reference[];
   recipes: Recipe[];
   active_recipe_id: string | null;
+  candidate_selection?: CandidateSelection | null;
+  active_set_id?: string | null;
   links: { runs: string; cards: string };
 };
 
@@ -97,6 +99,11 @@ export type RunSummary = {
   execution_mode: "live" | "simulation";
   model: string;
   cost_usd: number;
+  purpose?: "exploration" | "finish" | "set-production";
+  purpose_label?: string;
+  is_baseline?: boolean;
+  selection_id?: string;
+  selection_revision?: number;
 };
 
 export type RunItem = {
@@ -142,6 +149,106 @@ export type Run = RunSummary & {
   usage: Record<string, number>;
   cost_usd: number;
   model_metadata: Model;
+  purpose?: "exploration" | "finish" | "set-production";
+  selection_revision?: number;
+  candidate_inputs?: CandidateSelectionItem[];
+  reference_stack?: Array<Record<string, unknown>>;
+};
+
+export type CandidateSelectionItem = {
+  order: number;
+  run_id: string;
+  item_id: string;
+  run_item_id?: string;
+  source_id: string;
+  source_label: string;
+  output_path: string;
+  output_url?: string | null;
+  output_checksum_sha256: string;
+  output_dimensions?: [number, number];
+  source_path?: string;
+  source_url?: string | null;
+  recipe_id?: string;
+  recipe_name?: string;
+  recipe_snapshot?: Recipe;
+  references_snapshot?: Reference[];
+};
+
+export type CandidateSelection = {
+  selection_id: string;
+  revision: number;
+  created_at: string;
+  updated_at: string;
+  source_ids: string[];
+  selected_items: CandidateSelectionItem[];
+  items?: CandidateSelectionItem[];
+};
+
+export type FinishSummary = {
+  finish_id: string;
+  version: number;
+  state: "locked" | string;
+  trial_run_id: string;
+  selection_id: string;
+  selection_revision: number;
+  candidate_count: number;
+  reference_count?: number;
+  model?: string;
+  recipe_name?: string;
+  change_note?: string;
+  cost_usd: number;
+  locked_at?: string;
+};
+
+export type Finish = FinishSummary & {
+  candidate_inputs: CandidateSelectionItem[];
+  approved_output_items: Array<CandidateSelectionItem & { trial_item_id: string }>;
+  recipe_snapshot: Recipe;
+  references_snapshot: Reference[];
+  resolved_instruction: string;
+  model_metadata: Model;
+  usage: Record<string, number>;
+  backend_mapping: Record<string, unknown>;
+};
+
+export type SetItem = {
+  set_item_id: string;
+  order: number;
+  source_id: string;
+  source_label: string;
+  status: "queued" | "complete" | "failed" | "interrupted" | string;
+  anchor: boolean;
+  finish_id: string;
+  source_snapshot_path: string;
+  source_url?: string | null;
+  art_source_path?: string | null;
+  art_url?: string | null;
+  output_url?: string | null;
+  art_checksum_sha256?: string | null;
+  production_run_id?: string | null;
+  production_item_id?: string | null;
+  error?: string | null;
+  reference_stack?: Array<Record<string, unknown>>;
+};
+
+export type SetSummary = {
+  set_id: string;
+  name: string;
+  finish_id: string;
+  state: "building" | "ready-with-errors" | "ready" | string;
+  source_count: number;
+  complete_count: number;
+  failed_count: number;
+  production_runs: string[];
+  cost_usd: number;
+  active?: boolean;
+};
+
+export type PortraitSet = SetSummary & {
+  items: SetItem[];
+  source_ids: string[];
+  recipe_snapshot: Recipe;
+  references_snapshot: Reference[];
 };
 
 export type Card = {
@@ -169,6 +276,10 @@ export type Card = {
   selected_preview_id?: string;
   created_at: string;
   updated_at: string;
+  set_id?: string | null;
+  set_item_id?: string | null;
+  finish_id?: string | null;
+  legacy?: boolean;
 };
 
 export type CardPreviewOption = {
@@ -194,4 +305,9 @@ export type Bootstrap = {
   models: Model[];
   integrations: { pexels: { configured: boolean }; openrouter: { configured: boolean } };
   starter: { photo_ids: number[] };
+  candidate_selection?: CandidateSelection | null;
+  finishes?: FinishSummary[];
+  sets?: SetSummary[];
+  active_set_id?: string | null;
+  baseline_exploration_run_id?: string | null;
 };

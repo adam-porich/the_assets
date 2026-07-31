@@ -22,41 +22,41 @@ or rewriting the run.
 
 ## Checklist
 
-- [ ] Add a candidate-selection mutation that validates run purpose, item
+- [x] Add a candidate-selection mutation that validates run purpose, item
   completion, output existence/checksum, unique source IDs, and the 1–3 count.
-- [ ] Persist a stable selection ID/revision and return the refreshed selection
+- [x] Persist a stable selection ID/revision and return the refreshed selection
   through bootstrap and a focused API response.
-- [ ] Add selection actions to exploration result cards with clear selected
+- [x] Add selection actions to exploration result cards with clear selected
   order, source identity, run context, and a visible `1–3 selected` counter.
-- [ ] Prevent selection of a second output for the same source and explain the
+- [x] Prevent selection of a second output for the same source and explain the
   conflict beside the attempted item.
-- [ ] Add a compact persistent selection tray to Explore. Support remove and
+- [x] Add a compact persistent selection tray to Explore. Support remove and
   reorder without navigating away from the current run.
-- [ ] Make **Continue to Finish** the only primary downstream action for
+- [x] Make **Continue to Finish** the only primary downstream action for
   exploration results. Disable it until at least one valid candidate is saved.
-- [ ] Remove **Send to Frames** from the normal exploration result surface.
+- [x] Remove **Send to Frames** from the normal exploration result surface.
   Keep the underlying legacy card endpoint temporarily for compatibility until
   Plan 06.
-- [ ] Make run history distinguish exploration runs from later run purposes and
+- [x] Make run history distinguish exploration runs from later run purposes and
   exclude non-exploration runs from candidate selection.
-- [ ] On the existing local workspace, surface `run_59c947b99f90` as the
+- [x] On the existing local workspace, surface `run_59c947b99f90` as the
   baseline/current exploration batch without preselecting subjective winners.
   Fall back to the newest complete exploration run when that ID is absent.
-- [ ] Add backend tests for mixed-run selection, duplicate-source rejection,
+- [x] Add backend tests for mixed-run selection, duplicate-source rejection,
   incomplete/missing items, count limits, ordering, and immutable revision
   provenance.
-- [ ] Add UI tests for selecting, replacing, reordering, validation feedback,
+- [x] Add UI tests for selecting, replacing, reordering, validation feedback,
   refresh persistence, baseline opening, and the Finish navigation gate.
 
 ## Acceptance checks
 
-- [ ] The user can open `run_59c947b99f90`, choose 1–3 outputs from different
+- [x] The user can open `run_59c947b99f90`, choose 1–3 outputs from different
   people, refresh, and see the same ordered selection.
-- [ ] Arbitrary exploration results no longer enter Frames through the primary
+- [x] Arbitrary exploration results no longer enter Frames through the primary
   workflow.
-- [ ] Existing trials/finishes retain their original selection when the active
+- [x] Existing trials/finishes retain their original selection when the active
   selection changes later.
-- [ ] `uv run pytest`, `npm test`, and `npm run build` pass.
+- [x] `uv run pytest`, `npm test`, and `npm run build` pass.
 
 ## Out of scope
 

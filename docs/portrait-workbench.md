@@ -1,68 +1,117 @@
-# Portrait Workbench
+# Portrait Workbench contract
 
-The supported browser path is always visible:
+The supported browser path is:
 
 ```text
-1 Sources → 2 Styles → 3 Frames → 4 Completed
+Sources → Explore → Finish → Build Set → Frames → Completed
 ```
 
-The Back/Continue actions suggest a path, but hashes are refreshable and no stage is locked. Empty stages explain what is missing. Old `#lab`, `#run/<id>`, and `#cards` links redirect to their closest current stage; old `#card/<id>` links reopen the equivalent `#frames/<id>` view.
+Hashes remain refreshable. Empty stages explain their missing prerequisite.
+The old `#styles`, `#lab`, `#run/<id>`, and `#cards` links continue to open
+Explore or Frames; old `#card/<id>` links reopen `#frames/<id>`.
 
-## Sources
+## Sources and Explore
 
-New workspaces begin with no source images, two bundled `estate-card-v1` style references, and a low-quality live `openai/gpt-image-1-mini` recipe.
+`benchmark_source_ids` is the ordered project source selection retained for
+compatibility. Source records retain checksums, dimensions, local paths, and
+Pexels or upload provenance.
 
-With `PEXELS_API_KEY` configured, **Load six starter images** downloads and selects Pexels photos `11013487`, `14468344`, `23024613`, `9009504`, `14650121`, and `35918726`. Loading and importing are idempotent by photo ID and checksum. Search supports presets, paging, multi-selection, bulk import, and per-photo errors. Local uploads remain available without Pexels.
+Explore runs have `purpose: "exploration"`. A missing purpose is read as
+`exploration` without rewriting the historical `run.json`. Runs snapshot the
+visible recipe, resolved instruction, ordered references, source inputs,
+provider mapping, usage, cost, and each output checksum.
 
-`benchmark_source_ids` remains the stored ordered project selection for compatibility, but the browser presents it only as selected source images. Pexels and local-upload provenance stays attached to each source record.
+The baseline exploration run `run_59c947b99f90` is shown first when it exists;
+otherwise the newest complete exploration run is the starting batch. No
+subjective output is selected automatically.
 
-## Styles and generation
+## Candidate selection
 
-The main controls are selected source thumbnails, ordered visual references, **What should change?**, variant count, **Generate**, and **Test across all sources**.
+The current `candidate_selection` is a small versioned record backed by
+`candidate-selections/<selection-id>-r<revision>.json` and
+`candidate-selections/current.json`. It contains 1–3 complete Explore items,
+one per workspace source, in display order. Every item snapshots its run item,
+source identity, output path/checksum, source checksum, recipe, and references.
 
-- Quick exploration starts with the first selected project source and four variants.
-- Variant count accepts 1–4.
-- A user can choose a few project sources for a generation batch.
-- The all-sources test always creates one output per selected project source.
-- `change_note` defaults to an empty string for existing recipes, is added to the resolved instruction as `Requested change: …`, and is preserved in the immutable recipe snapshot.
+Selecting, removing, or reordering creates a new revision. Existing Finish
+trials and locked Finishes retain their original selection revision. The
+service rejects non-Explore runs, incomplete or missing output files, checksum
+drift, duplicate source IDs, duplicate IDs, and selections outside the 1–3
+limit.
 
-Model, quality, live/simulation mode, structured direction, negative direction, resolved instruction, recipe duplication, provider capabilities, and pricing metadata are under **Advanced**.
+## Finish
 
-Starting a run submits the complete visible recipe plus explicit source IDs, output count, and execution mode. There is no `confirm_paid` field, paid confirmation dialog, or completed-smoke prerequisite. Live execution still requires `OPENROUTER_API_KEY`, the selected model must be available for the chosen execution mode, identity plus style references must fit its exact endpoint limit, and only one run may be active.
+`POST /api/finish-trials` creates an immutable run with
+`purpose: "finish"`, `selection_revision`, exactly one item per candidate, and
+one generated output per item. A generated Explore output is copied below the
+trial's `inputs/candidates/` directory as an identity input; it is not
+pretended to be a workspace source. The trial records the originating Explore
+run/item, workspace source identity, candidate checksum, inherited recipe
+provenance, ordered style references, model mapping, usage, and cost.
 
-Every immutable run records:
+Finish instructions resolve in stable order: the new
+`Requested finish change: …` note, then inherited art direction. If selected
+candidates came from different recipes, the first candidate initializes the
+draft and the differing recipe provenance remains in the snapshots.
 
-- recipe, change note, resolved instruction, sources, references, and input checksums;
-- live or simulation execution and exact model/provider capability mappings;
-- requested and effective aspect ratios;
-- per-call status, seed, timing, usage, and returned cost;
-- aggregate usage and returned cost.
+Trials are reviewed as candidate-aligned cohort sheets. Comparison is allowed
+only between complete trials from the same selection revision. Locking verifies
+that every expected item is complete, remains in selection order, and still
+has its saved output checksum. It then atomically creates
+`finishes/<finish-id>/finish.json` with a version, trial, candidate inputs,
+approved outputs, snapshots, model mapping, usage, cost, and lock timestamp.
+Locked Finishes are immutable; a later trial creates another version. No item
+from one trial can be mixed with an item from another.
 
-Progress and source-grouped results appear on Styles. Each batch shows its source, style note, reference thumbnails, and cost details. A completed result exposes **Send to Frames**. History and source-for-source comparison remain secondary tools and verdicts do not gate progress.
+## Build Set
 
-## Frames
+Sets are stored under `sets/<set-id>/set.json`. Creation snapshots the current
+ordered project source selection and one locked Finish. Every source gets one
+set item before remaining work is queued. Anchor items point to their approved
+Finish output and preserve its bytes and checksum.
 
-Sending a run item creates a working card draft. Re-sending an item that already has a working or kept card returns that existing card instead of creating a duplicate. A previously discarded item may start a fresh draft.
+For each remaining source, set production sends references in exactly this
+order:
 
-`POST /api/cards/{id}/previews` returns six `CardPreviewOption` records: Bust, Tall, and Torso crossed with Painterly and Estate Pixel. Each record contains the preset, treatment, derived framing, render URL, art URL, dimensions, and render metadata.
+```text
+identity: current source snapshot
+style: approved Finish outputs in candidate order
+style: original Finish references in saved order
+```
 
-Preview files are cached below ignored `portrait-library/cards/previews/<card-id>/`. The cache key includes:
+Reference-limit validation counts the identity plus every anchor and base
+reference before creation; anchors and references are never silently
+truncated. Set production runs have `purpose: "set-production"` and record the
+same stack on each item. No generation call is made for anchors.
 
-- the current source-output checksum;
-- template ID and version;
-- the exact frame preset definitions;
-- treatment versions;
-- preview schema and card label.
+Sets are `building`, `ready-with-errors`, or `ready`. Successful items are
+immutable. Retry creates a new production run only for failed/interrupted
+items, preserves successful item paths, and aggregates usage and cost across
+all production attempts. Source membership and order cannot change under a set
+ID. The newest set becomes `active_set_id`; historical sets can be switched
+explicitly without mutating their Finish or items.
 
-Stale files are removed when the key changes. Selecting a preview copies that exact cached card and art render into the draft's saved output paths, then persists its preset, derived numeric framing, treatment, treatment version, metadata, and preview ID. This makes the chosen preview and saved render byte-identical.
+## Frames and Completed
 
-The browser asks only two visual questions: crop, then finish. Numeric framing and provenance remain read-only under details. **Keep as completed** sets `decision: keep`; **Not this one** sets `decision: discard` and advances to the next working candidate.
+A ready active set automatically receives one working card draft per set item.
+New cards persist `set_id`, `set_item_id`, `finish_id`, complete source
+provenance, and the set item's immutable art source. At most one working or
+kept card exists per set item. A discarded item may create a new draft with
+explicit lineage; reconsidering never detaches it from the set.
 
-Estate Pixel uses the established deterministic pipeline: crop the 336 × 276 art window, downsample to 112 × 92, quantize to at most 32 adaptive colours without dithering, and upscale 3× with nearest-neighbour sampling.
+Frames asks composition (Bust, Tall, Torso) and deterministic Treatment
+(Painterly or Estate Pixel). Treatment is never labelled Finish. Preview cache
+keys include source checksum, set/Finish provenance, template version, frame
+presets, Treatment versions, schema, and card label. Selecting a preview copies
+the exact cached PNG and art render into the card's saved paths, preserving
+byte-identical output.
 
-## Completed
-
-Completed filters strictly to `decision: keep`. Working and discarded drafts never appear. Each entry shows the full render, stored source/style summary, a direct PNG download, and **Reconsider in Frames**. Reconsidering first changes the decision to `working`, then opens `#frames/<card-id>`.
+Completed defaults strictly to kept cards whose `set_id` equals
+`active_set_id`, in set source order. It shows the active set and locked Finish
+and retains direct downloads, provenance, reconsider, keep, and discard
+behavior. Cards without the three set provenance IDs are legacy cards: they
+remain reachable through history and saved URLs, but never enter the active
+Completed grid.
 
 ## Workspace and compatibility
 
@@ -72,16 +121,28 @@ portrait-library/
   sources/
   references/
   runs/<run-id>/
-  cards/
-    previews/<card-id>/
+  candidate-selections/
+  finishes/<finish-id>/finish.json
+  sets/<set-id>/set.json
+  cards/previews/<card-id>/
 ```
 
-Existing workspace, run, and card files remain readable. `benchmark_source_ids`, run verdicts, and persisted numeric framing remain in storage. Missing `change_note`, treatment, framing, and decision values receive compatible payload defaults. Writes use a temporary sibling followed by `Path.replace`, with process-local locking around metadata mutation. Asset requests reject absolute paths and traversal.
+Existing version-1 workspaces open without destructive migration. Missing run
+purposes become Explore history, missing `active_set_id` is `null`, and old
+cards receive legacy payload defaults without being assigned to a set. Old
+numeric framing, treatment, run verdicts, and source selection remain stored.
+All metadata writes use a temporary sibling followed by `Path.replace`, with
+process-local locking. Asset requests reject absolute paths and traversal.
 
-To reset the experimental workspace, stop the API service, delete only the repository's `portrait-library/`, and restart the service. The directory is ignored by Git.
+To reset the experimental workspace, stop the API service, delete only this
+repository's ignored `portrait-library/`, and restart the service. Historical
+generated assets are not deleted by normal workflow actions.
 
 ## External services
 
-OpenRouter model discovery resolves each image-to-image model to a definitive provider endpoint and retains its exact typed parameters, reference limit, provider tag, streaming support, and pricing lines. Generation pins that provider and sends only supported fields. Exact response usage and cost remain the accounting source of truth.
-
-Pexels records retain photo, photographer, source-page, query, and license-page provenance. Review the [Pexels license](https://www.pexels.com/license/) before using an image beyond this experiment.
+OpenRouter discovery resolves each image-to-image model to a definitive
+provider endpoint and retains typed parameters, reference limits, provider
+tag, streaming support, and pricing. Generation pins that provider and sends
+only supported fields. Exact response usage and cost remain the accounting
+source of truth. Pexels records retain photo, photographer, source-page,
+query, and license-page provenance.

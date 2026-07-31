@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { api } from "./api";
 import { modelsForMode, recipeIsDirty, referenceLimitProblem, selectedModel } from "./runDraft";
-import type { Model, Recipe, Run, RunSummary, SearchResult, Source, Workspace } from "./types";
+import type { CandidateSelection, Model, Recipe, Run, RunSummary, SearchResult, Source, Workspace } from "./types";
 
 const searchPresets = ["character portrait", "older face portrait", "dramatic side light", "distinctive clothing portrait"];
 const directionLabels: Array<[keyof Recipe["direction"], string]> = [
@@ -113,7 +113,7 @@ export function SourcesStage({ workspace, pexelsAvailable, onWorkspace, onNaviga
   }
 
   return <section className="stage-page sources-page">
-    <div className="page-heading"><div><p className="eyebrow">Stage 1 of 4</p><h2>Choose source images</h2><p>Build the ordered set of people you want to explore. Search, upload, provenance, and selection all live here.</p></div><button className="button primary next-action" onClick={() => onNavigate("#styles")}>Continue to Styles →</button></div>
+    <div className="page-heading"><div><p className="eyebrow">Stage 1 of 6</p><h2>Choose source images</h2><p>Build the ordered set of people you want to explore. Search, upload, provenance, and selection all live here.</p></div><button className="button primary next-action" onClick={() => onNavigate("#explore")}>Continue to Explore →</button></div>
 
     <div className="source-tools">
       <section className="surface tool-panel"><div className="panel-heading"><div><p className="eyebrow">Pexels library</p><h3>Find source images</h3></div>{!pexelsAvailable && <span className="status-chip warning">API key needed</span>}</div>
@@ -130,7 +130,7 @@ export function SourcesStage({ workspace, pexelsAvailable, onWorkspace, onNaviga
     <section className="surface library-panel"><div className="panel-heading"><div><p className="eyebrow">Project library</p><h3>{selected.length} selected source image{selected.length === 1 ? "" : "s"}</h3></div><span className="muted">Click a card to include or remove it. Arrows set generation order.</span></div>
       {workspace.sources.length ? <div className="image-library">{workspace.sources.map((source) => { const index = workspace.benchmark_source_ids.indexOf(source.id); const isSelected = index >= 0; return <article key={source.id} className={`library-card source-card ${isSelected ? "selected" : ""}`}><button className="image-select" onClick={() => void updateSelection(isSelected ? workspace.benchmark_source_ids.filter((id) => id !== source.id) : [...workspace.benchmark_source_ids, source.id])} aria-pressed={isSelected}><img src={source.image_url} alt={source.label} /><span className="selection-mark">{isSelected ? `✓ ${index + 1}` : "+"}</span></button><div className="library-meta"><strong>{source.label}</strong><small>{source.provenance.kind === "pexels" ? "Pexels source" : "Local upload"}</small>{isSelected && <div className="order-actions"><button onClick={() => void moveSource(index, -1)} disabled={index === 0} aria-label={`Move ${source.label} earlier`}>←</button><button onClick={() => void moveSource(index, 1)} disabled={index === selected.length - 1} aria-label={`Move ${source.label} later`}>→</button></div>}<details><summary>Provenance</summary><code>{JSON.stringify(source.provenance)}</code></details><button className="text-button danger" onClick={() => void deleteSource(source)}>{confirmDelete === source.id ? "Confirm delete" : "Delete"}</button></div></article>; })}</div> : <div className="empty-panel"><span className="empty-glyph">◇</span><h3>No source images yet</h3><p>Load the starter set, search Pexels, or upload an image. You can still visit later stages to see what they need.</p></div>}
     </section>
-    <div className="stage-actions"><span /><button className="button primary large" onClick={() => onNavigate("#styles")}>Continue to Styles →</button></div>
+    <div className="stage-actions"><span /><button className="button primary large" onClick={() => onNavigate("#explore")}>Continue to Explore →</button></div>
   </section>;
 }
 
@@ -141,9 +141,12 @@ type StylesProps = SharedProps & {
   openrouterAvailable: boolean;
   onRun: (run: Run) => void;
   onRefresh: () => Promise<void>;
+  candidateSelection?: CandidateSelection | null;
+  onSelection?: (selection: CandidateSelection | null) => void;
+  baselineRunId?: string | null;
 };
 
-export function StylesStage({ workspace, models, runs, initialRun, openrouterAvailable, onWorkspace, onRun, onRefresh, onNavigate, onMessage }: StylesProps) {
+export function StylesStage({ workspace, models, runs, initialRun, openrouterAvailable, onWorkspace, onRun, onRefresh, onNavigate, onMessage, candidateSelection, onSelection, baselineRunId }: StylesProps) {
   const savedRecipe = workspace.recipes.find((item) => item.id === workspace.active_recipe_id) || workspace.recipes[0];
   const [recipe, setRecipe] = useState<Recipe | undefined>(savedRecipe);
   const [sourceIds, setSourceIds] = useState<string[]>(workspace.benchmark_source_ids.slice(0, 1));
@@ -155,6 +158,7 @@ export function StylesStage({ workspace, models, runs, initialRun, openrouterAva
 
   useEffect(() => setRecipe(savedRecipe), [savedRecipe?.id, savedRecipe?.updated_at]);
   useEffect(() => { if (initialRun) setCurrentRun(initialRun); }, [initialRun]);
+  useEffect(() => { if (!initialRun && baselineRunId) void openRun(baselineRunId); }, [baselineRunId]);
   useEffect(() => {
     const allowed = new Set(workspace.benchmark_source_ids);
     setSourceIds((current) => {
@@ -252,20 +256,42 @@ export function StylesStage({ workspace, models, runs, initialRun, openrouterAva
     catch (error) { onMessage((error as Error).message, "error"); }
   }
 
-  async function sendToFrames(run: Run, itemId: string) {
-    try {
-      const response = await api.createCard(run.run_id, itemId, "Experimental claimant", "bust", "painterly");
-      await onRefresh(); onNavigate(`#frames/${response.card.card_id}`);
-    } catch (error) { onMessage((error as Error).message, "error"); }
+  async function toggleCandidate(run: Run, itemId: string) {
+    const selected = candidateSelection?.selected_items || [];
+    const existing = selected.find((item) => item.run_id === run.run_id && item.item_id === itemId);
+    if (existing) {
+      const response = await api.removeCandidate(run.run_id, itemId);
+      onSelection?.(response.candidate_selection);
+      onWorkspace(response.workspace);
+      return;
+    }
+    const item = run.items.find((candidate) => candidate.item_id === itemId);
+    if (!item) return;
+    const conflict = selected.find((candidate) => candidate.source_id === item.source_id);
+    if (conflict) { onMessage("Choose one output per source portrait; remove the existing candidate first.", "error"); return; }
+    if (selected.length >= 3) { onMessage("A Finish cohort can contain at most three candidates.", "error"); return; }
+    const response = await api.saveCandidateSelection([...selected.map((candidate) => ({ run_id: candidate.run_id, item_id: candidate.item_id })), { run_id: run.run_id, item_id: itemId }]);
+    onSelection?.(response.candidate_selection);
+    onWorkspace(response.workspace);
+  }
+
+  async function moveCandidate(index: number, direction: -1 | 1) {
+    if (!candidateSelection) return;
+    const target = index + direction;
+    if (target < 0 || target >= candidateSelection.selected_items.length) return;
+    const items = candidateSelection.selected_items.map((item) => ({ run_id: item.run_id, item_id: item.item_id }));
+    [items[index], items[target]] = [items[target], items[index]];
+    try { const response = await api.reorderCandidates(items); onSelection?.(response.candidate_selection); onWorkspace(response.workspace); }
+    catch (error) { onMessage((error as Error).message, "error"); }
   }
 
   const references = recipe?.reference_ids.map((id) => workspace.references.find((item) => item.id === id)).filter(Boolean) || [];
   const otherReferences = workspace.references.filter((item) => !recipe?.reference_ids.includes(item.id));
   const grouped = currentRun?.benchmark_source_ids.map((sourceId) => ({ source: currentRun.sources_snapshot.find((item) => item.id === sourceId), items: currentRun.items.filter((item) => item.source_id === sourceId) })) || [];
-  const compareCandidates = runs.filter((item) => item.run_id !== currentRun?.run_id && item.status === "complete");
+  const compareCandidates = runs.filter((item) => item.run_id !== currentRun?.run_id && item.status === "complete" && (!item.purpose || item.purpose === "exploration"));
 
   return <section className="stage-page styles-page">
-    <div className="page-heading"><div><p className="eyebrow">Stage 2 of 4</p><h2>Explore a style</h2><p>Say what should change, choose a few source images, and generate. Technical controls remain available under Advanced.</p></div><button className="button secondary" onClick={() => onNavigate("#sources")}>← Back to Sources</button></div>
+    <div className="page-heading"><div><p className="eyebrow">Stage 2 of 6 · Explore</p><h2>Explore a style</h2><p>Say what should change, choose a few source images, and generate. Select 1–3 representative outputs to hand off to Finish.</p></div><button className="button secondary" onClick={() => onNavigate("#sources")}>← Back to Sources</button></div>
     {!recipe ? <div className="empty-panel"><h3>No style recipe is available</h3><p>Refresh the workspace to seed its starter recipe.</p></div> : <>
       <section className="surface style-setup">
         <div className="setup-block"><div className="panel-heading"><div><p className="eyebrow">Source images</p><h3>Choose a few to explore</h3></div><span className="status-chip">{sourceIds.length} chosen</span></div>{selectedSources.length ? <div className="choice-thumbs">{selectedSources.map((source) => <button key={source.id} className={sourceIds.includes(source.id) ? "selected" : ""} onClick={() => setSourceIds((current) => current.includes(source.id) ? current.filter((id) => id !== source.id) : [...current, source.id])}><img src={source.image_url} alt={source.label} /><span>{source.label}</span></button>)}</div> : <div className="mini-empty">No project sources yet. <button className="text-button" onClick={() => onNavigate("#sources")}>Add source images</button></div>}</div>
@@ -289,12 +315,13 @@ export function StylesStage({ workspace, models, runs, initialRun, openrouterAva
     <section className="results-section"><div className="panel-heading"><div><p className="eyebrow">Generation batches</p><h3>{currentRun ? currentRun.recipe_snapshot.change_note || currentRun.recipe_name : "Results appear here"}</h3></div>{currentRun && <span className={`status-chip ${currentRun.status}`}>{currentRun.status} · {currentRun.completed_calls}/{currentRun.total_calls}</span>}</div>
       {!currentRun ? <div className="empty-panel"><span className="empty-glyph">✦</span><h3>No generation batch selected</h3><p>Generate above, or open a previous batch from history.</p></div> : <>
         <div className="progress-track" aria-label={`${currentRun.completed_calls} of ${currentRun.total_calls} results complete`}><span style={{ width: `${currentRun.total_calls ? (currentRun.completed_calls / currentRun.total_calls) * 100 : 0}%` }} /></div>
-        <div className="batch-groups">{grouped.map((group) => <article className="surface batch-group" key={group.source?.id}><header><img src={group.source?.input_url} alt={group.source?.label || "Source"} /><div><p className="eyebrow">Source batch</p><h4>{group.source?.label}</h4></div><details><summary>Batch details</summary><p><strong>Style note:</strong> {currentRun.recipe_snapshot.change_note || "Structured art direction only"}</p><div className="reference-thumbs">{currentRun.references_snapshot.map((reference) => <img src={reference.input_url} alt={reference.label} key={reference.id} />)}</div><p>Cost: ${group.items.reduce((total, item) => total + Number(item.cost_usd || 0), 0).toFixed(4)}</p></details></header><div className="result-grid">{group.items.map((item) => <div className={`result-card ${item.status}`} key={item.item_id}>{item.output_url ? <img src={item.output_url} alt={`${item.source_label} variant ${item.output_index + 1}`} /> : <div className="result-placeholder"><span className="spinner" />{item.status}</div>}<div><strong>Variant {item.output_index + 1}</strong>{item.error && <small className="error-text">{item.error}</small>}{item.status === "complete" && <button className="button primary" onClick={() => void sendToFrames(currentRun, item.item_id)}>Send to Frames →</button>}<details><summary>Details</summary><small>{item.elapsed_seconds ?? "—"}s · ${Number(item.cost_usd || 0).toFixed(4)} · seed {item.seed ?? "—"}</small></details></div></div>)}</div></article>)}</div>
+        <div className="batch-groups">{grouped.map((group) => <article className="surface batch-group" key={group.source?.id}><header><img src={group.source?.input_url} alt={group.source?.label || "Source"} /><div><p className="eyebrow">Source batch</p><h4>{group.source?.label}</h4></div><details><summary>Batch details</summary><p><strong>Style note:</strong> {currentRun.recipe_snapshot.change_note || "Structured art direction only"}</p><div className="reference-thumbs">{currentRun.references_snapshot.map((reference) => <img src={reference.input_url} alt={reference.label} key={reference.id} />)}</div><p>Cost: ${group.items.reduce((total, item) => total + Number(item.cost_usd || 0), 0).toFixed(4)}</p></details></header><div className="result-grid">{group.items.map((item) => { const selected = candidateSelection?.selected_items.find((candidate) => candidate.run_id === currentRun.run_id && candidate.item_id === item.item_id); return <div className={`result-card ${item.status} ${selected ? "selected" : ""}`} key={item.item_id}>{item.output_url ? <img src={item.output_url} alt={`${item.source_label} variant ${item.output_index + 1}`} /> : <div className="result-placeholder"><span className="spinner" />{item.status}</div>}<div><strong>Variant {item.output_index + 1}</strong>{selected && <span className="selection-badge">Selected #{selected.order + 1}</span>}{item.error && <small className="error-text">{item.error}</small>}{item.status === "complete" && <button className="button primary" onClick={() => void toggleCandidate(currentRun, item.item_id)}>{selected ? "Remove candidate" : "Select for Finish"}</button>}<details><summary>Details</summary><small>{item.elapsed_seconds ?? "—"}s · ${Number(item.cost_usd || 0).toFixed(4)} · seed {item.seed ?? "—"}</small></details></div></div>; })}</div></article>)}</div>
       </>}
-      {runs.length > 0 && <details className="run-history"><summary>Run history ({runs.length})</summary><div>{runs.map((run) => <button key={run.run_id} onClick={() => void openRun(run.run_id)}><span className={`status-dot ${run.status}`} /><span><strong>{run.recipe_name}</strong><small>{formatTime(run.created_at)} · {run.source_count} source{run.source_count === 1 ? "" : "s"} · ${Number(run.cost_usd || 0).toFixed(4)}</small></span></button>)}</div></details>}
+      {runs.length > 0 && <details className="run-history"><summary>Run history ({runs.length})</summary><div>{runs.map((run) => <button key={run.run_id} onClick={() => void openRun(run.run_id)}><span className={`status-dot ${run.status}`} /><span><strong>{run.purpose_label || (run.purpose === "finish" ? "Finish trial" : run.purpose === "set-production" ? "Set production" : "Explore")}: {run.recipe_name}</strong><small>{formatTime(run.created_at)} · {run.source_count} source{run.source_count === 1 ? "" : "s"} · ${Number(run.cost_usd || 0).toFixed(4)}</small></span></button>)}</div></details>}
       {currentRun && compareCandidates.length > 0 && <div className="compare-tool"><label>Compare this batch with<select value={compareId} onChange={(event) => setCompareId(event.target.value)}><option value="">Choose a completed batch</option>{compareCandidates.map((run) => <option key={run.run_id} value={run.run_id}>{run.recipe_name} · {formatTime(run.created_at)}</option>)}</select></label><button className="button secondary" disabled={!compareId} onClick={() => onNavigate(`#compare/${currentRun.run_id}/${compareId}`)}>Compare sources</button></div>}
     </section>
-    <div className="stage-actions"><button className="button secondary" onClick={() => onNavigate("#sources")}>← Back to Sources</button><button className="button primary" onClick={() => onNavigate("#frames")}>Continue to Frames →</button></div>
+    {candidateSelection && <section className="surface selection-tray"><div><p className="eyebrow">Finish handoff</p><h3>{candidateSelection.selected_items.length} / 3 selected</h3><p>One representative output per source. Reorder or remove candidates before starting a Finish trial.</p></div><div className="selection-tray-items">{candidateSelection.selected_items.map((item, index) => <article key={`${item.run_id}:${item.item_id}`}><button onClick={() => void toggleCandidate(currentRun || ({ run_id: item.run_id, items: [] } as unknown as Run), item.item_id)}><span>#{item.order + 1}</span>{item.output_url ? <img src={item.output_url} alt={item.source_label} /> : null}<small>{item.source_label}</small></button><div><button aria-label={`Move ${item.source_label} earlier`} disabled={index === 0} onClick={() => void moveCandidate(index, -1)}>←</button><button aria-label={`Move ${item.source_label} later`} disabled={index === candidateSelection.selected_items.length - 1} onClick={() => void moveCandidate(index, 1)}>→</button></div></article>)}</div></section>}
+    <div className="stage-actions"><button className="button secondary" onClick={() => onNavigate("#sources")}>← Back to Sources</button><button className="button primary large" disabled={!candidateSelection?.selected_items.length} onClick={() => onNavigate("#finish")}>Continue to Finish →</button></div>
   </section>;
 }
 

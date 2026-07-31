@@ -68,7 +68,7 @@ class WorkspaceStore:
 
     def ensure(self) -> None:
         with self._lock:
-            for directory in ("sources", "references", "prepared", "runs", "cards"):
+            for directory in ("sources", "references", "prepared", "runs", "cards", "candidate-selections", "finishes", "sets"):
                 (self.root / directory).mkdir(parents=True, exist_ok=True)
             if not self.workspace_path.exists():
                 self._atomic_json(self.workspace_path, _clone_default())
@@ -81,10 +81,21 @@ class WorkspaceStore:
         for key in ("sources", "benchmark_source_ids", "references", "recipes"):
             if not isinstance(normalized.get(key), list):
                 raise WorkspaceError(f"{key} must be a list")
-        source_ids = {str(item.get("id")) for item in normalized["sources"]}
+        source_values = [str(item.get("id")) for item in normalized["sources"]]
+        if len(source_values) != len(set(source_values)):
+            raise WorkspaceError("sources must have unique IDs")
+        source_ids = set(source_values)
+        if len(normalized["benchmark_source_ids"]) != len(set(map(str, normalized["benchmark_source_ids"]))):
+            raise WorkspaceError("the saved source selection contains duplicate IDs")
         if any(str(item) not in source_ids for item in normalized["benchmark_source_ids"]):
             raise WorkspaceError("the saved source selection contains an unknown source")
-        reference_ids = {str(item.get("id")) for item in normalized["references"]}
+        reference_values = [str(item.get("id")) for item in normalized["references"]]
+        if len(reference_values) != len(set(reference_values)):
+            raise WorkspaceError("references must have unique IDs")
+        reference_ids = set(reference_values)
+        recipe_values = [str(item.get("id")) for item in normalized["recipes"]]
+        if len(recipe_values) != len(set(recipe_values)):
+            raise WorkspaceError("recipes must have unique IDs")
         for recipe in normalized["recipes"]:
             if not isinstance(recipe, dict):
                 raise WorkspaceError("recipes must contain objects")
@@ -93,6 +104,12 @@ class WorkspaceStore:
         active = normalized.get("active_recipe_id")
         if active is not None and str(active) not in {str(item.get("id")) for item in normalized["recipes"]}:
             raise WorkspaceError("active_recipe_id contains an unknown recipe")
+        active_set = normalized.get("active_set_id")
+        if active_set is not None and not str(active_set).strip():
+            raise WorkspaceError("active_set_id must be null or a non-empty ID")
+        selection = normalized.get("candidate_selection")
+        if selection is not None and not isinstance(selection, dict):
+            raise WorkspaceError("candidate_selection must be an object or null")
         return normalized
 
     def read(self) -> dict[str, Any]:
@@ -204,8 +221,29 @@ class WorkspaceStore:
                 for recipe in data["recipes"]
             ],
             "active_recipe_id": data.get("active_recipe_id"),
+            "candidate_selection": self.candidate_selection_payload(data.get("candidate_selection")),
+            "active_set_id": data.get("active_set_id"),
             "links": {"runs": "api/runs", "cards": "api/cards"},
         }
+
+    def candidate_selection_payload(self, selection: dict[str, Any] | None) -> dict[str, Any] | None:
+        """Add asset URLs without changing the immutable selection snapshot."""
+        if not isinstance(selection, dict):
+            return None
+        result = dict(selection)
+        items = selection.get("selected_items", selection.get("items", []))
+        if isinstance(items, list):
+            result["selected_items"] = [
+                {
+                    **item,
+                    "output_url": self.asset_url(item.get("output_path")),
+                    "source_url": self.asset_url(item.get("source_path")),
+                }
+                for item in items
+                if isinstance(item, dict)
+            ]
+            result["items"] = result["selected_items"]
+        return result
 
     def ensure_bundled_references(self) -> list[str]:
         """Copy the checked-in estate-card references into a new workspace once."""

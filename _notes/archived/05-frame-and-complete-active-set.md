@@ -19,46 +19,46 @@ finish, while older sets and pre-set cards remain available as history.
 
 ## Checklist
 
-- [ ] Change card creation to accept a set item, validate that the parent set is
+- [x] Change card creation to accept a set item, validate that the parent set is
   ready, and persist `set_id`, `set_item_id`, and `finish_id` alongside the
   complete source provenance.
-- [ ] Enforce at most one non-discarded card per set item. Reopening or
+- [x] Enforce at most one non-discarded card per set item. Reopening or
   re-sending returns the existing working/kept card; a discarded item may start
   a new draft with explicit lineage.
-- [ ] Create or expose working drafts for all active-set items when entering
+- [x] Create or expose working drafts for all active-set items when entering
   Frames so the user does not manually send portraits one by one from Set.
-- [ ] Filter the Frames candidate list to the active set and show progress as
+- [x] Filter the Frames candidate list to the active set and show progress as
   working, kept, and discarded counts against total set items.
-- [ ] Preserve exact deterministic preview caching and byte-identical selected
+- [x] Preserve exact deterministic preview caching and byte-identical selected
   renders while adding finish/set IDs to the cache/provenance inputs where
   needed.
-- [ ] Rename every current UI/documentation use of card `finish` to
+- [x] Rename every current UI/documentation use of card `finish` to
   `Treatment`; retain the stored `treatment` and `treatment_version` fields.
-- [ ] Make Completed identify the active set and locked finish, show only its
+- [x] Make Completed identify the active set and locked finish, show only its
   kept cards by default, and preserve ordered source membership.
-- [ ] Add an active-set switcher/history entry point. Switching sets updates
+- [x] Add an active-set switcher/history entry point. Switching sets updates
   Frames and Completed without changing cards or deleting renders.
-- [ ] Place old cards without set provenance in a clearly labelled **Legacy
+- [x] Place old cards without set provenance in a clearly labelled **Legacy
   cards** history section. Never mix them into the active Completed grid.
-- [ ] Keep direct PNG downloads, provenance, reconsider, keep, and discard
+- [x] Keep direct PNG downloads, provenance, reconsider, keep, and discard
   behavior working within the active set.
-- [ ] Add backend tests for set-item validation, deduplication, immutable
+- [x] Add backend tests for set-item validation, deduplication, immutable
   provenance, active-set filtering, reconsider, discarded lineage, and legacy
   reads.
-- [ ] Add UI tests for automatic active-set drafts, treatment terminology,
+- [x] Add UI tests for automatic active-set drafts, treatment terminology,
   frame selection, keep/discard progression, Completed filtering, set
   switching, legacy history, downloads, and refresh.
 
 ## Acceptance checks
 
-- [ ] Frames cannot create a new primary-flow card from an exploration or
+- [x] Frames cannot create a new primary-flow card from an exploration or
   finish run item directly.
-- [ ] Every active Completed card traces to one set item and the same locked
+- [x] Every active Completed card traces to one set item and the same locked
   finish as the active set.
-- [ ] Historical and legacy cards remain accessible but never appear mixed
+- [x] Historical and legacy cards remain accessible but never appear mixed
   into the current Completed set.
-- [ ] Reconsidering a card cannot detach it from or move it between sets.
-- [ ] `uv run pytest`, `npm test`, and `npm run build` pass.
+- [x] Reconsidering a card cannot detach it from or move it between sets.
+- [x] `uv run pytest`, `npm test`, and `npm run build` pass.
 
 ## Out of scope
 

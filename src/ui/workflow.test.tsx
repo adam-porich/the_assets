@@ -63,7 +63,7 @@ function setText(element: HTMLInputElement | HTMLTextAreaElement, value: string)
 
 async function flush() { await act(async () => { await Promise.resolve(); await Promise.resolve(); }); }
 
-describe("guided four-stage graphics workflow", () => {
+describe("guided six-stage graphics workflow", () => {
   it("keeps the new stage hashes refreshable and redirects legacy hashes", () => {
     window.location.hash = "#frames/card_7";
     expect(readRoute()).toEqual({ view: "frames", id: "card_7" });
@@ -78,6 +78,12 @@ describe("guided four-stage graphics workflow", () => {
     window.location.hash = "#cards";
     expect(readRoute()).toEqual({ view: "frames" });
     expect(window.location.hash).toBe("#frames");
+    window.location.hash = "#explore";
+    expect(readRoute()).toEqual({ view: "styles" });
+    window.location.hash = "#finish";
+    expect(readRoute()).toEqual({ view: "finish" });
+    window.location.hash = "#set";
+    expect(readRoute()).toEqual({ view: "set" });
   });
 
   it("shows an accessible Sources empty state, loads the library, and continues freely", async () => {
@@ -86,8 +92,8 @@ describe("guided four-stage graphics workflow", () => {
     function Harness() { const [value, setValue] = React.useState(emptyWorkspace); return <SourcesStage workspace={value} pexelsAvailable onWorkspace={setValue} onNavigate={navigate} onMessage={() => undefined} />; }
     mount(<Harness />);
     expect(container.textContent).toContain("No source images yet");
-    clickButton("Continue to Styles");
-    expect(navigate).toHaveBeenCalledWith("#styles");
+    clickButton("Continue to Explore");
+    expect(navigate).toHaveBeenCalledWith("#explore");
     await act(async () => clickButton("Load six starter images"));
     expect(container.textContent).toContain("2 selected source images");
     expect(container.textContent).not.toContain("Benchmark portraits");
@@ -96,7 +102,6 @@ describe("guided four-stage graphics workflow", () => {
   it("edits a plain-language style and generates four quick variants without a modal", async () => {
     let submitted: { draft?: Recipe; ids?: string[]; outputs?: number } = {};
     vi.spyOn(api, "startRun").mockImplementation(async (draft, ids, outputs) => { submitted = { draft, ids, outputs }; return { run: runFixture(draft, ids, outputs), workspace: { ...workspace, recipes: [draft] } }; });
-    vi.spyOn(api, "createCard").mockResolvedValue({ card: cardFixture() });
     const navigate = vi.fn();
     mount(<StylesStage workspace={workspace} models={[liveModel]} runs={[]} openrouterAvailable onWorkspace={() => undefined} onRun={() => undefined} onRefresh={async () => undefined} onNavigate={navigate} onMessage={() => undefined} />);
     const note = container.querySelector(".change-field textarea") as HTMLTextAreaElement;
@@ -107,8 +112,7 @@ describe("guided four-stage graphics workflow", () => {
     expect(submitted.outputs).toBe(4);
     expect(container.querySelector('[role="dialog"]')).toBeNull();
     expect(container.querySelectorAll(".result-card")).toHaveLength(4);
-    await act(async () => clickButton("Send to Frames"));
-    expect(navigate).toHaveBeenCalledWith("#frames/card_1");
+    expect(container.textContent).toContain("Select for Finish");
   });
 
   it("tests consistency once per project source", async () => {

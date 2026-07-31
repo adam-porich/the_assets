@@ -177,9 +177,35 @@ def _find_run_item(store: WorkspaceStore, run_id: str, item_id: str) -> tuple[di
     return run, {**item, "_source_path": source_path}
 
 
+def _find_card_input(store: WorkspaceStore, card: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]:
+    """Resolve either a legacy run item or an immutable active-set item."""
+    if card.get("set_id") and card.get("set_item_id"):
+        set_path = store.root / "sets" / str(card["set_id"]) / "set.json"
+        if not set_path.is_file():
+            raise ValueError(f"set {card['set_id']} does not exist")
+        set_record = store.read_json(set_path, {})
+        set_item = next((item for item in set_record.get("items", []) if str(item.get("set_item_id")) == str(card["set_item_id"])), None)
+        if not set_item:
+            raise ValueError(f"set item {card['set_item_id']} does not exist")
+        if set_item.get("status") != "complete" or not set_item.get("art_source_path"):
+            raise ValueError("only a complete set item can become a card")
+        source_path = store.absolute_path(str(set_item["art_source_path"]))
+        if not source_path.is_file():
+            raise ValueError("set item art source is missing")
+        run_id = str(card.get("run_id") or set_item.get("production_run_id") or "set")
+        run_path = store.root / "runs" / run_id / "run.json"
+        run = store.read_json(run_path, {"run_id": run_id, "purpose": "set-production", "recipe_snapshot": set_record.get("recipe_snapshot", {})})
+        return run, {"item_id": card.get("run_item_id"), "source_id": set_item.get("source_id"), "source_label": set_item.get("source_label"), "output_path": set_item["art_source_path"], "dimensions": set_item.get("dimensions"), "_source_path": source_path}
+    return _find_run_item(store, str(card["run_id"]), str(card["run_item_id"]))
+
+
 def _payload(store: WorkspaceStore, card: dict[str, Any]) -> dict[str, Any]:
     return {
         **card,
+        "set_id": card.get("set_id"),
+        "set_item_id": card.get("set_item_id"),
+        "finish_id": card.get("finish_id"),
+        "legacy": not bool(card.get("set_id") and card.get("set_item_id") and card.get("finish_id")),
         "archetype": card.get("archetype", "bust"),
         "framing": card.get("framing") or {key: framing_preset("bust")[key] for key in ("zoom", "offset_x", "offset_y")},
         "decision": card.get("decision", "working"),
@@ -256,6 +282,65 @@ def create_card_draft(
     return _payload(store, record)
 
 
+def create_card_from_set_item(store: WorkspaceStore, set_id: str, set_item_id: str, label: str = "", preset: str = "bust", treatment: str = "painterly") -> dict[str, Any]:
+    """Create the sole working card for a ready set item."""
+    set_path = store.root / "sets" / set_id / "set.json"
+    if not set_path.is_file():
+        raise ValueError(f"set {set_id} does not exist")
+    set_record = store.read_json(set_path, {})
+    if set_record.get("state") != "ready":
+        raise ValueError("a ready set is required before entering Frames")
+    item = next((candidate for candidate in set_record.get("items", []) if str(candidate.get("set_item_id")) == set_item_id), None)
+    if not item:
+        raise ValueError(f"set item {set_item_id} does not exist")
+    if item.get("status") != "complete" or not item.get("art_source_path"):
+        raise ValueError("set item is not complete")
+    cards = load_cards(store).get("cards", [])
+    existing = next((candidate for candidate in cards if candidate.get("set_id") == set_id and candidate.get("set_item_id") == set_item_id and candidate.get("decision", "working") in {"working", "keep"}), None)
+    if existing:
+        return _payload(store, existing)
+    discarded_lineage = next((candidate for candidate in cards if candidate.get("set_id") == set_id and candidate.get("set_item_id") == set_item_id and candidate.get("decision") == "discard"), None)
+    source_path = store.absolute_path(str(item["art_source_path"]))
+    if not source_path.is_file():
+        raise ValueError("set item art source is missing")
+    run_id = str(item.get("production_run_id") or set_record.get("finish_id") or "set")
+    run_path = store.root / "runs" / run_id / "run.json"
+    run = store.read_json(run_path, {"run_id": run_id, "purpose": "set-production", "model": set_record.get("model"), "recipe_snapshot": set_record.get("recipe_snapshot", {})})
+    framing = framing_preset(preset)
+    card_id = f"card_{uuid.uuid4().hex[:12]}"
+    source_label = str(item.get("source_label") or label or "Set portrait")
+    record = {
+        "card_id": card_id, "run_id": run_id, "run_item_id": item.get("production_item_id") or item.get("set_item_id"),
+        "set_id": set_id, "set_item_id": set_item_id, "finish_id": set_record.get("finish_id"),
+        "label": label.strip() or source_label, "template_id": "estate-card-v1",
+        "archetype": preset, "framing": {key: framing[key] for key in ("zoom", "offset_x", "offset_y")}, "decision": "working",
+        "treatment": treatment, "treatment_version": TREATMENT_VERSIONS[treatment], "render_path": f"cards/{card_id}.png", "art_render_path": f"cards/{card_id}-art.png",
+        "source_output_path": item["art_source_path"], "source_dimensions": item.get("dimensions"), "created_at": now_iso(), "updated_at": now_iso(),
+        "lineage_of_card_id": discarded_lineage.get("card_id") if discarded_lineage else None,
+        "source_run_provenance": {
+            "run_id": run_id, "run_item_id": item.get("production_item_id"), "purpose": "set-production", "set_id": set_id, "set_item_id": set_item_id,
+            "finish_id": set_record.get("finish_id"), "model": run.get("model") or set_record.get("model"), "recipe_name": (set_record.get("recipe_snapshot") or {}).get("name"),
+            "source_label": source_label, "source_output_checksum_sha256": item.get("art_checksum_sha256") or checksum(source_path),
+        },
+    }
+    rendered = _render_image(source_path, store.absolute_path(record["render_path"]), store.absolute_path(record["art_render_path"]), record["label"], record["framing"], load_template(), treatment)
+    record.update({"render_dimensions": rendered["dimensions"], "transform": rendered["transform"], "render_metadata": rendered["render_metadata"]})
+    data = load_cards(store)
+    data.setdefault("cards", []).insert(0, record)
+    _save_cards(store, data)
+    return _payload(store, record)
+
+
+def ensure_set_card_drafts(store: WorkspaceStore, set_id: str) -> list[dict[str, Any]]:
+    set_path = store.root / "sets" / set_id / "set.json"
+    if not set_path.is_file():
+        raise ValueError(f"set {set_id} does not exist")
+    record = store.read_json(set_path, {})
+    if record.get("state") != "ready":
+        raise ValueError("a ready set is required before entering Frames")
+    return [create_card_from_set_item(store, set_id, str(item["set_item_id"]), str(item.get("source_label") or "")) for item in record.get("items", [])]
+
+
 def _preview_cache_key(card: dict[str, Any], source_path: Path, template: dict[str, Any]) -> str:
     payload = {
         "schema": PREVIEW_SCHEMA_VERSION,
@@ -265,6 +350,9 @@ def _preview_cache_key(card: dict[str, Any], source_path: Path, template: dict[s
         "frame_presets": FRAME_PRESETS,
         "treatment_versions": TREATMENT_VERSIONS,
         "label": card.get("label", "Experimental claimant"),
+        "set_id": card.get("set_id"),
+        "set_item_id": card.get("set_item_id"),
+        "finish_id": card.get("finish_id"),
     }
     return hashlib.sha256(json.dumps(payload, sort_keys=True).encode("utf-8")).hexdigest()[:20]
 
@@ -275,7 +363,7 @@ def card_previews(store: WorkspaceStore, card_id: str) -> list[dict[str, Any]]:
     record = next((item for item in data.get("cards", []) if item.get("card_id") == card_id), None)
     if not record:
         raise ValueError(f"card {card_id} does not exist")
-    _, item = _find_run_item(store, str(record["run_id"]), str(record["run_item_id"]))
+    _, item = _find_card_input(store, record)
     template = load_template(str(record.get("template_id") or "estate-card-v1"))
     cache_key = _preview_cache_key(record, item["_source_path"], template)
     cache_relative = Path("cards") / "previews" / card_id
@@ -373,7 +461,7 @@ def update_card_draft(store: WorkspaceStore, card_id: str, patch: dict[str, Any]
         data["cards"] = [updated if item.get("card_id") == card_id else item for item in data.get("cards", [])]
         _save_cards(store, data)
         return _payload(store, updated)
-    run, item = _find_run_item(store, str(record["run_id"]), str(record["run_item_id"]))
+    run, item = _find_card_input(store, record)
     framing = dict(record.get("framing") or {})
     incoming = patch.get("framing") or {}
     for key in ("zoom", "offset_x", "offset_y"):

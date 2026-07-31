@@ -46,42 +46,42 @@ primary paths only after the replacement flow passes end to end.
 
 ## Checklist
 
-- [ ] Define and document normalized Python and TypeScript types for candidate
+- [x] Define and document normalized Python and TypeScript types for candidate
   selection, finish summaries/details, sets, set items, and the three run
   purposes.
-- [ ] Add file-backed finish and set stores using the workspace's existing
+- [x] Add file-backed finish and set stores using the workspace's existing
   atomic JSON-write, locking, relative-path, and asset-URL rules.
-- [ ] Add read-time compatibility defaults for the current version-1 workspace,
+- [x] Add read-time compatibility defaults for the current version-1 workspace,
   runs without `purpose`, and cards without set provenance. Do not rewrite
   immutable historical run files just to add a default.
-- [ ] Extend the bootstrap payload with candidate selection, finish summaries,
+- [x] Extend the bootstrap payload with candidate selection, finish summaries,
   set summaries, and `active_set_id` while keeping current fields readable by
   the client during the staged implementation.
-- [ ] Add read-only list/detail endpoints for finishes and sets so later plans
+- [x] Add read-only list/detail endpoints for finishes and sets so later plans
   can add mutations without changing response shapes.
-- [ ] Expand hash routing and the stage navigator to the six named stages. Give
+- [x] Expand hash routing and the stage navigator to the six named stages. Give
   unfinished stages useful empty states and links back to their prerequisite.
-- [ ] Route old `#styles` links to Explore and keep existing `#frames/<id>` and
+- [x] Route old `#styles` links to Explore and keep existing `#frames/<id>` and
   `#completed` links refreshable.
-- [ ] Centralize run-purpose labels and stage eligibility helpers rather than
+- [x] Centralize run-purpose labels and stage eligibility helpers rather than
   scattering string checks through React components and server routes.
-- [ ] Add store/API tests for empty defaults, atomic writes, unknown IDs,
+- [x] Add store/API tests for empty defaults, atomic writes, unknown IDs,
   duplicate IDs, path safety, and serialization round trips.
-- [ ] Add UI routing tests for all six stages, legacy hashes, refresh, and empty
+- [x] Add UI routing tests for all six stages, legacy hashes, refresh, and empty
   prerequisite states.
-- [ ] Keep existing exploration, preview, framing, and completed tests passing
+- [x] Keep existing exploration, preview, framing, and completed tests passing
   throughout this foundation change.
 
 ## Acceptance checks
 
-- [ ] An existing workspace opens without destructive migration and its old
+- [x] An existing workspace opens without destructive migration and its old
   runs are classified as exploration history.
-- [ ] A new workspace exposes empty candidate/finish/set state and no active
+- [x] A new workspace exposes empty candidate/finish/set state and no active
   set.
-- [ ] All six stages are directly navigable and accurately explain what is
+- [x] All six stages are directly navigable and accurately explain what is
   missing.
-- [ ] No new mutation can yet start a finish trial or build a set.
-- [ ] `uv run pytest`, `npm test`, and `npm run build` pass.
+- [x] No new mutation can yet start a finish trial or build a set.
+- [x] `uv run pytest`, `npm test`, and `npm run build` pass.
 
 ## Out of scope
 

@@ -25,44 +25,44 @@ only the remaining selected project sources.
 
 ## Checklist
 
-- [ ] Add set creation validation for locked finish state, non-empty source
+- [x] Add set creation validation for locked finish state, non-empty source
   snapshot, anchor/source correspondence, unique source IDs, asset checksums,
   provider availability, reference limits, and active-run concurrency.
-- [ ] Atomically create the set manifest and anchor set items before queuing
+- [x] Atomically create the set manifest and anchor set items before queuing
   remaining work so refresh always explains what exists and what is pending.
-- [ ] Extend generation requests with the exact locked anchor-first reference
+- [x] Extend generation requests with the exact locked anchor-first reference
   stack and record that mapping per production item.
-- [ ] Skip generation for every anchor source and preserve its approved finish
+- [x] Skip generation for every anchor source and preserve its approved finish
   output byte-for-byte as the set item's art source.
-- [ ] Add the set-production runner, incremental status/cost updates, restart
+- [x] Add the set-production runner, incremental status/cost updates, restart
   interruption behavior, and aggregate accounting across retry runs.
-- [ ] Add retry for failed or interrupted set items. Reject attempts to rerun a
+- [x] Add retry for failed or interrupted set items. Reject attempts to rerun a
   successful item or to change recipe/references under the existing set ID.
-- [ ] Add **Build Set** controls showing the set name, locked finish, anchor
+- [x] Add **Build Set** controls showing the set name, locked finish, anchor
   subjects, remaining subjects, reference count, model, and exact number of
   paid image calls.
-- [ ] Build a source-ordered Set stage with anchor/generated badges, progress,
+- [x] Build a source-ordered Set stage with anchor/generated badges, progress,
   errors, retry actions, provenance details, and a coherent contact sheet.
-- [ ] Set a newly created set as active. Add explicit switching among historical
+- [x] Set a newly created set as active. Add explicit switching among historical
   sets without changing their finish or item membership.
-- [ ] Disable **Continue to Frames** until every source has a successful set
+- [x] Disable **Continue to Frames** until every source has a successful set
   item. A partial set remains inspectable and retryable.
-- [ ] Add fake-adapter tests for reference order, anchor skipping, source
+- [x] Add fake-adapter tests for reference order, anchor skipping, source
   snapshot immutability, no remaining sources, reference-limit failure,
   partial failure, retry idempotency, aggregate cost, and active-set switching.
-- [ ] Add UI tests for preflight summary, progress, anchor badges, partial
+- [x] Add UI tests for preflight summary, progress, anchor badges, partial
   failure/retry, ready gating, historical set switching, and refresh.
 
 ## Acceptance checks
 
-- [ ] Building from a locked finish makes no generation call for the approved
+- [x] Building from a locked finish makes no generation call for the approved
   anchor subjects and generates each remaining selected source once.
-- [ ] Each generated item records the original identity first, locked finish
+- [x] Each generated item records the original identity first, locked finish
   anchors next, and original references last in exact order.
-- [ ] Retrying failures cannot duplicate or replace successful set items.
-- [ ] Changing the workspace source selection after launch cannot alter the
+- [x] Retrying failures cannot duplicate or replace successful set items.
+- [x] Changing the workspace source selection after launch cannot alter the
   set's membership or order.
-- [ ] `uv run pytest`, `npm test`, and `npm run build` pass.
+- [x] `uv run pytest`, `npm test`, and `npm run build` pass.
 
 ## Out of scope
 

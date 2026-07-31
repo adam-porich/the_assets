@@ -14,13 +14,14 @@ from urllib.parse import parse_qs, unquote, urlparse
 
 import requests
 
-from tools.cards.pipeline import card_detail, card_previews, create_card_draft, list_card_drafts, list_templates, update_card_draft
+from tools.cards.pipeline import card_detail, card_previews, create_card_draft, create_card_from_set_item, ensure_set_card_drafts, list_card_drafts, list_templates, update_card_draft
 
 from .generation import DEFAULT_LIVE_MODEL_ID, fetch_model_catalogue, simulation_model, unavailable_live_model
 from .pexels import STARTER_PHOTO_IDS, get_pexels_photo, has_pexels_api_key, is_plausible_portrait, search_pexels
 from .recipes import STARTER_RECIPE, recipe_from_payload
 from .runs import RunManager
 from .workspace import WorkspaceError, WorkspaceStore, new_id, now_iso
+from .workflow import BASELINE_RUN_ID, CandidateSelectionStore, FinishStore, SetManager, SetStore, create_finish_trial, lock_finish, run_purpose, stage_eligibility
 
 
 _models_cache: tuple[list[dict[str, Any]], float] | None = None
@@ -51,11 +52,22 @@ def _models_for_store(store: WorkspaceStore) -> list[dict[str, Any]]:
 
 def _workspace_response(store: WorkspaceStore, manager: RunManager) -> dict[str, Any]:
     _ensure_starter_recipe(store)
+    finish_store = FinishStore(store)
+    set_manager = SetManager(store, manager)
+    sets = set_manager.list()
+    workspace = store.payload()
+    selection = workspace.get("candidate_selection")
+    baseline = BASELINE_RUN_ID if any(item.get("run_id") == BASELINE_RUN_ID and item.get("purpose") == "exploration" for item in manager.list()) else next((item.get("run_id") for item in manager.list() if item.get("purpose") == "exploration" and item.get("status") == "complete"), None)
     return {
         "ok": True,
-        "workspace": store.payload(),
+        "workspace": workspace,
         "runs": manager.list(),
         "cards": list_card_drafts(store),
+        "candidate_selection": selection,
+        "finishes": finish_store.list(),
+        "sets": sets,
+        "active_set_id": workspace.get("active_set_id"),
+        "baseline_exploration_run_id": baseline,
         "models": _models_for_store(store),
         "integrations": {
             "pexels": {"configured": has_pexels_api_key()},
@@ -204,7 +216,43 @@ class WorkbenchHandler(BaseHTTPRequestHandler):
                 return
             if path == "/api/cards":
                 include_discarded = parse_qs(parsed.query).get("include_discarded", ["false"])[0] == "true"
-                self.send_json({"ok": True, "cards": list_card_drafts(self.store, include_discarded)})
+                cards = list_card_drafts(self.store, include_discarded)
+                if parse_qs(parsed.query).get("active_set", ["false"])[0] == "true":
+                    active_set_id = self.store.read().get("active_set_id")
+                    cards = [card for card in cards if card.get("set_id") == active_set_id]
+                self.send_json({"ok": True, "cards": cards})
+                return
+            if path == "/api/candidate-selection":
+                selection = CandidateSelectionStore(self.store).current()
+                self.send_json({"ok": True, "candidate_selection": selection})
+                return
+            if path == "/api/finishes":
+                self.send_json({"ok": True, "finishes": FinishStore(self.store).list()})
+                return
+            match = re.fullmatch(r"/api/finish-trials/([^/]+)/compare", path)
+            if match:
+                other = parse_qs(parsed.query).get("with", [""])[0]
+                if not other:
+                    raise ValueError("cohort comparison requires a second trial id")
+                self.send_json({"ok": True, "comparison": self.manager.compare_finish_trials(match.group(1), other)})
+                return
+            match = re.fullmatch(r"/api/finishes/([^/]+)", path)
+            if match:
+                self.send_json({"ok": True, "finish": FinishStore(self.store).payload(FinishStore(self.store).read(match.group(1)))})
+                return
+            if path == "/api/sets":
+                self.send_json({"ok": True, "sets": SetManager(self.store, self.manager).list(), "active_set_id": self.store.read().get("active_set_id")})
+                return
+            if path == "/api/stages":
+                workspace = self.store.read()
+                selection = CandidateSelectionStore(self.store).current()
+                finishes = [FinishStore(self.store).read(item["finish_id"]) for item in FinishStore(self.store).list()]
+                sets = [SetManager(self.store, self.manager).get(item["set_id"]) for item in SetManager(self.store, self.manager).list()]
+                self.send_json({"ok": True, "stages": [stage_eligibility(stage, workspace, selection, finishes, sets) for stage in ("sources", "explore", "finish", "set", "frames", "completed")]})
+                return
+            match = re.fullmatch(r"/api/sets/([^/]+)", path)
+            if match:
+                self.send_json({"ok": True, "set": SetManager(self.store, self.manager).get(match.group(1))})
                 return
             match = re.fullmatch(r"/api/runs/([^/]+)/compare", path)
             if match:
@@ -342,8 +390,58 @@ class WorkbenchHandler(BaseHTTPRequestHandler):
                     int(payload.get("outputs_per_source", 1)),
                     str(payload.get("execution_mode") or ""),
                     _models_for_store(self.store),
+                    purpose=str(payload.get("purpose") or "exploration"),
                 )
                 self.send_json({"ok": True, "run": run, "workspace": self.store.payload()})
+                return
+            if path == "/api/candidate-selection":
+                payload = self._json()
+                refs = payload.get("items") or payload.get("selected_items") or []
+                selection = CandidateSelectionStore(self.store).save([dict(item) for item in refs])
+                self.send_json({"ok": True, "candidate_selection": selection, "workspace": self.store.payload()})
+                return
+            match = re.fullmatch(r"/api/candidate-selection/(remove|reorder)", path)
+            if match:
+                payload = self._json()
+                selection_store = CandidateSelectionStore(self.store)
+                if match.group(1) == "remove":
+                    selection = selection_store.clear_item(str(payload.get("run_id") or ""), str(payload.get("item_id") or payload.get("run_item_id") or ""))
+                else:
+                    selection = selection_store.reorder([dict(item) for item in payload.get("items") or []])
+                self.send_json({"ok": True, "candidate_selection": selection, "workspace": self.store.payload()})
+                return
+            if path == "/api/finish-trials":
+                payload = self._json()
+                selection = CandidateSelectionStore(self.store).current()
+                if not selection or int(payload.get("selection_revision", -1)) != int(selection.get("revision", -2)):
+                    raise ValueError("the current candidate selection revision is required")
+                trial = create_finish_trial(self.store, self.manager, selection, dict(payload.get("recipe") or {}), _models_for_store(self.store))
+                self.send_json({"ok": True, "run": trial})
+                return
+            match = re.fullmatch(r"/api/(?:finishes|finish-trials)/([^/]+)/lock", path)
+            if match:
+                finish_store = FinishStore(self.store)
+                selection = CandidateSelectionStore(self.store).current()
+                if not selection:
+                    raise ValueError("candidate selection no longer exists")
+                finish = lock_finish(self.store, self.manager._read(match.group(1)), selection, finish_store)
+                self.send_json({"ok": True, "finish": finish})
+                return
+            if path == "/api/sets":
+                payload = self._json()
+                result = SetManager(self.store, self.manager).build(str(payload.get("name") or ""), str(payload.get("finish_id") or ""), [str(item) for item in payload.get("source_ids")] if payload.get("source_ids") is not None else None, _models_for_store(self.store), str(payload.get("execution_mode") or "") or None)
+                self.send_json({"ok": True, "set": result, "workspace": self.store.payload()})
+                return
+            match = re.fullmatch(r"/api/sets/([^/]+)/(retry|switch|drafts)", path)
+            if match:
+                set_manager = SetManager(self.store, self.manager)
+                if match.group(2) == "retry":
+                    result = set_manager.retry(match.group(1), _models_for_store(self.store))
+                elif match.group(2) == "switch":
+                    result = set_manager.switch(match.group(1))
+                else:
+                    result = {"items": ensure_set_card_drafts(self.store, match.group(1))}
+                self.send_json({"ok": True, "set": result if match.group(2) != "drafts" else set_manager.get(match.group(1)), **({"cards": result["items"]} if match.group(2) == "drafts" else {})})
                 return
             match = re.fullmatch(r"/api/runs/([^/]+)/review", path)
             if match:
@@ -357,11 +455,11 @@ class WorkbenchHandler(BaseHTTPRequestHandler):
                 return
             if path == "/api/cards":
                 payload = self._json()
-                card = create_card_draft(
-                    self.store, str(payload.get("run_id") or ""), str(payload.get("run_item_id") or ""),
-                    str(payload.get("label") or "Experimental claimant"), str(payload.get("preset") or "bust"),
-                    str(payload.get("treatment") or "painterly"),
-                )
+                if payload.get("set_id") and payload.get("set_item_id"):
+                    card = create_card_from_set_item(self.store, str(payload["set_id"]), str(payload["set_item_id"]), str(payload.get("label") or ""), str(payload.get("preset") or "bust"), str(payload.get("treatment") or "painterly"))
+                else:
+                    # Deprecated compatibility endpoint for existing saved URLs.
+                    card = create_card_draft(self.store, str(payload.get("run_id") or ""), str(payload.get("run_item_id") or ""), str(payload.get("label") or "Experimental claimant"), str(payload.get("preset") or "bust"), str(payload.get("treatment") or "painterly"))
                 self.send_json({"ok": True, "card": card})
                 return
             match = re.fullmatch(r"/api/cards/([^/]+)/decision", path)

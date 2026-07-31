@@ -17,6 +17,7 @@ from .generation import (
 )
 from .recipes import recipe_from_payload
 from .workspace import WorkspaceStore, checksum, new_id, now_iso
+from .workflow import run_purpose
 
 
 class RunManager:
@@ -35,7 +36,11 @@ class RunManager:
         path = self._run_path(run_id)
         if not path.exists():
             raise ValueError(f"run {run_id} does not exist")
-        return self.store.read_json(path, {})
+        run = self.store.read_json(path, {})
+        # Compatibility default is intentionally in-memory only; historical
+        # immutable run.json files are never rewritten just to add purpose.
+        run.setdefault("purpose", "exploration")
+        return run
 
     def _write(self, run: dict[str, Any]) -> None:
         self.store.atomic_json(self._run_path(str(run["run_id"])), run)
@@ -47,15 +52,20 @@ class RunManager:
             if run.get("status") in {"queued", "running"}:
                 run["status"] = "interrupted"
                 run["error"] = "The workbench stopped while this run was active. Start it again to make a new request."
+                for item in run.get("items", []):
+                    if item.get("status") in {"queued", "running"}:
+                        item["status"] = "interrupted"
+                        item["error"] = run["error"]
                 run["updated_at"] = now_iso()
                 self.store.atomic_json(path, run)
 
     def _snapshot_file(self, source: Path, destination: Path) -> None:
         destination.parent.mkdir(parents=True, exist_ok=True)
-        try:
-            destination.hardlink_to(source)
-        except OSError:
-            shutil.copy2(source, destination)
+        # A hardlink would allow a later mutation of an Explore output or
+        # workspace source to mutate an allegedly immutable run input.
+        temporary = destination.with_name(f".{destination.name}.{new_id('snapshot')}.tmp")
+        shutil.copy2(source, temporary)
+        temporary.replace(destination)
 
     def create(
         self,
@@ -64,7 +74,16 @@ class RunManager:
         outputs_per_source: int,
         execution_mode: str,
         models: list[dict[str, Any]],
+        purpose: str = "exploration",
+        input_records: list[dict[str, Any]] | None = None,
+        style_reference_records: list[dict[str, Any]] | None = None,
+        selection_revision: int | None = None,
+        reference_stack: list[dict[str, Any]] | None = None,
+        resolved_instruction_override: str | None = None,
+        metadata: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
+        if purpose not in {"exploration", "finish", "set-production"}:
+            raise ValueError("purpose must be exploration, finish, or set-production")
         if outputs_per_source not in {1, 2, 3, 4}:
             raise ValueError("outputs_per_source must be between 1 and 4")
         if execution_mode not in {"live", "simulation"}:
@@ -101,17 +120,32 @@ class RunManager:
             capabilities = AdapterCapabilities.from_model(model)
             sources = {str(item["id"]): item for item in workspace.get("sources", [])}
             references = {str(item["id"]): item for item in workspace.get("references", [])}
-            missing_sources = [source_id for source_id in source_ids if source_id not in sources]
-            if missing_sources:
-                raise ValueError("source_ids contains a missing source")
+            if input_records is None:
+                missing_sources = [source_id for source_id in source_ids if source_id not in sources]
+                if missing_sources:
+                    raise ValueError("source_ids contains a missing source")
+            else:
+                if len(input_records) != len(source_ids) or {str(item.get("source_id")) for item in input_records} != set(source_ids):
+                    raise ValueError("input_records must contain exactly one immutable input for each source_id")
+                for input_record in input_records:
+                    if not self.store.absolute_path(str(input_record.get("input_path") or input_record.get("relative_path") or "")).is_file():
+                        raise ValueError("an immutable run input is missing")
             reference_ids = list(normalized_recipe.get("reference_ids") or [])
-            missing_references = [reference_id for reference_id in reference_ids if reference_id not in references]
-            if missing_references:
-                raise ValueError("recipe contains a missing style reference")
+            if style_reference_records is None:
+                missing_references = [reference_id for reference_id in reference_ids if reference_id not in references]
+                if missing_references:
+                    raise ValueError("recipe contains a missing style reference")
+            else:
+                reference_ids = [str(item.get("id") or item.get("reference_id") or f"reference_{index}") for index, item in enumerate(style_reference_records)]
+                normalized_recipe = {**normalized_recipe, "reference_ids": reference_ids}
             mapping = validate_request(normalized_recipe, len(reference_ids), capabilities)
             def persist(data: dict[str, Any]) -> None:
-                data["recipes"] = [normalized_recipe if item.get("id") == normalized_recipe["id"] else item for item in data["recipes"]]
-                data["active_recipe_id"] = normalized_recipe["id"]
+                # Explore edits update the mutable working recipe.  Finish and
+                # set-production runs may use immutable/pseudo reference IDs
+                # from their locked snapshots and must never rewrite it.
+                if purpose == "exploration":
+                    data["recipes"] = [normalized_recipe if item.get("id") == normalized_recipe["id"] else item for item in data["recipes"]]
+                    data["active_recipe_id"] = normalized_recipe["id"]
 
             self.store.mutate(persist)
 
@@ -119,17 +153,29 @@ class RunManager:
             run_dir = self.store.root / "runs" / run_id
             run_dir.mkdir(parents=True, exist_ok=True)
             source_snapshot: list[dict[str, Any]] = []
+            input_by_id = {str(item.get("source_id")): item for item in (input_records or [])}
             for source_id in source_ids:
-                source = sources[source_id]
-                destination = Path("runs") / run_id / "inputs" / "sources" / f"{source_id}{Path(source['relative_path']).suffix.lower()}"
-                self._snapshot_file(self.store.absolute_path(source["relative_path"]), self.store.absolute_path(destination))
-                source_snapshot.append({**source, "input_path": destination.as_posix(), "input_checksum_sha256": checksum(self.store.absolute_path(destination))})
+                source = input_by_id.get(source_id) or sources.get(source_id) or {"id": source_id, "label": source_id}
+                source_path = self.store.absolute_path(str(source.get("relative_path") or source.get("input_path")))
+                role = str(source.get("input_role") or ("workspace-source" if input_records is None else "generated-artifact"))
+                folder = "sources" if role == "workspace-source" else "candidates"
+                suffix = Path(str(source.get("relative_path") or source.get("input_path") or ".png")).suffix.lower() or ".png"
+                destination = Path("runs") / run_id / "inputs" / folder / f"{source_id}{suffix}"
+                self._snapshot_file(source_path, self.store.absolute_path(destination))
+                source_snapshot.append({
+                    **source, "id": source_id, "input_role": role, "input_path": destination.as_posix(),
+                    "input_checksum_sha256": checksum(self.store.absolute_path(destination)),
+                })
             reference_snapshot: list[dict[str, Any]] = []
+            reference_by_id = {str(item.get("id") or item.get("reference_id")): item for item in (style_reference_records or [])}
             for reference_id in reference_ids:
-                reference = references[reference_id]
-                destination = Path("runs") / run_id / "inputs" / "references" / f"{reference_id}{Path(reference['relative_path']).suffix.lower()}"
-                self._snapshot_file(self.store.absolute_path(reference["relative_path"]), self.store.absolute_path(destination))
-                reference_snapshot.append({**reference, "input_path": destination.as_posix(), "input_checksum_sha256": checksum(self.store.absolute_path(destination))})
+                reference = references.get(reference_id) or reference_by_id.get(reference_id)
+                if not reference:
+                    raise ValueError(f"unknown style reference {reference_id}")
+                source_path = self.store.absolute_path(str(reference.get("relative_path") or reference.get("input_path")))
+                destination = Path("runs") / run_id / "inputs" / "references" / f"{reference_id}{Path(str(reference.get('relative_path') or reference.get('input_path') or '.png')).suffix.lower() or '.png'}"
+                self._snapshot_file(source_path, self.store.absolute_path(destination))
+                reference_snapshot.append({**reference, "id": reference_id, "input_path": destination.as_posix(), "input_checksum_sha256": checksum(self.store.absolute_path(destination))})
             items: list[dict[str, Any]] = []
             for source in source_snapshot:
                 for output_index in range(outputs_per_source):
@@ -137,12 +183,16 @@ class RunManager:
                         "item_id": new_id("item"), "source_id": source["id"], "source_label": source.get("label"),
                         "output_index": output_index, "status": "queued", "output_path": None, "dimensions": None,
                         "seed": None, "elapsed_seconds": None, "usage": {}, "cost_usd": 0.0, "error": None,
+                        "reference_stack": [
+                            {"role": "identity", "source_id": source["id"], "path": source.get("input_path")},
+                            *[{"role": str(reference.get("role") or "style"), "id": reference.get("id"), "path": reference.get("input_path") or reference.get("relative_path")} for reference in (reference_stack or reference_snapshot)],
+                        ],
                     })
             created = now_iso()
             run = {
-                "run_id": run_id, "created_at": created, "updated_at": created, "status": "queued",
+                "run_id": run_id, "created_at": created, "updated_at": created, "status": "queued", "purpose": purpose,
                 "recipe_id": normalized_recipe["id"], "recipe_name": normalized_recipe["name"],
-                "recipe_snapshot": normalized_recipe, "resolved_instruction": resolved_run_instruction(normalized_recipe, capabilities),
+                "recipe_snapshot": normalized_recipe, "resolved_instruction": resolved_instruction_override or resolved_run_instruction(normalized_recipe, capabilities),
                 "benchmark_source_ids": source_ids, "sources_snapshot": source_snapshot, "references_snapshot": reference_snapshot,
                 "execution_mode": execution_mode, "model": normalized_recipe["model"], "quality": normalized_recipe["quality"],
                 "model_metadata": model, "requested_aspect_ratio": mapping["requested_aspect_ratio"],
@@ -153,6 +203,9 @@ class RunManager:
                 },
                 "outputs_per_source": outputs_per_source, "total_calls": len(items), "completed_calls": 0,
                 "usage": {}, "cost_usd": 0.0, "items": items, "verdict": "unreviewed", "note": "",
+                "selection_revision": selection_revision,
+                "reference_stack": reference_stack or [*reference_snapshot],
+                **(metadata or {}),
             }
             self._write(run)
             self._worker_active = True
@@ -199,6 +252,7 @@ class RunManager:
                         thumbnail.save(thumbnail_path, format="JPEG", quality=88)
                     item.update({
                         "status": "complete", "output_path": output_relative.as_posix(),
+                        "output_checksum_sha256": checksum(self.store.absolute_path(output_relative)),
                         "thumbnail_path": thumbnail_relative.as_posix(), "dimensions": result.dimensions,
                         "seed": result.seed, "elapsed_seconds": result.elapsed_seconds, "backend": result.backend,
                         "model": result.model, "usage": result.usage, "cost_usd": result.cost_usd, "error": None,
@@ -247,8 +301,17 @@ class RunManager:
                 "verdict": run.get("verdict", "unreviewed"), "created_at": run.get("created_at"),
                 "completed_calls": run.get("completed_calls", 0), "total_calls": run.get("total_calls", 0),
                 "execution_mode": run.get("execution_mode", "simulation"), "model": run.get("model"),
-                "cost_usd": run.get("cost_usd", 0.0),
+                "cost_usd": run.get("cost_usd", 0.0), "purpose": run_purpose(run),
+                "purpose_label": {"exploration": "Explore", "finish": "Finish trial", "set-production": "Set production"}.get(run_purpose(run), "Explore"),
+                "is_baseline": str(run.get("run_id")) == "run_59c947b99f90",
+                "selection_id": run.get("selection_id"),
+                "selection_revision": run.get("selection_revision"),
             })
+        baseline = next((item for item in result if item["is_baseline"] and item["purpose"] == "exploration"), None)
+        if baseline:
+            result = [baseline, *sorted((item for item in result if item is not baseline), key=lambda item: str(item.get("created_at") or ""), reverse=True)]
+        else:
+            result.sort(key=lambda item: str(item.get("created_at") or ""), reverse=True)
         return result
 
     def update_review(self, run_id: str, verdict: str, note: str = "") -> dict[str, Any]:
@@ -290,3 +353,30 @@ class RunManager:
             if first_value != second_value:
                 changes.append({"field": field, "first": first_value, "second": second_value})
         return {"first": self.payload(first), "second": self.payload(second), "same_benchmark": aligned, "rows": rows, "recipe_changes": changes}
+
+    def compare_finish_trials(self, first_id: str, second_id: str) -> dict[str, Any]:
+        first, second = self._read(first_id), self._read(second_id)
+        if run_purpose(first) != "finish" or run_purpose(second) != "finish":
+            raise ValueError("cohort comparison requires two Finish trials")
+        if first.get("selection_id") != second.get("selection_id") or first.get("selection_revision") != second.get("selection_revision"):
+            raise ValueError("Finish trials must come from the same candidate selection revision")
+        if first.get("status") != "complete" or second.get("status") != "complete":
+            raise ValueError("only complete Finish cohorts can be compared")
+        first_by_source = {str(item.get("source_id")): item for item in first.get("items", [])}
+        second_by_source = {str(item.get("source_id")): item for item in second.get("items", [])}
+        ordered_sources = [str(item.get("source_id")) for item in first.get("candidate_inputs", [])] or list(first_by_source)
+        rows = []
+        for source_id in ordered_sources:
+            first_item = first_by_source.get(source_id)
+            second_item = second_by_source.get(source_id)
+            rows.append({
+                "source_id": source_id,
+                "source_label": (first_item or second_item or {}).get("source_label"),
+                "first": self.payload({**first, "items": [first_item]})["items"][0] if first_item else None,
+                "second": self.payload({**second, "items": [second_item]})["items"][0] if second_item else None,
+            })
+        return {
+            "first": self.payload(first), "second": self.payload(second),
+            "selection_id": first.get("selection_id"), "selection_revision": first.get("selection_revision"),
+            "rows": rows,
+        }
