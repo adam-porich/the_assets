@@ -11,6 +11,13 @@ import pytest
 import requests
 from PIL import Image
 
+from tools.cards.amiga import (
+    amiga_palette,
+    load_amiga_style,
+    palette_is_ocs_12_bit,
+    quantize_amiga,
+    render_amiga,
+)
 from tools.cards.pipeline import (
     ART_WINDOW,
     PIXEL_LOGICAL_SIZE,
@@ -39,6 +46,11 @@ from tools.portraits.workspace import WorkspaceError, WorkspaceStore, checksum
 
 def fixture_image(path: Path, size: tuple[int, int] = (160, 220), colour: str = "#996b55") -> None:
     Image.new("RGB", size, colour).save(path)
+
+
+def image_colours(image: Image.Image) -> set[tuple[int, int, int]]:
+    raw = image.convert("RGB").tobytes()
+    return set(zip(raw[0::3], raw[1::3], raw[2::3]))
 
 
 def ready_store(tmp_path: Path) -> tuple[WorkspaceStore, dict]:
@@ -294,6 +306,44 @@ def test_estate_pixel_treatment_is_deterministic_palette_limited_and_nearest_ups
         for x in range(0, ART_WINDOW[0], 3):
             block = {pixels[x + dx, y + dy] for dx in range(3) for dy in range(3)}
             assert len(block) == 1
+
+
+def test_amiga_ocs_style_uses_one_fixed_hardware_compatible_palette() -> None:
+    style = load_amiga_style()
+    palette = amiga_palette(style)
+    assert style["id"] == "amiga-ocs-portrait-v1"
+    assert len(palette) == len(set(palette)) == 32
+    assert palette_is_ocs_12_bit(palette)
+
+
+def test_amiga_render_is_deterministic_palette_limited_and_pixel_native() -> None:
+    source = Image.new("RGB", (512, 512))
+    source.putdata([((x * 7) % 256, (y * 11) % 256, ((x + y) * 5) % 256) for y in range(512) for x in range(512)])
+    first = render_amiga(source, "Fixture claimant")
+    second = render_amiga(source, "Fixture claimant")
+    assert first.logical_art.size == (168, 138)
+    assert first.art.size == (336, 276)
+    assert first.card.size == (420, 600)
+    assert hashlib.sha256(first.card.tobytes()).digest() == hashlib.sha256(second.card.tobytes()).digest()
+    palette = set(amiga_palette())
+    assert image_colours(first.logical_art) <= palette
+    assert image_colours(first.card) <= palette
+    pixels = first.art.load()
+    for y in range(0, first.art.height, 2):
+        for x in range(0, first.art.width, 2):
+            assert len({pixels[x + dx, y + dy] for dx in range(2) for dy in range(2)}) == 1
+
+
+def test_amiga_ordered_dither_leaves_strong_edges_clean() -> None:
+    source = Image.new("RGB", (12, 8), "#887060")
+    for y in range(source.height):
+        for x in range(6, source.width):
+            source.putpixel((x, y), (238, 221, 204))
+    result = quantize_amiga(source)
+    palette = set(amiga_palette())
+    assert image_colours(result) <= palette
+    assert len({result.getpixel((5, y)) for y in range(result.height)}) == 1
+    assert len({result.getpixel((6, y)) for y in range(result.height)}) == 1
 
 
 def test_six_frame_previews_are_deterministic_invalidate_and_become_final_render(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

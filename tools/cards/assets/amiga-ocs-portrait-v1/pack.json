@@ -1,0 +1,32 @@
+{
+  "id": "amiga-ocs-portrait-v1-reference-pack",
+  "version": 1,
+  "purpose": "Stage-specific reference pair for the Amiga OCS Portrait v1 house style.",
+  "generation_references": [
+    {
+      "path": "generation-reference-01.png",
+      "role": "img2img pre-quantisation master",
+      "checksum_sha256": "68ca995a8d308963278a2047863886b382adc8cd1230d05952c017b659838efe",
+      "provenance": {
+        "kind": "generated",
+        "generator": "Codex built-in image generation",
+        "created_at": "2026-08-02"
+      }
+    }
+  ],
+  "target_examples": [
+    {
+      "path": "target-example-01.png",
+      "role": "human review target; never sent to img2img",
+      "checksum_sha256": "abebad5ec4628651caefd601567c0c6b3c549e1bbff6b20bb4fd21afe7631d2a"
+    }
+  ],
+  "generation_prompt": {
+    "intent": "Create a clean pre-quantisation portrait master for later reduction through the deterministic OCS renderer.",
+    "composition": "Square head-and-shoulders portrait with the subject inside a central 28:23 safe area and eyes near 42 percent from the top.",
+    "rendering": "Broad connected tonal shapes, deliberate edges, no more than five visible value steps per material, and minimal microtexture.",
+    "lighting": "Quiet upper-left key light with warm skin planes and cool reflected shadows.",
+    "palette_direction": "Muted charcoal, umber, rust, ochre, parchment, moss, and slate blue.",
+    "avoid": "Visible pixels, dithering, checker patterns, scanlines, CRT effects, text, borders, card frames, UI, props, and invented narrative elements."
+  }
+}
