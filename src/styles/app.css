@@ -88,6 +88,9 @@ code { color: #d6ba7e; overflow-wrap: anywhere; }
 .reference-strip { display: flex; gap: 14px; overflow-x: auto; }
 .reference-strip figure { width: 150px; flex: 0 0 150px; margin: 0; }
 .reference-strip img, .target-example img { width: 100%; aspect-ratio: 1; object-fit: cover; }
+.reference-pair { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.reference-pair figure { margin: 0; }
+.reference-pair figcaption { color: #a99d90; font-size: 11px; margin-top: 6px; }
 figcaption, .muted { color: #aaa095; font-size: 12px; margin-top: 7px; }
 .target-example img { image-rendering: pixelated; aspect-ratio: 336 / 276; }
 .target-example p { color: #e2ba77; font-size: 12px; }

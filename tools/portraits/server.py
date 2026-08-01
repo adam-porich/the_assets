@@ -114,7 +114,7 @@ def _cards(manager: CardProductionManager) -> list[dict[str, Any]]:
             detail = manager.get(str(batch["batch_id"]))
         except ValueError:
             continue
-        for item in detail.get("items", []):
+        for item in manager.latest_items(detail):
             if item.get("status") == "ready":
                 cards.append({**item, "batch_id": detail["batch_id"], "purpose": detail["purpose"], "style_version_id": detail["style_version_id"], "style_checksum_sha256": detail["style_checksum_sha256"]})
     return cards

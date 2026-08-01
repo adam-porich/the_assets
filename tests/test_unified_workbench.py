@@ -281,3 +281,39 @@ def test_simulation_is_preview_only_for_lock_and_normal_production(tmp_path: Pat
     styles.update_draft({"generation": simulation})
     with pytest.raises(ValueError, match="preview"):
         styles.lock_draft()
+
+
+class FailOnceSemanticAdapter(SemanticFakeGenerationAdapter):
+    def __init__(self, capabilities: AdapterCapabilities, state: dict[str, bool]) -> None:
+        super().__init__(capabilities)
+        self.state = state
+
+    def generate(self, request):
+        if not self.state["failed"]:
+            self.state["failed"] = True
+            raise RuntimeError("semantic test provider failed once")
+        return super().generate(request)
+
+
+def test_failed_retry_and_try_another_keep_attempt_provenance(tmp_path: Path) -> None:
+    store = WorkspaceStore(tmp_path / "library")
+    styles = StyleStore(store)
+    item = source(store, "retryable")
+    preview = simulation_trial_style(styles)
+    state = {"failed": False}
+    manager = CardProductionManager(store, styles, lambda mode, capabilities: FailOnceSemanticAdapter(capabilities, state))
+    failed = wait_for(manager, manager.create([item["id"]], preview, [simulation_model()], purpose="style-trial")["batch_id"])
+    failed_item = failed["items"][0]
+    assert failed["status"] == "failed"
+    assert failed_item["generation_request"]["target_examples_excluded"] is True
+    retried = wait_for(manager, manager.retry_failed(failed["batch_id"])["batch_id"])
+    assert retried["status"] == "ready"
+    ready_item = retried["items"][-1]
+    assert ready_item["attempt_number"] == 2
+    assert ready_item["lineage_id"] == failed_item["lineage_id"]
+    another = wait_for(manager, manager.try_another(retried["batch_id"], item["id"])["batch_id"])
+    attempts = [candidate for candidate in another["items"] if candidate["source_id"] == item["id"]]
+    assert len(attempts) == 3
+    assert [candidate["attempt_number"] for candidate in attempts] == [1, 2, 3]
+    assert len({candidate["master_url"] for candidate in attempts if candidate.get("master_url")}) == 2
+    assert another["progress"]["total_attempts"] == 3

@@ -177,7 +177,7 @@ class CardProductionManager:
             "attempt_number": attempt_number, "lineage_id": lineage_id, "status": "queued", "phase": "queued", "error": None,
             "source_input_path": source["input_path"], "source_input_checksum_sha256": source["input_checksum_sha256"],
             "reference_stack": [{"role": "identity", "source_id": source["id"], "input_path": source["input_path"], "checksum_sha256": source["input_checksum_sha256"]}, *[
-                {"role": "generation-reference", "reference_id": reference["id"], "input_path": reference["input_path"], "checksum_sha256": reference["input_checksum_sha256"]} for reference in references
+                {"role": "generation-reference", "reference_id": reference["id"], "label": reference.get("label") or reference["id"], "input_path": reference["input_path"], "checksum_sha256": reference["input_checksum_sha256"]} for reference in references
             ]],
             "framing": None, "render_revision": 0, "render_revisions": [], "master_path": None, "master_checksum_sha256": None,
             "logical_art_path": None, "art_path": None, "card_path": None, "card_checksum_sha256": None,
@@ -234,7 +234,7 @@ class CardProductionManager:
                     item.update({"status": "failed", "phase": "failed", "error": str(exc), "finished_at": now_iso()})
                 self._update_totals(record); record["updated_at"] = now_iso(); self._write(record)
             self._update_totals(record)
-            statuses = [item.get("status") for item in record["items"]]
+            statuses = [item.get("status") for item in self.latest_items(record)]
             record["status"] = "ready" if statuses and all(status == "ready" for status in statuses) else "ready-with-errors" if any(status == "ready" for status in statuses) else "failed"
             record["finished_at"] = now_iso(); record["updated_at"] = now_iso(); self._write(record)
         except Exception as exc:
@@ -252,6 +252,17 @@ class CardProductionManager:
         record["usage"] = {key: value for key, value in {key: sum(float(item.get("usage", {}).get(key, 0) or 0) for item in record["items"] if isinstance(item.get("usage", {}).get(key), (int, float))) for key in {key for item in record["items"] for key in (item.get("usage") or {})}}.items()}
         costs = [item.get("cost_usd") for item in record["items"] if isinstance(item.get("cost_usd"), (int, float))]
         record["cost_usd"] = round(sum(costs), 8) if costs else None
+
+    @staticmethod
+    def latest_items(record: dict[str, Any]) -> list[dict[str, Any]]:
+        """Return the current attempt for each selected source, preserving source order."""
+        latest: dict[str, dict[str, Any]] = {}
+        for item in record.get("items", []):
+            source_id = str(item.get("source_id"))
+            previous = latest.get(source_id)
+            if previous is None or int(item.get("attempt_number", 0)) >= int(previous.get("attempt_number", 0)):
+                latest[source_id] = item
+        return [latest[str(source_id)] for source_id in record.get("selected_source_ids", []) if str(source_id) in latest]
 
     def _render_item(self, record: dict[str, Any], item: dict[str, Any], framing: dict[str, float] | None) -> None:
         style = validate_style(record["style_snapshot"], require_locked=record["purpose"] == "card-production")
@@ -285,7 +296,8 @@ class CardProductionManager:
     @staticmethod
     def progress(record: dict[str, Any]) -> dict[str, Any]:
         items = record.get("items", [])
-        return {"selected_sources": len(record.get("selected_source_ids", [])), "ready_cards": sum(item.get("status") == "ready" for item in items), "approved_cards": 0, "failed_sources": len({item.get("source_id") for item in items if item.get("status") == "failed"}), "paid_calls": int(record.get("paid_calls") or 0), "total_attempts": len(items)}
+        current = CardProductionManager.latest_items(record)
+        return {"selected_sources": len(record.get("selected_source_ids", [])), "ready_cards": sum(item.get("status") == "ready" for item in current), "approved_cards": 0, "failed_sources": len({item.get("source_id") for item in current if item.get("status") in {"failed", "interrupted"}}), "paid_calls": int(record.get("paid_calls") or 0), "total_attempts": len(items)}
 
     def get(self, batch_id: str) -> dict[str, Any]:
         return self.payload(self._read(batch_id))
@@ -320,7 +332,7 @@ class CardProductionManager:
             if self._active_batch: raise ValueError("one paid generation batch is already active; wait for it to finish")
             record = self._read(batch_id)
             self._require_action_consent(record, consent)
-            source_ids = list(dict.fromkeys(str(item["source_id"]) for item in record["items"] if item.get("status") in {"failed", "interrupted"}))
+            source_ids = [str(item["source_id"]) for item in self.latest_items(record) if item.get("status") in {"failed", "interrupted"}]
             if not source_ids: raise ValueError("this batch has no failed or interrupted sources to retry")
             for source_id in source_ids: self._append_attempt(record, source_id)
             record.setdefault("generation_authorization", {"required": record.get("model_capabilities", {}).get("execution_mode") == "live"})["last_action"] = {"action": "retry", "consent": bool(consent), "granted_at": now_iso() if consent else None}

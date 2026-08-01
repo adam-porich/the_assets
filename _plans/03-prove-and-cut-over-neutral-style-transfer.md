@@ -21,29 +21,29 @@
 
 ## Acceptance guardrails
 
-- [ ] Define a short human rubric with independent checks for identity,
+- [x] Define a short human rubric with independent checks for identity,
   neutralisation, composition, master quality, Amiga treatment, and card
   legibility.
-- [ ] Reject a draft when outputs merely filter the source photograph, retain
+- [x] Reject a draft when outputs merely filter the source photograph, retain
   strong expressions/poses, invent distracting narrative details, become
   generic faces, or attempt to generate their own pixel effects/card frame.
-- [ ] Require cohort-level coherence; do not activate a version by selecting
+- [x] Require cohort-level coherence; do not activate a version by selecting
   isolated successes from different prompt/reference configurations.
-- [ ] Preserve failed and rejected attempts as provenance without exposing
+- [x] Preserve failed and rejected attempts as provenance without exposing
   them as approved cards.
-- [ ] Confirm framing adjustments cannot hide a failed neutralisation step and
+- [x] Confirm framing adjustments cannot hide a failed neutralisation step and
   never trigger generation.
 
 ## Cutover and documentation
 
 - [ ] Activate the proven live style as a new immutable version without
   rewriting existing batches or approvals.
-- [ ] Update README and workbench documentation to describe the canonical
+- [x] Update README and workbench documentation to describe the canonical
   master and show the exact source → neutral master → Amiga art → card path.
-- [ ] Add a checked-in review sheet or manifest showing the calibration cohort
+- [x] Add a checked-in review sheet or manifest showing the calibration cohort
   at every artifact stage; do not commit paid provider credentials or
   unrestricted workspace data.
-- [ ] Run Python tests, UI tests, TypeScript build, `git diff --check`, and an
+- [x] Run Python tests, UI tests, TypeScript build, `git diff --check`, and an
   empty-workspace smoke test.
 - [ ] Move these completed plans to `_notes/archived`, commit the implementation
   in coherent increments, push the branch, and leave the worktree clean.

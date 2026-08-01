@@ -49,4 +49,31 @@ describe("unified workbench", () => {
     await act(async () => make?.click());
     expect(api.createProduction).toHaveBeenCalledWith(["source-1"], style.identity.style_version_id, true);
   });
+
+  it("labels simulation as preview-only and blocks normal production", async () => {
+    const previewStyle = { ...style, generation: { ...style.generation, model_id: "fake/amiga-ocs-deterministic", execution_mode: "simulation" as const } };
+    vi.spyOn(api, "bootstrap").mockResolvedValue({ ...base, style: { ...base.style, active: previewStyle }, models: [{ id: "fake/amiga-ocs-deterministic", name: "Simulation", execution_mode: "simulation" as const, available: true, credentials_configured: true, max_input_references: 9, qualities: ["low"], aspect_ratios: ["5:4"], pricing: [{ cost_usd: 0 }] }] } as never);
+    await act(async () => root.render(<App />));
+    expect(container.textContent).toContain("simulation-only");
+    const make = [...container.querySelectorAll("button")].find((button) => button.textContent?.includes("Make 1 card"));
+    expect(make?.disabled).toBe(true);
+  });
+
+  it("shows an actionable missing-key message for live production", async () => {
+    const blockedModel = { ...base.models[0], credentials_configured: false, available: true };
+    vi.spyOn(api, "bootstrap").mockResolvedValue({ ...base, models: [blockedModel] } as never);
+    await act(async () => root.render(<App />));
+    expect(container.textContent).toContain("OPENROUTER_API_KEY is missing");
+  });
+
+  it("exposes capability-backed execution mode and model controls in Style Studio", async () => {
+    const draft = { ...style, identity: { ...style.identity, state: "draft" as const, style_version_id: "draft-style" } };
+    vi.spyOn(api, "bootstrap").mockResolvedValue({ ...base, style: { ...base.style, draft } } as never);
+    vi.spyOn(api, "updateDraft").mockResolvedValue({ style: draft } as never);
+    window.location.hash = "#style";
+    await act(async () => root.render(<App />));
+    expect(container.textContent).toContain("Execution mode");
+    expect(container.textContent).toContain("Capability-backed model");
+    expect([...container.querySelectorAll("option")].some((option) => option.textContent?.includes("Live image model"))).toBe(true);
+  });
 });
