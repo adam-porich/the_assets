@@ -4,13 +4,13 @@ Portrait Workbench turns selected source portraits into finished, pixel-native
 cards through one explicit path:
 
 ```text
-Sources → Cards
+Sources → Pipelines → Cards
 ```
 
-The active house style is **Amiga OCS Portrait v1**. Its locked pipeline owns
-the generation direction, ordered image references, framing, fixed-palette
-rendering, and card assembly as one versioned contract. Style Studio is opened
-from the active-style chip when that contract needs to evolve.
+The active house pipeline owns the generation direction, ordered image
+references, framing, fixed-palette rendering, and card assembly as one
+versioned contract. Saved versions and working configurations are first-class
+assets with their own produced-card history.
 
 ## Start it
 
@@ -25,39 +25,40 @@ checked-in live Amiga neutral-portrait style and its reference assets without
 making a generation call. Set `PEXELS_API_KEY` to enable Pexels search and
 starter imports, and configure `OPENROUTER_API_KEY` before live generation.
 The capability catalogue is resolved from OpenRouter image endpoints; a local
-simulation remains available only for free Style Studio preview trials.
+simulation remains available only for free pipeline preview trials.
 
 ## Browser surfaces
 
 ### Sources
 
 Upload, search, inspect provenance, and select an ordered set of source images.
-The page shows the exact number of calls, model, execution mode, and available
-cost before the primary **Make N cards with Amiga OCS Neutral Portrait v3** action.
+The page keeps that identity set stable while pipelines change. It shows the
+active pipeline, exact call count, model, and available unit cost before a run.
+Generation starts immediately from the explicit run action.
+
+### Pipelines
+
+Saved versions and the current working pipeline sit side-by-side with sample
+outputs. The pipeline anatomy makes the complete source + reference → generated
+master → Amiga art → assembled card path visible. A working configuration can
+change the model direction, ordered references, renderer values, and card
+values, then run the same three-source comparison cohort repeatedly. Each
+checksum keeps its own result column.
 
 ### Cards
 
-Each selected source gets one immutable live generation attempt by default. A
-card slot first redraws the source into a canonical neutral portrait master,
-then stays in progress until that master has been rendered into 336×276 art
-and a complete 420×600 card. Reviewers can approve a ready card, make one
-additional **Try another** attempt, adjust framing without generation, retry a
-failed source, download an individual PNG, or download the ordered approved
-bundle and manifest.
-
-### Style Studio
-
-The header chip opens Style Studio. A draft is derived from the active locked
-version. It can change the generation direction, ordered generation references,
-Amiga processing values, and card values. Up to three representative sources
-can run an integrated trial. Only a complete trial whose draft checksum still
-matches can be locked and activated.
+Cards are shown as a source-by-pipeline matrix: rows keep identity constant and
+columns expose each stored pipeline checksum. Open a result to inspect its
+source, generated master, rendered art, final card, and provenance. **New
+result** adds an attempt immediately; framing changes rerender the existing
+master without another model call. Approval and bundle gates are intentionally
+absent while the visual pipeline is still being developed.
 
 ## Routes
 
-The refreshable hashes are `#sources`, `#cards`, `#cards/<batch-id>/<item-id>`,
-and `#style`. Superseded hashes redirect to the nearest current surface and do
-not expose an additional workflow.
+The refreshable hashes are `#sources`, `#pipelines`,
+`#pipelines/<pipeline-id>`, `#cards`, and
+`#cards/<batch-id>/<item-id>`. Superseded style hashes redirect to Pipelines.
 
 ## Pipeline and provenance
 
@@ -75,18 +76,18 @@ identity source + ordered generation references
   → exact 2× enlargement to 420×600 card
 ```
 
-The canonical master is an inspectable provenance artifact; the final card is
-the everyday approval artifact. Every locked style, batch, attempt, render
-revision, and approval records the source snapshot, resolved instruction and
-negative instruction, ordered reference mapping, model/provider capabilities,
-execution mode, usage/cost, framing transform, and output checksums. Target
-examples are visible for review and golden tests, but are structurally
-excluded from provider payloads.
+The canonical master and final card are inspectable provenance artifacts.
+Every locked pipeline, batch, attempt, and render revision records the source
+snapshot, resolved instruction and negative instruction, ordered reference
+mapping, model/provider capabilities, execution mode, usage/cost, framing
+transform, and output checksums. Target examples are visible as renderer proof
+assets, but are structurally excluded from provider payloads.
 
-Live production, trials, retries, and **Try another** each require an explicit
-confirmation. The Sources action shows the selected live model, call count,
-and known/unknown cost before it can be used. Simulation output is labelled as
-a preview and cannot be used to lock or activate a production style.
+Live runs, comparison cohorts, retries, and **New result** are explicit button
+actions and do not add a second confirmation modal. The UI keeps model, call
+count, and known/unknown cost adjacent to the run action, and the API records
+authorization for live calls. Simulation output is labelled as a preview and
+cannot be used to save and activate a production pipeline.
 
 Workspace data is stored below `portrait-library/`:
 

@@ -116,7 +116,17 @@ def _cards(manager: CardProductionManager) -> list[dict[str, Any]]:
             continue
         for item in manager.latest_items(detail):
             if item.get("status") == "ready":
-                cards.append({**item, "batch_id": detail["batch_id"], "purpose": detail["purpose"], "style_version_id": detail["style_version_id"], "style_checksum_sha256": detail["style_checksum_sha256"]})
+                identity = detail.get("style_snapshot", {}).get("identity", {})
+                cards.append({
+                    **item,
+                    "batch_id": detail["batch_id"],
+                    "batch_created_at": detail["created_at"],
+                    "purpose": detail["purpose"],
+                    "style_version_id": detail["style_version_id"],
+                    "style_checksum_sha256": detail["style_checksum_sha256"],
+                    "pipeline_label": identity.get("label") or detail["style_version_id"],
+                    "pipeline_version": identity.get("version"),
+                })
     return cards
 
 

@@ -1,24 +1,30 @@
-import { useEffect, useState, type ChangeEvent } from "react";
+import { useEffect, useMemo, useState, type ChangeEvent } from "react";
 import { api } from "./api";
-import type { Bootstrap, Framing, Model, PipelineStyle, ProductionBatch, ProductionItem, SearchResult } from "./types";
+import type { Bootstrap, Framing, Model, PipelineStyle, PipelineVersion, ProducedCard, ProductionBatch, SearchResult, Source } from "./types";
 
 type Notice = (message: string, kind?: "success" | "error") => void;
 type Shared = { bootstrap: Bootstrap; navigate: (hash: string) => void; refresh: () => Promise<void>; notify: Notice };
 
 function formatCost(value: number | null | undefined) {
-  return value == null ? "Cost returned by provider" : value === 0 ? "$0 simulation" : `$${value.toFixed(4)}`;
+  return value == null ? "provider-priced" : value === 0 ? "$0 simulation" : `$${value.toFixed(4)}`;
 }
 function modelCost(model: Model | undefined) { return formatCost(model?.pricing?.[0]?.cost_usd as number | undefined); }
+function isActive(status: string) { return ["queued", "running", "processing"].includes(status); }
+function versionName(version: number | null | undefined) { return version ? `Pipeline ${String(version).padStart(2, "0")}` : "Working pipeline"; }
+function shortChecksum(value: string) { return value.slice(0, 8); }
+function selectedSources(bootstrap: Bootstrap) {
+  return bootstrap.selected_source_ids.map((id) => bootstrap.sources.find((source) => source.id === id)).filter(Boolean) as Source[];
+}
 
 export function SourcesView({ bootstrap, navigate, refresh, notify }: Shared) {
   const [selected, setSelected] = useState(bootstrap.selected_source_ids);
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<SearchResult[]>([]);
   const [busy, setBusy] = useState("");
-  const style = bootstrap.style.active;
-  const model = bootstrap.models.find((entry) => entry.id === style.generation.model_id && entry.execution_mode === style.generation.execution_mode);
-  const activeBatch = bootstrap.batches.find((batch) => ["queued", "running", "processing"].includes(batch.status));
-  const referenceCount = style.reference_pack.assets.filter((asset) => asset.role === "generation-reference").length;
+  const pipeline = bootstrap.style.active;
+  const model = bootstrap.models.find((entry) => entry.id === pipeline.generation.model_id && entry.execution_mode === pipeline.generation.execution_mode);
+  const activeBatch = bootstrap.batches.find((batch) => isActive(batch.status));
+  const referenceCount = pipeline.reference_pack.assets.filter((asset) => asset.role === "generation-reference").length;
   useEffect(() => setSelected(bootstrap.selected_source_ids), [bootstrap.selected_source_ids.join(",")]);
 
   async function saveSelection(next: string[]) {
@@ -36,14 +42,12 @@ export function SourcesView({ bootstrap, navigate, refresh, notify }: Shared) {
     setBusy("upload");
     try { await api.uploadSource(file, file.name.replace(/\.[^.]+$/, "")); await refresh(); notify("Source image uploaded"); } catch (error) { notify((error as Error).message, "error"); } finally { setBusy(""); event.target.value = ""; }
   }
-  async function makeCards() {
+  async function runPipeline() {
     if (!selected.length || !model) return;
-    const live = style.generation.execution_mode === "live";
-    if (live && !window.confirm(`Generate ${selected.length} neutral portrait master${selected.length === 1 ? "" : "s"} with ${model.name}? This uses ${selected.length} paid image call${selected.length === 1 ? "" : "s"}.`)) return;
-    setBusy("make");
+    setBusy("run");
     try {
-      const response = await api.createProduction(selected, style.identity.style_version_id, live);
-      notify("Neutral portrait generation started");
+      const response = await api.createProduction(selected, pipeline.identity.style_version_id, pipeline.generation.execution_mode === "live");
+      notify(`${selected.length}-source pipeline run started`);
       navigate(`#cards/${response.batch.batch_id}`);
       await refresh();
     } catch (error) { notify((error as Error).message, "error"); } finally { setBusy(""); }
@@ -51,130 +55,198 @@ export function SourcesView({ bootstrap, navigate, refresh, notify }: Shared) {
   const problem = !selected.length
     ? "Select at least one source image."
     : activeBatch
-      ? "A generation batch is already active."
-      : style.generation.execution_mode !== "live"
-        ? "This style is simulation-only and can make preview cards in Style Studio, but cannot run production."
+      ? "A pipeline run is already active."
+      : pipeline.generation.execution_mode !== "live"
+        ? "The active pipeline is simulation-only. Open Pipelines to switch it back to live generation."
         : !model
-          ? "The active live model is not in the current capability catalogue."
+          ? "The active pipeline model is not in the current capability catalogue."
           : !model.available
-            ? "The selected live model is unavailable; choose an available model in Style Studio."
+            ? "The active pipeline model is unavailable; choose another model in Pipelines."
             : !model.credentials_configured
-              ? "OPENROUTER_API_KEY is missing; configure live image generation before making cards."
+              ? "OPENROUTER_API_KEY is missing; configure live image generation before running this set."
               : model.max_input_references < 1 + referenceCount
-                ? `The active model accepts ${model.max_input_references} references, but this style needs ${1 + referenceCount}. Reduce the ordered style references or choose another model.`
-                : model.qualities.length > 0 && !model.qualities.includes(style.generation.quality)
-                  ? `The active model does not support ${style.generation.quality} quality.`
+                ? `The active model accepts ${model.max_input_references} references, but this pipeline needs ${1 + referenceCount}.`
+                : model.qualities.length > 0 && !model.qualities.includes(pipeline.generation.quality)
+                  ? `The active model does not support ${pipeline.generation.quality} quality.`
                   : "";
 
   return <section className="page sources-page">
     <div className="page-heading">
-      <div><p className="eyebrow">Sources</p><h2>Choose the images that become cards</h2><p>Select and order portrait sources. Each selected source is redrawn as a calm, neutral Amiga portrait before card assembly.</p></div>
-      <span className="status-chip">{selected.length} selected</span>
+      <div><p className="eyebrow">Source library</p><h2>Choose the identity inputs</h2><p>Keep a broad library, then pin the same source set while you compare pipeline changes.</p></div>
+      <span className="status-chip">{selected.length} in current set</span>
     </div>
     <section className="surface source-management">
-      <div className="panel-heading"><div><p className="eyebrow">Add source images</p><h3>Project library</h3></div><label className="button secondary file-button">Upload image<input aria-label="Upload source image" type="file" accept="image/*" onChange={upload} /></label></div>
+      <div className="panel-heading"><div><p className="eyebrow">Add sources</p><h3>Project library</h3></div><label className="button secondary file-button">Upload image<input aria-label="Upload source image" type="file" accept="image/*" onChange={upload} /></label></div>
       <form className="search-row" onSubmit={(event) => { event.preventDefault(); void search(); }}><input aria-label="Search source images" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search Pexels portraits" /><button className="button secondary" disabled={busy === "search"}>{busy === "search" ? "Searching…" : "Search"}</button></form>
-      {results.length > 0 && <div className="search-results">{results.map((result) => <article key={result.pexels_photo_id}><img src={result.preview_url || result.selected_image_url} alt={result.label || result.photographer || "Search result"} /><div><strong>{result.photographer || "Portrait source"}</strong><button className="button secondary" onClick={() => void api.importSources([result]).then(() => refresh()).then(() => notify("Source image added")).catch((error) => notify((error as Error).message, "error"))}>Add source</button></div></article>)}</div>}
+      {results.length > 0 && <div className="search-results">{results.map((result) => <article key={result.pexels_photo_id}><img src={result.preview_url || result.selected_image_url} alt={result.label || result.photographer || "Search result"} /><div><strong>{result.photographer || "Portrait source"}</strong><button type="button" className="button secondary" onClick={() => void api.importSources([result]).then(() => refresh()).then(() => notify("Source image added")).catch((error) => notify((error as Error).message, "error"))}>Add source</button></div></article>)}</div>}
     </section>
     <section className="source-library">
-      {bootstrap.sources.length === 0 ? <div className="surface empty-panel"><span className="empty-glyph">＋</span><h3>No source images yet</h3><p>Add an upload or search Pexels above. Nothing is sent to a generation provider until you make cards.</p></div> : <div className="source-grid">{bootstrap.sources.map((source) => { const order = selected.indexOf(source.id); return <article className={`surface source-tile ${order >= 0 ? "selected" : ""}`} key={source.id}><button className="source-select" aria-pressed={order >= 0} onClick={() => void saveSelection(order >= 0 ? selected.filter((id) => id !== source.id) : [...selected, source.id])}>{source.image_url && <img src={source.image_url} alt={source.label} />}<span>{source.label}</span>{order >= 0 && <b>#{order + 1}</b>}</button><button className="text-button danger" onClick={async () => { if (!window.confirm(`Delete ${source.label}?`)) return; try { await api.deleteSource(source.id); await refresh(); notify("Source removed"); } catch (error) { notify((error as Error).message, "error"); } }}>Remove</button></article>; })}</div>}
+      {bootstrap.sources.length === 0 ? <div className="surface empty-panel"><span className="empty-glyph">＋</span><h3>No source images yet</h3><p>Add an upload or search Pexels above.</p></div> : <div className="source-grid">{bootstrap.sources.map((source) => { const order = selected.indexOf(source.id); return <article className={`surface source-tile ${order >= 0 ? "selected" : ""}`} key={source.id}><button className="source-select" aria-pressed={order >= 0} onClick={() => void saveSelection(order >= 0 ? selected.filter((id) => id !== source.id) : [...selected, source.id])}>{source.image_url && <img src={source.image_url} alt={source.label} />}<span>{source.label}</span>{order >= 0 && <b>{String(order + 1).padStart(2, "0")}</b>}</button><button className="text-button danger" onClick={async () => { if (!window.confirm(`Delete ${source.label}?`)) return; try { await api.deleteSource(source.id); await refresh(); notify("Source removed"); } catch (error) { notify((error as Error).message, "error"); } }}>Remove</button></article>; })}</div>}
     </section>
-    <section className="surface make-cards-panel">
-      <div><p className="eyebrow">Active house style</p><h3>{style.identity.label}</h3><p><strong>{style.generation.execution_mode === "live" ? "Live image generation" : "Simulation preview"}</strong> · {model?.name || style.generation.model_id} · {selected.length} call{selected.length === 1 ? "" : "s"} · {modelCost(model)}</p><p className="muted">Source image first for identity evidence, then {referenceCount} ordered house-style reference{referenceCount === 1 ? "" : "s"}. The target example is review-only.</p></div>
-      <button className="button primary large" disabled={Boolean(problem) || Boolean(busy) || Boolean(activeBatch)} onClick={() => void makeCards()}>{busy === "make" ? "Starting…" : `Make ${selected.length} card${selected.length === 1 ? "" : "s"} with ${style.identity.label}`}</button>
-      {problem && <p className="validation-note" role="status">{problem}</p>}
+    <section className="surface pipeline-launcher">
+      <div className="launcher-flow"><div><p className="eyebrow">Current source set</p><strong>{selected.length} identities</strong></div><i>→</i><button className="pipeline-token" onClick={() => navigate("#pipelines")}><small>Active pipeline · v{pipeline.identity.version}</small><strong>{pipeline.identity.label}</strong><span>{model?.name || pipeline.generation.model_id} · {referenceCount} refs</span></button><i>→</i><div><p className="eyebrow">Expected output</p><strong>{selected.length} cards</strong></div></div>
+      <div className="launcher-action"><p>{selected.length} generation call{selected.length === 1 ? "" : "s"} · {modelCost(model)} each. Runs start immediately so comparison sets stay easy to replenish.</p><button className="button primary large" disabled={Boolean(problem) || Boolean(busy)} onClick={() => void runPipeline()}>{busy === "run" ? "Starting pipeline…" : `Run ${selected.length} source${selected.length === 1 ? "" : "s"}`}</button>{problem && <p className="validation-note" role="status">{problem}</p>}</div>
     </section>
   </section>;
 }
 
-function latestItems(batch: ProductionBatch, selectedIds: string[]) {
-  return selectedIds.map((sourceId) => batch.items?.filter((item) => item.source_id === sourceId).sort((a, b) => b.attempt_number - a.attempt_number)[0]).filter(Boolean).sort((a, b) => Number(b.status === "ready") - Number(a.status === "ready")) as ProductionItem[];
-}
-function phaseLabel(item: ProductionItem) {
-  if (item.phase === "redrawing neutral portrait" || item.status === "generating") return "Redrawing neutral portrait…";
-  if (item.phase === "applying Amiga rendering and assembling card" || item.status === "processing") return "Applying Amiga rendering and assembling card…";
-  if (item.status === "queued") return "Queued for neutral redraw";
-  if (item.status === "failed") return "Generation failed";
-  if (item.status === "interrupted") return "Generation interrupted";
-  return "Finished card ready for review";
+type PipelineCard = PipelineVersion & { outputCount: number; samples: ProducedCard[] };
+
+function pipelineResults(cards: ProducedCard[], styleId: string, checksum?: string) {
+  return cards.filter((card) => card.style_version_id === styleId && (!checksum || card.style_checksum_sha256 === checksum));
 }
 
-function Provenance({ item, batch }: { item: ProductionItem; batch: ProductionBatch }) {
-  const refs = item.reference_stack.filter((reference) => reference.role === "generation-reference");
-  return <details>
-    <summary>How this was made</summary>
-    <div className="details-content">
-      <p>Source identity: {item.source_url ? <a href={item.source_url}>original source</a> : "—"} · canonical master: {item.master_url ? <a href={item.master_url}>inspect master</a> : "—"}</p>
-      <p>Amiga art: {item.art_url ? <a href={item.art_url}>336×276 PNG</a> : "—"} · card: {item.card_url ? <a href={item.card_url}>420×600 PNG</a> : "—"}</p>
-      <p>Generation: <strong>{String(item.generation?.execution_mode || batch.model_capabilities?.execution_mode || "unknown")}</strong> · {String(item.generation?.model || batch.model?.name || batch.style_version_id)}</p>
-      <p>Ordered generation references: {refs.length ? refs.map((reference, index) => <span key={String(reference.reference_id || index)}> {index ? "→ " : ""}{reference.url ? <a href={String(reference.url)}>{String(reference.label || reference.reference_id)}</a> : String(reference.label || reference.reference_id)}</span>) : "—"}</p>
-      <p>Style checksum: <code>{batch.style_checksum_sha256}</code> · render revision {item.render_revision} · card checksum <code>{item.card_checksum_sha256 || "—"}</code></p>
-      <p>The target example is review-only and was excluded from the provider request.</p>
+function PipelineDiagram({ style, cards, sources }: { style?: PipelineStyle; cards: ProducedCard[]; sources: Source[] }) {
+  const example = cards[0];
+  const reference = style?.reference_pack.assets.find((asset) => asset.role === "generation-reference");
+  const recordedReference = example?.reference_stack.find((asset) => asset.role === "generation-reference");
+  const referenceUrl = reference?.image_url || String(recordedReference?.url || "");
+  const referenceLabel = reference?.label || String(recordedReference?.label || "Style reference");
+  const model = style?.generation.model_id || String(example?.generation?.model || "image model");
+  const renderer = style?.renderer.driver_id || "Amiga renderer";
+  const sourceUrl = example?.source_url || sources[0]?.image_url;
+  return <section className="surface pipeline-diagram">
+    <div className="diagram-heading"><div><p className="eyebrow">Pipeline anatomy</p><h3>Identity in. Card out.</h3></div><span>{cards.length} produced result{cards.length === 1 ? "" : "s"}</span></div>
+    <div className="diagram-track">
+      <figure>{sourceUrl ? <img src={sourceUrl} alt="Source identity input" /> : <span className="diagram-empty">＋</span>}<figcaption><small>Input 01</small><strong>Source identity</strong></figcaption></figure>
+      <span className="diagram-plus">+</span>
+      <figure>{referenceUrl ? <img src={referenceUrl} alt={referenceLabel} /> : <span className="diagram-empty">ref</span>}<figcaption><small>Input 02</small><strong>Style reference</strong></figcaption></figure>
+      <div className="diagram-step"><span>→</span><small>{model}</small></div>
+      <figure>{example?.master_url ? <img src={example.master_url} alt="Generated portrait master" /> : <span className="diagram-empty">master</span>}<figcaption><small>Generated</small><strong>Portrait master</strong></figcaption></figure>
+      <div className="diagram-step"><span>→</span><small>{renderer}</small></div>
+      <figure>{example?.art_url ? <img className="pixelated" src={example.art_url} alt="Rendered portrait art" /> : <span className="diagram-empty">art</span>}<figcaption><small>Rendered</small><strong>Amiga art</strong></figcaption></figure>
+      <div className="diagram-step"><span>→</span><small>card assembly</small></div>
+      <figure className="diagram-card">{example?.card_url ? <img className="pixelated" src={example.card_url} alt="Produced card" /> : <span className="diagram-empty">card</span>}<figcaption><small>Output</small><strong>Produced card</strong></figcaption></figure>
     </div>
-  </details>;
-}
-
-export function CardsView({ bootstrap, navigate, refresh, notify, batchId, cardId }: Shared & { batchId?: string; cardId?: string }) {
-  const [batch, setBatch] = useState<ProductionBatch | undefined>();
-  const [busy, setBusy] = useState("");
-  const [framing, setFraming] = useState<Framing>({ zoom: 1, offset_x: 0, offset_y: 0 });
-  const selectedBatch = bootstrap.batches.find((candidate) => candidate.batch_id === batchId)
-    || bootstrap.batches.find((candidate) => candidate.status === "ready")
-    || bootstrap.batches.find((candidate) => candidate.purpose === "card-production");
-  useEffect(() => { if (selectedBatch) void api.getProduction(selectedBatch.batch_id).then((response) => setBatch(response.batch)).catch((error) => notify(error.message, "error")); }, [selectedBatch?.batch_id]);
-  useEffect(() => { if (!batch || !["queued", "running", "processing"].includes(batch.status)) return; const timer = window.setInterval(() => void api.getProduction(batch.batch_id).then((response) => setBatch(response.batch)).catch(() => undefined), 800); return () => window.clearInterval(timer); }, [batch?.batch_id, batch?.status]);
-  const current = batch;
-  const items = current ? latestItems(current, current.selected_source_ids) : [];
-  const card = items.find((item) => item.item_id === cardId);
-  const live = current?.model_capabilities?.execution_mode === "live";
-  async function refreshBatch() { if (!current) return; setBatch((await api.getProduction(current.batch_id)).batch); await refresh(); }
-  async function approve(item: ProductionItem) { if (!current) return; setBusy(item.item_id); try { await api.approve(current.batch_id, item.item_id); notify("Card approved"); await refreshBatch(); } catch (error) { notify((error as Error).message, "error"); } finally { setBusy(""); } }
-  async function tryAnother(item: ProductionItem) { if (!current) return; if (live && !window.confirm("Try another makes one additional paid neutral-portrait generation attempt for this source. Continue?")) return; setBusy(item.item_id); try { await api.tryAnother(current.batch_id, item.source_id, live); notify("Another generation attempt queued"); await refreshBatch(); } catch (error) { notify((error as Error).message, "error"); } finally { setBusy(""); } }
-  async function render(item: ProductionItem) { if (!current) return; setBusy(`render-${item.item_id}`); try { await api.renderFraming(current.batch_id, item.item_id, framing); notify("Framing saved without a generation call"); await refreshBatch(); } catch (error) { notify((error as Error).message, "error"); } finally { setBusy(""); } }
-  async function bundle() { if (!current) return; setBusy("bundle"); try { const result = await api.bundle(current.batch_id); const link = document.createElement("a"); link.href = result.download_url; link.download = "approved-cards.zip"; link.click(); notify("Approved card bundle downloaded"); } catch (error) { notify((error as Error).message, "error"); } finally { setBusy(""); } }
-  if (!current) return <section className="page cards-page"><div className="empty-panel surface">{selectedBatch ? <><span className="spinner" /><p>Loading card production…</p></> : <><h2>No card batch yet</h2><p>Select source images and make cards to see finished candidates here.</p><button className="button primary" onClick={() => navigate("#sources")}>Choose source images</button></>}</div></section>;
-  const ready = current.progress.ready_cards; const approved = current.progress.approved_cards;
-  const batchLabel = current.purpose === "style-trial" ? "Live style trial" : "Production batch";
-  const styleLabel = current.style_snapshot?.identity.label || current.style_version_id;
-  return <section className="page cards-page"><div className="page-heading"><div><p className="eyebrow">Cards</p><h2>Review finished cards</h2><p>{batchLabel} · {styleLabel} · {formatCost(current.cost_usd)} · {current.progress.paid_calls} generation call{current.progress.paid_calls === 1 ? "" : "s"}</p></div><div className="heading-actions"><span className="status-chip">{ready} / {current.progress.selected_sources} ready</span>{current.status === "ready" && <button className="button primary" disabled={busy === "bundle" || approved !== current.progress.selected_sources} onClick={() => void bundle()}>Download approved cards</button>}</div></div><div className="batch-progress surface"><strong>{approved} / {current.progress.selected_sources} approved</strong><span className="progress-track"><i style={{ width: `${current.progress.selected_sources ? (ready / current.progress.selected_sources) * 100 : 0}%` }} /></span><small>{current.status === "ready" ? "Every source has a final card." : current.status === "ready-with-errors" ? "Some sources failed; ready cards remain reviewable." : current.items.some((item) => item.status === "processing") ? "Masters are being converted into Amiga art and cards." : `Production is ${current.status}.`}</small>{current.status === "ready-with-errors" && <button className="button secondary" onClick={async () => { if (live && !window.confirm("Retry failed sources with new paid generation calls?")) return; setBusy("retry"); try { await api.retryFailed(current.batch_id, live); notify("Failed sources queued for retry"); await refreshBatch(); } catch (error) { notify((error as Error).message, "error"); } finally { setBusy(""); } }}>{busy === "retry" ? "Retrying…" : "Retry failed"}</button>}</div><div className="card-groups">{items.map((item) => <article className={`card-slot surface ${card?.item_id === item.item_id ? "focused" : ""}`} key={item.item_id}><header><div><p className="eyebrow">{item.source_label}</p><h3>Attempt {item.attempt_number}</h3></div><span className={`status-chip ${item.status}`}>{item.status}</span></header>{item.card_url ? <button className="card-image-button" onClick={() => navigate(`#cards/${current.batch_id}/${item.item_id}`)}><img className="final-card-image" src={item.card_url} alt={`${item.source_label} finished card`} /></button> : <div className="card-placeholder"><span className="spinner" />{phaseLabel(item)}{item.error && <small>{item.error}</small>}</div>}<p className="phase-label">{phaseLabel(item)}</p><div className="card-actions">{item.status === "ready" && <><button className="button primary" disabled={busy === item.item_id} onClick={() => void approve(item)}>Approve card</button><button className="button secondary" disabled={Boolean(busy)} onClick={() => void tryAnother(item)}>Try another <small>{live ? "paid" : "preview"}</small></button><button className="button secondary" disabled={Boolean(busy)} onClick={() => { setFraming(item.framing || { zoom: 1, offset_x: 0, offset_y: 0 }); navigate(`#cards/${current.batch_id}/${item.item_id}`); }}>Adjust framing <small>no generation</small></button></>}{item.error && <button className="button secondary" onClick={async () => { if (live && !window.confirm("Retry this failed source with a new paid generation call?")) return; try { await api.retryFailed(current.batch_id, live); await refreshBatch(); } catch (error) { notify((error as Error).message, "error"); } }}>Retry failed</button>}</div><Provenance item={item} batch={current} /></article>)}</div>{card && <section className="surface framing-panel"><div className="panel-heading"><div><p className="eyebrow">Framing · {card.source_label}</p><h3>Adjust the existing master</h3><p>Saving this rerenders art and card deterministically. It makes zero generation calls.</p></div><button className="button secondary" onClick={() => navigate(`#cards/${current.batch_id}`)}>Close</button></div><img className="framing-preview" src={card.card_url} alt="Live framing preview" /><div className="framing-controls"><label>Zoom<input type="range" min="1" max="3" step="0.01" value={framing.zoom} onChange={(event) => setFraming({ ...framing, zoom: Number(event.target.value) })} /></label><label>Horizontal<input type="range" min="-1" max="1" step="0.01" value={framing.offset_x} onChange={(event) => setFraming({ ...framing, offset_x: Number(event.target.value) })} /></label><label>Vertical<input type="range" min="-1" max="1" step="0.01" value={framing.offset_y} onChange={(event) => setFraming({ ...framing, offset_y: Number(event.target.value) })} /></label></div><button className="button primary" disabled={busy === `render-${card.item_id}`} onClick={() => void render(card)}>{busy === `render-${card.item_id}` ? "Saving…" : "Save framing"}</button></section>}</section>;
+  </section>;
 }
 
 function directionText(style: PipelineStyle, field: string) { return style.generation.direction[field] || ""; }
 
-export function StyleStudio({ bootstrap, navigate, refresh, notify }: Shared) {
+export function PipelinesView({ bootstrap, navigate, refresh, notify, pipelineId }: Shared & { pipelineId?: string }) {
   const [style, setStyle] = useState<PipelineStyle>(bootstrap.style.draft || bootstrap.style.active);
   const [cohort, setCohort] = useState<string[]>(bootstrap.selected_source_ids.slice(0, 3));
   const [trial, setTrial] = useState<ProductionBatch>();
   const [busy, setBusy] = useState("");
   const active = bootstrap.style.active;
   const draft = bootstrap.style.draft;
+  const selectedId = pipelineId || draft?.identity.style_version_id || active.identity.style_version_id;
+  const selectedStyle = selectedId === draft?.identity.style_version_id ? draft : selectedId === active.identity.style_version_id ? active : undefined;
+  const selectedVersion = bootstrap.style.versions.find((version) => version.style_version_id === selectedId);
+  const selectedChecksum = selectedStyle?.checksums.style_sha256 || selectedVersion?.checksum_sha256;
+  const selectedCards = pipelineResults(bootstrap.cards, selectedId, selectedChecksum);
+  const pipelineCards: PipelineCard[] = bootstrap.style.versions.slice().reverse().map((version) => {
+    const outputs = pipelineResults(bootstrap.cards, version.style_version_id, version.checksum_sha256);
+    return { ...version, outputCount: new Set(outputs.map((card) => card.source_id)).size, samples: outputs.slice(0, 3) };
+  });
   const generationRefs = style.reference_pack.assets.filter((asset) => asset.role === "generation-reference");
   const target = style.reference_pack.assets.find((asset) => asset.role === "target-example");
   const models = bootstrap.models.filter((model) => model.execution_mode === style.generation.execution_mode);
   const selectedModel = bootstrap.models.find((model) => model.id === style.generation.model_id && model.execution_mode === style.generation.execution_mode);
-  useEffect(() => { if (draft) setStyle(draft); }, [draft?.identity.style_version_id, draft?.checksums.style_sha256]);
-  async function beginEdit() { setBusy("draft"); try { const response = await api.createDraft(); setStyle(response.style); notify("Draft style ready"); } catch (error) { notify((error as Error).message, "error"); } finally { setBusy(""); } }
+  const activeBatch = bootstrap.batches.find((batch) => isActive(batch.status));
+  const previewCards = trial?.items.filter((item) => item.status === "ready") || (draft ? pipelineResults(bootstrap.cards, draft.identity.style_version_id, draft.checksums.style_sha256) : []);
+  useEffect(() => { if (draft) setStyle(draft); else setStyle(active); }, [draft?.identity.style_version_id, draft?.checksums.style_sha256, active.identity.style_version_id]);
+
+  async function beginEdit() {
+    setBusy("draft");
+    try { const response = await api.createDraft(); setStyle(response.style); navigate(`#pipelines/${response.style.identity.style_version_id}`); await refresh(); notify("Working pipeline created"); } catch (error) { notify((error as Error).message, "error"); } finally { setBusy(""); }
+  }
   async function patch(patchValue: Partial<PipelineStyle>) { try { const response = await api.updateDraft(patchValue); setStyle(response.style); await refresh(); } catch (error) { notify((error as Error).message, "error"); } }
   async function patchGeneration(next: Partial<PipelineStyle["generation"]>) { await patch({ generation: { ...style.generation, ...next } }); }
   async function changeMode(mode: PipelineStyle["generation"]["execution_mode"]) { const next = bootstrap.models.find((model) => model.execution_mode === mode && model.available) || bootstrap.models.find((model) => model.execution_mode === mode); await patchGeneration({ execution_mode: mode, model_id: next?.id || style.generation.model_id }); }
-  async function runTrial() { if (!selectedModel || !cohort.length) return; const live = style.generation.execution_mode === "live"; if (live && !window.confirm(`Run ${cohort.length} live style-trial call${cohort.length === 1 ? "" : "s"} with ${selectedModel.name}?`)) return; setBusy("trial"); try { const response = await api.runTrial(cohort, live); setTrial(response.batch); notify(live ? "Live cohort trial started" : "Simulation preview trial started"); } catch (error) { notify((error as Error).message, "error"); } finally { setBusy(""); } }
-  useEffect(() => { if (!trial || !["queued", "running", "processing"].includes(trial.status)) return; const timer = window.setInterval(() => void api.getProduction(trial.batch_id).then((response) => setTrial(response.batch)), 800); return () => window.clearInterval(timer); }, [trial?.batch_id, trial?.status]);
-  async function activate() { if (!trial) return; setBusy("activate"); try { const response = await api.activateTrial(trial.batch_id); notify("New live style version activated"); await refresh(); setStyle(response.style.active); setTrial(undefined); } catch (error) { notify((error as Error).message, "error"); } finally { setBusy(""); } }
-  async function uploadReference(event: ChangeEvent<HTMLInputElement>) { const file = event.target.files?.[0]; if (!file) return; setBusy("reference"); try { const response = await api.uploadDraftReference(file); setStyle(response.style); await refresh(); notify("Generation reference added"); } catch (error) { notify((error as Error).message, "error"); } finally { setBusy(""); event.target.value = ""; } }
+  async function runTrial() {
+    if (!selectedModel || !cohort.length) return;
+    setBusy("trial");
+    try { const response = await api.runTrial(cohort, style.generation.execution_mode === "live"); setTrial(response.batch); notify(`${cohort.length}-source comparison run started`); } catch (error) { notify((error as Error).message, "error"); } finally { setBusy(""); }
+  }
+  useEffect(() => { if (!trial || !isActive(trial.status)) return; const timer = window.setInterval(() => void api.getProduction(trial.batch_id).then((response) => setTrial(response.batch)).then(() => refresh()), 800); return () => window.clearInterval(timer); }, [trial?.batch_id, trial?.status]);
+  async function activate() { if (!trial) return; setBusy("activate"); try { const response = await api.activateTrial(trial.batch_id); notify("Pipeline saved and made active"); await refresh(); setStyle(response.style.active); navigate(`#pipelines/${response.style.active.identity.style_version_id}`); setTrial(undefined); } catch (error) { notify((error as Error).message, "error"); } finally { setBusy(""); } }
+  async function uploadReference(event: ChangeEvent<HTMLInputElement>) { const file = event.target.files?.[0]; if (!file) return; setBusy("reference"); try { const response = await api.uploadDraftReference(file); setStyle(response.style); await refresh(); notify("Pipeline reference added"); } catch (error) { notify((error as Error).message, "error"); } finally { setBusy(""); event.target.value = ""; } }
   async function moveReference(index: number, delta: number) { const nextIndex = index + delta; if (nextIndex < 0 || nextIndex >= generationRefs.length) return; const ordered = [...generationRefs]; [ordered[index], ordered[nextIndex]] = [ordered[nextIndex], ordered[index]]; const targetAsset = style.reference_pack.assets.find((asset) => asset.role === "target-example"); await patch({ reference_pack: { ...style.reference_pack, assets: targetAsset ? [...ordered, targetAsset] : ordered } }); }
-  return <section className="page style-page">
-    <div className="page-heading"><div><p className="eyebrow">Style Studio</p><h2>{active.identity.label}</h2><p>Control live versus simulation explicitly, inspect the reference pair, then test the complete neutral-master-to-card path on a small cohort.</p></div><button className="button secondary" onClick={() => navigate("#sources")}>Back to Sources</button></div>
-    <section className="style-hero surface"><div><p className="eyebrow">Active version</p><h3>{active.identity.label}</h3><p><code>{active.identity.style_version_id}</code> · checksum <code>{active.checksums.style_sha256}</code> · <strong>{active.generation.execution_mode === "live" ? "live production" : "simulation preview only"}</strong></p></div><div className="palette-strip">{active.renderer.palette.map((colour) => <i key={colour} style={{ backgroundColor: colour }} title={colour} />)}</div></section>
-    <div className="reference-columns"><section className="surface"><div className="panel-heading"><h3>Ordered generation references</h3><span>{generationRefs.length} / {style.generation.reference_limit - 1}</span></div><div className="reference-strip">{generationRefs.map((asset, index) => <figure key={asset.id}><img src={asset.image_url} alt={asset.label} /><figcaption>{index + 1}. {asset.label}</figcaption>{draft && <div><button className="text-button" disabled={index === 0} onClick={() => void moveReference(index, -1)}>Earlier</button><button className="text-button" disabled={index === generationRefs.length - 1} onClick={() => void moveReference(index, 1)}>Later</button></div>}</figure>)}</div>{draft && <label className="button secondary file-button">Add generation reference<input type="file" accept="image/*" onChange={uploadReference} /></label>}<p className="muted">The identity source is always sent first, followed by these references in order.</p></section><section className="surface target-example"><h3>Generation reference → Amiga target</h3><div className="reference-pair">{generationRefs[0]?.image_url && <figure><img src={generationRefs[0].image_url} alt="High-resolution generation reference" /><figcaption>Generation reference</figcaption></figure>}{target?.image_url && <figure><img src={target.image_url} alt={target.label} /><figcaption>Rendered target example</figcaption></figure>}</div><p><strong>Review only — target is never sent to the model.</strong> The pair documents the post-render appearance expected from the deterministic driver.</p></section></div>
-    {!draft ? <section className="surface edit-callout"><h3>Keep the active version clear</h3><p>Production continues using {active.identity.label}. Create a separate draft before changing anything.</p><button className="button primary" disabled={busy === "draft"} onClick={() => void beginEdit()}>Edit as new version</button></section> : <>
-      <section className="surface editor"><div className="panel-heading"><div><p className="eyebrow">Draft</p><h3>Neutralisation contract</h3></div><span className="status-chip">{style.identity.style_version_id}</span></div>
-        <details open><summary>Generation and provider</summary><div className="form-grid"><label>Execution mode<select value={style.generation.execution_mode} onChange={(event) => void changeMode(event.target.value as PipelineStyle["generation"]["execution_mode"])}><option value="live">Live image generation</option><option value="simulation">Simulation preview</option></select></label><label>Capability-backed model<select value={style.generation.model_id} onChange={(event) => void patchGeneration({ model_id: event.target.value })}>{models.map((model) => <option key={model.id} value={model.id}>{model.name}{!model.available ? " · unavailable" : !model.credentials_configured && model.execution_mode === "live" ? " · missing key" : ""}</option>)}</select></label><label>Quality<select value={style.generation.quality} onChange={(event) => void patchGeneration({ quality: event.target.value as PipelineStyle["generation"]["quality"] })}><option>low</option><option>medium</option><option>high</option></select></label></div><p className="muted">{style.generation.execution_mode === "live" ? `${selectedModel?.name || style.generation.model_id} · ${selectedModel?.max_input_references || 0} input references · ${modelCost(selectedModel)}` : "Simulation output is a clearly labelled preview and cannot activate a production style."}</p></details>
+
+  return <section className="page pipelines-page">
+    <div className="page-heading"><div><p className="eyebrow">Pipelines</p><h2>The recipe is an asset too</h2><p>Each pipeline records the model direction, ordered references, renderer, card assembly, and the cards it produced.</p></div><button className="button secondary" onClick={() => navigate("#cards")}>Compare all results</button></div>
+    <section className="pipeline-collection" aria-label="Saved pipelines">
+      {draft && <button className={`surface pipeline-card draft ${selectedId === draft.identity.style_version_id ? "selected" : ""}`} onClick={() => navigate(`#pipelines/${draft.identity.style_version_id}`)}><div><span className="status-chip working">working</span><small>{shortChecksum(draft.checksums.style_sha256)}</small></div><strong>Working pipeline</strong><p>{draft.generation.model_id} · {draft.reference_pack.assets.filter((asset) => asset.role === "generation-reference").length} refs</p><div className="pipeline-samples">{pipelineResults(bootstrap.cards, draft.identity.style_version_id, draft.checksums.style_sha256).slice(0, 3).map((card) => <img key={card.item_id} src={card.card_url} alt="Working pipeline result" />)}<span>＋</span></div></button>}
+      {pipelineCards.map((pipeline) => <button className={`surface pipeline-card ${pipeline.active ? "active" : ""} ${selectedId === pipeline.style_version_id ? "selected" : ""}`} key={pipeline.style_version_id} onClick={() => navigate(`#pipelines/${pipeline.style_version_id}`)}><div>{pipeline.active ? <span className="status-chip">active</span> : <span>{versionName(pipeline.version)}</span>}<small>{shortChecksum(pipeline.checksum_sha256)}</small></div><strong>{pipeline.label}</strong><p>{pipeline.model_id} · {pipeline.reference_count} refs</p><div className="pipeline-samples">{pipeline.samples.map((card) => <img key={card.item_id} src={card.card_url} alt={`${pipeline.label} result`} />)}<span>{pipeline.outputCount || "＋"}</span></div></button>)}
+    </section>
+    <PipelineDiagram style={selectedStyle} cards={selectedCards} sources={selectedSources(bootstrap)} />
+    <section className="surface pipeline-meta"><div><p className="eyebrow">{selectedId === draft?.identity.style_version_id ? "Working pipeline" : selectedVersion?.active ? "Active pipeline" : versionName(selectedVersion?.version)}</p><h3>{selectedStyle?.identity.label || selectedVersion?.label || selectedId}</h3><p><code>{selectedId}</code> · checksum <code>{shortChecksum(selectedChecksum || "")}</code></p></div><div className="palette-strip">{selectedStyle?.renderer.palette.map((colour) => <i key={colour} style={{ backgroundColor: colour }} title={colour} />)}</div>{!draft && <button className="button primary" disabled={busy === "draft"} onClick={() => void beginEdit()}>{busy === "draft" ? "Creating…" : "Branch active pipeline"}</button>}{draft && selectedId !== draft.identity.style_version_id && <button className="button primary" onClick={() => navigate(`#pipelines/${draft.identity.style_version_id}`)}>Open working pipeline</button>}</section>
+    {draft && selectedId === draft.identity.style_version_id && <>
+      <div className="reference-columns"><section className="surface"><div className="panel-heading"><div><p className="eyebrow">Inputs</p><h3>Ordered generation references</h3></div><span>{generationRefs.length} / {style.generation.reference_limit - 1}</span></div><div className="reference-strip">{generationRefs.map((asset, index) => <figure key={asset.id}><img src={asset.image_url} alt={asset.label} /><figcaption>{index + 1}. {asset.label}</figcaption><div><button className="text-button" disabled={index === 0} onClick={() => void moveReference(index, -1)}>Earlier</button><button className="text-button" disabled={index === generationRefs.length - 1} onClick={() => void moveReference(index, 1)}>Later</button></div></figure>)}</div><label className="button secondary file-button">Add reference<input type="file" accept="image/*" onChange={uploadReference} /></label><p className="muted">The identity source is always first; these pipeline references follow in order.</p></section><section className="surface target-example"><p className="eyebrow">Renderer proof</p><h3>Reference → target</h3><div className="reference-pair">{generationRefs[0]?.image_url && <figure><img src={generationRefs[0].image_url} alt="High-resolution generation reference" /><figcaption>Model reference</figcaption></figure>}{target?.image_url && <figure><img src={target.image_url} alt={target.label} /><figcaption>Rendered target</figcaption></figure>}</div><p>Target is documentation for the renderer and is never sent to the model.</p></section></div>
+      <section className="surface editor"><div className="panel-heading"><div><p className="eyebrow">Transform</p><h3>Edit working pipeline</h3></div><span className="status-chip working">unsaved version</span></div>
+        <details open><summary>Generation model</summary><div className="form-grid"><label>Execution mode<select value={style.generation.execution_mode} onChange={(event) => void changeMode(event.target.value as PipelineStyle["generation"]["execution_mode"])}><option value="live">Live image generation</option><option value="simulation">Simulation preview</option></select></label><label>Model<select value={style.generation.model_id} onChange={(event) => void patchGeneration({ model_id: event.target.value })}>{models.map((model) => <option key={model.id} value={model.id}>{model.name}{!model.available ? " · unavailable" : !model.credentials_configured && model.execution_mode === "live" ? " · missing key" : ""}</option>)}</select></label><label>Quality<select value={style.generation.quality} onChange={(event) => void patchGeneration({ quality: event.target.value as PipelineStyle["generation"]["quality"] })}><option>low</option><option>medium</option><option>high</option></select></label></div><p className="muted">{selectedModel?.name || style.generation.model_id} · {selectedModel?.max_input_references || 0} inputs · {modelCost(selectedModel)} per result</p></details>
         {(["identity_to_retain", "composition_to_normalize", "expression_pose_to_discard", "rendering_language"] as const).map((field) => <details key={field} open={field !== "rendering_language"}><summary>{field.replace(/_/g, " ")}</summary><textarea value={directionText(style, field)} onChange={(event) => setStyle({ ...style, generation: { ...style.generation, direction: { ...style.generation.direction, [field]: event.target.value } } })} onBlur={() => void patchGeneration({ direction: style.generation.direction })} /></details>)}
         <details><summary>Avoid</summary><textarea value={style.generation.avoid} onChange={(event) => setStyle({ ...style, generation: { ...style.generation, avoid: event.target.value } })} onBlur={() => void patchGeneration({ avoid: style.generation.avoid })} /></details>
-        <details><summary>Amiga processing and card</summary><div className="form-grid"><label>Dither strength<input type="number" min="0" max="1" step="0.01" value={style.renderer.dither.strength} onChange={(event) => setStyle({ ...style, renderer: { ...style.renderer, dither: { ...style.renderer.dither, strength: Number(event.target.value) } } })} onBlur={() => void patch({ renderer: style.renderer })} /></label><label>Edge threshold<input type="number" min="0" max="1" step="0.01" value={style.renderer.dither.edge_threshold} onChange={(event) => setStyle({ ...style, renderer: { ...style.renderer, dither: { ...style.renderer.dither, edge_threshold: Number(event.target.value) } } })} onBlur={() => void patch({ renderer: style.renderer })} /></label><label>Centering Y<input type="number" min="0" max="1" step="0.01" value={style.composition.centering[1]} onChange={(event) => setStyle({ ...style, composition: { ...style.composition, centering: [style.composition.centering[0], Number(event.target.value)] } })} onBlur={() => void patch({ composition: style.composition })} /></label></div><p>Pixel-native {style.card_assembly.logical_card_size.join("×")} logical · {style.card_assembly.output_scale}× output · {style.card_assembly.driver_id}</p></details>
-        <div className="draft-summary"><strong>Draft checksum</strong> <code>{style.checksums.style_sha256}</code></div>
+        <details><summary>Amiga renderer and card assembly</summary><div className="form-grid"><label>Dither strength<input type="number" min="0" max="1" step="0.01" value={style.renderer.dither.strength} onChange={(event) => setStyle({ ...style, renderer: { ...style.renderer, dither: { ...style.renderer.dither, strength: Number(event.target.value) } } })} onBlur={() => void patch({ renderer: style.renderer })} /></label><label>Edge threshold<input type="number" min="0" max="1" step="0.01" value={style.renderer.dither.edge_threshold} onChange={(event) => setStyle({ ...style, renderer: { ...style.renderer, dither: { ...style.renderer.dither, edge_threshold: Number(event.target.value) } } })} onBlur={() => void patch({ renderer: style.renderer })} /></label><label>Centering Y<input type="number" min="0" max="1" step="0.01" value={style.composition.centering[1]} onChange={(event) => setStyle({ ...style, composition: { ...style.composition, centering: [style.composition.centering[0], Number(event.target.value)] } })} onBlur={() => void patch({ composition: style.composition })} /></label></div></details>
+        <div className="draft-summary"><strong>Current configuration</strong> <code>{shortChecksum(style.checksums.style_sha256)}</code></div>
       </section>
-      <section className="surface trial-panel"><div className="panel-heading"><div><p className="eyebrow">Calibration cohort</p><h3>Test complete style</h3></div><span>{cohort.length} / 3 sources</span></div><div className="cohort-picker">{bootstrap.sources.map((source) => <button key={source.id} className={cohort.includes(source.id) ? "selected" : ""} aria-pressed={cohort.includes(source.id)} onClick={() => setCohort((current) => current.includes(source.id) ? current.filter((id) => id !== source.id) : current.length < 3 ? [...current, source.id] : current)}>{source.image_url && <img src={source.image_url} alt={source.label} />}<span>{source.label}</span></button>)}</div><p>{cohort.length} generation call{cohort.length === 1 ? "" : "s"} · {modelCost(selectedModel)}. Masters are immediately processed into final cards.</p><button className="button primary" disabled={!cohort.length || !selectedModel || Boolean(busy) || Boolean(trial) || !selectedModel.available || (style.generation.execution_mode === "live" && !selectedModel.credentials_configured)} onClick={() => void runTrial()}>{busy === "trial" ? "Starting…" : style.generation.execution_mode === "live" ? "Run live cohort trial" : "Run simulation preview trial"}</button>{trial && <div className="trial-result"><span className={`status-chip ${trial.status}`}>{trial.status}</span>{trial.items.map((item) => <img key={item.item_id} src={item.card_url} alt={`${item.source_label} trial card`} />)}{trial.status === "ready" && trial.model_capabilities?.execution_mode === "live" ? <button className="button primary" disabled={busy === "activate"} onClick={() => void activate()}>{busy === "activate" ? "Activating…" : "Make this the active style"}</button> : trial.status === "ready" && <p className="validation-note">Simulation preview complete. A live cohort trial is required before activation.</p>}</div>}</section>
+      <section className="surface trial-panel"><div className="panel-heading"><div><p className="eyebrow">Output</p><h3>Run a constant comparison set</h3></div><span>{cohort.length} / 3 sources</span></div><div className="cohort-picker">{bootstrap.sources.map((source) => <button key={source.id} className={cohort.includes(source.id) ? "selected" : ""} aria-pressed={cohort.includes(source.id)} onClick={() => setCohort((current) => current.includes(source.id) ? current.filter((id) => id !== source.id) : current.length < 3 ? [...current, source.id] : current)}>{source.image_url && <img src={source.image_url} alt={source.label} />}<span>{source.label}</span></button>)}</div><div className="trial-actions"><p>Every run produces complete cards immediately. {cohort.length} calls · {modelCost(selectedModel)} each.</p><button className="button primary" disabled={!cohort.length || !selectedModel || Boolean(busy) || Boolean(activeBatch) || !selectedModel.available || (style.generation.execution_mode === "live" && !selectedModel.credentials_configured)} onClick={() => void runTrial()}>{busy === "trial" ? "Starting…" : previewCards.length ? "Run this configuration again" : "Run comparison set"}</button></div>{(trial || previewCards.length > 0) && <div className="trial-result"><span className={`status-chip ${trial?.status || "ready"}`}>{trial?.status || "ready"}</span>{previewCards.map((item) => item.card_url && <img key={item.item_id} src={item.card_url} alt={`${item.source_label} pipeline result`} />)}{trial?.status === "ready" && trial.model_capabilities?.execution_mode === "live" && <button className="button primary" disabled={busy === "activate"} onClick={() => void activate()}>{busy === "activate" ? "Saving…" : "Save as pipeline & make active"}</button>}</div>}</section>
     </>}
+  </section>;
+}
+
+type ResultGroup = { key: string; styleId: string; checksum: string; label: string; version?: number | null; cards: ProducedCard[]; createdAt: string; active: boolean };
+
+function resultGroups(bootstrap: Bootstrap): ResultGroup[] {
+  const groups = new Map<string, ResultGroup>();
+  const active = bootstrap.style.active;
+  [...bootstrap.cards].sort((a, b) => b.batch_created_at.localeCompare(a.batch_created_at) || b.attempt_number - a.attempt_number).forEach((card) => {
+    const key = `${card.style_version_id}:${card.style_checksum_sha256}`;
+    const group = groups.get(key) || { key, styleId: card.style_version_id, checksum: card.style_checksum_sha256, label: card.pipeline_label, version: card.pipeline_version, cards: [], createdAt: card.batch_created_at, active: card.style_version_id === active.identity.style_version_id && card.style_checksum_sha256 === active.checksums.style_sha256 };
+    if (!group.cards.some((item) => item.source_id === card.source_id)) group.cards.push(card);
+    groups.set(key, group);
+  });
+  return [...groups.values()].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+}
+
+function configurationName(group: ResultGroup) {
+  return group.styleId.startsWith("draft_") ? "Experiment" : versionName(group.version);
+}
+
+function ResultProvenance({ card }: { card: ProducedCard }) {
+  const refs = card.reference_stack.filter((reference) => reference.role === "generation-reference");
+  return <details><summary>Run details</summary><div className="details-content"><p>Pipeline <code>{card.style_version_id}</code> · configuration <code>{shortChecksum(card.style_checksum_sha256)}</code></p><p>Generation: <strong>{String(card.generation?.execution_mode || "unknown")}</strong> · {String(card.generation?.model || "model unavailable")}</p><p>Ordered references: {refs.length ? refs.map((reference, index) => <span key={String(reference.reference_id || index)}> {index ? "→ " : ""}{String(reference.label || reference.reference_id)}</span>) : "—"}</p><p>Render revision {card.render_revision} · card checksum <code>{card.card_checksum_sha256 || "—"}</code></p></div></details>;
+}
+
+export function CardsView({ bootstrap, navigate, refresh, notify, batchId, cardId }: Shared & { batchId?: string; cardId?: string }) {
+  const groups = useMemo(() => resultGroups(bootstrap), [bootstrap.cards, bootstrap.style.active.identity.style_version_id]);
+  const sources = selectedSources(bootstrap);
+  const [busy, setBusy] = useState("");
+  const selectedCard = bootstrap.cards.find((card) => card.item_id === cardId && (!batchId || card.batch_id === batchId));
+  const [framing, setFraming] = useState<Framing>(selectedCard?.framing || { zoom: 1, offset_x: 0, offset_y: 0 });
+  const activePipeline = bootstrap.style.active;
+  const model = bootstrap.models.find((entry) => entry.id === activePipeline.generation.model_id && entry.execution_mode === activePipeline.generation.execution_mode);
+  const activeBatch = bootstrap.batches.find((batch) => isActive(batch.status));
+  useEffect(() => { if (selectedCard) setFraming(selectedCard.framing || { zoom: 1, offset_x: 0, offset_y: 0 }); }, [selectedCard?.item_id]);
+
+  async function generate(sourceIds = bootstrap.selected_source_ids) {
+    if (!sourceIds.length) return;
+    setBusy("generate");
+    try { await api.createProduction(sourceIds, activePipeline.identity.style_version_id, activePipeline.generation.execution_mode === "live"); notify(`${sourceIds.length}-source pipeline run started`); await refresh(); } catch (error) { notify((error as Error).message, "error"); } finally { setBusy(""); }
+  }
+  async function tryAnother(card: ProducedCard) {
+    setBusy(card.item_id);
+    try { await api.tryAnother(card.batch_id, card.source_id, card.generation?.execution_mode === "live"); notify("Another result queued"); await refresh(); } catch (error) { notify((error as Error).message, "error"); } finally { setBusy(""); }
+  }
+  async function render(card: ProducedCard) {
+    setBusy(`render-${card.item_id}`);
+    try { await api.renderFraming(card.batch_id, card.item_id, framing); notify("Framing rerendered"); await refresh(); } catch (error) { notify((error as Error).message, "error"); } finally { setBusy(""); }
+  }
+
+  if (!groups.length) return <section className="page cards-page"><div className="page-heading"><div><p className="eyebrow">Cards</p><h2>Produced assets appear here</h2><p>Run a source set through the active pipeline to start a visual history.</p></div></div><div className="empty-panel surface"><span className="empty-glyph">→</span><h3>No pipeline results yet</h3><button className="button primary" onClick={() => navigate("#sources")}>Choose sources</button></div></section>;
+
+  return <section className="page cards-page">
+    <div className="page-heading"><div><p className="eyebrow">Cards · pipeline comparison</p><h2>See exactly what changed</h2><p>Rows hold identity constant. Columns show the newest result for each pipeline configuration.</p></div><div className="heading-actions"><span className="status-chip">{groups.length} configurations</span><small className="run-cost">{sources.length} calls · {modelCost(model)} each</small><button className="button primary" disabled={Boolean(activeBatch) || Boolean(busy) || !sources.length || !model?.available || !model.credentials_configured} onClick={() => void generate()}>{activeBatch ? "Pipeline running…" : `Run active pipeline · ${sources.length}`}</button></div></div>
+    {activeBatch && <div className="surface running-banner"><span className="spinner" /><div><strong>Producing a new comparison column</strong><small>{activeBatch.progress.ready_cards} / {activeBatch.progress.selected_sources} cards ready</small></div></div>}
+    <div className="results-matrix surface" style={{ "--pipeline-count": groups.length } as React.CSSProperties}>
+      <div className="matrix-corner"><small>Source identity</small><strong>{sources.length} pinned</strong></div>
+      {groups.map((group) => <button className={`matrix-pipeline ${group.active ? "active" : ""}`} key={group.key} onClick={() => navigate(`#pipelines/${group.styleId}`)}><span>{group.active ? "active" : configurationName(group)}</span><strong>{group.label}</strong><small>{shortChecksum(group.checksum)} · {group.cards.length} cards</small></button>)}
+      {sources.map((source) => <div className="matrix-row" key={source.id}>
+        <div className="matrix-source">{source.image_url && <img src={source.image_url} alt={source.label} />}<div><small>source</small><strong>{source.label}</strong></div></div>
+        {groups.map((group) => { const card = group.cards.find((candidate) => candidate.source_id === source.id); return <article className={`matrix-result ${card ? "produced" : "missing"}`} key={group.key}>{card?.card_url ? <><button className="result-image" onClick={() => navigate(`#cards/${card.batch_id}/${card.item_id}`)}><img src={card.card_url} alt={`${source.label} produced by ${group.label}`} /></button><div className="result-actions"><span>attempt {card.attempt_number}</span><button disabled={Boolean(busy) || Boolean(activeBatch)} onClick={() => void tryAnother(card)}>New result</button></div></> : <><span className="empty-glyph">＋</span><small>No result for this source</small>{group.active && <button className="text-button" disabled={Boolean(activeBatch) || Boolean(busy)} onClick={() => void generate([source.id])}>Generate</button>}</>}</article>; })}
+      </div>)}
+    </div>
+    {selectedCard && <section className="surface result-inspector"><div className="panel-heading"><div><p className="eyebrow">Produced asset · {selectedCard.source_label}</p><h3>{selectedCard.pipeline_label}</h3><p>Inspect every stage or rerender the existing master. A new model result is one click away.</p></div><button className="button secondary" onClick={() => navigate("#cards")}>Close</button></div><div className="asset-stages"><figure><img src={selectedCard.source_url} alt="Source" /><figcaption>Source</figcaption></figure><span>→</span><figure><img src={selectedCard.master_url} alt="Generated master" /><figcaption>Generated master</figcaption></figure><span>→</span><figure><img className="pixelated" src={selectedCard.art_url} alt="Amiga art" /><figcaption>Rendered art</figcaption></figure><span>→</span><figure className="final-stage"><img className="pixelated" src={selectedCard.card_url} alt="Final card" /><figcaption>Card</figcaption></figure></div><div className="framing-controls"><label>Zoom<input type="range" min="1" max="3" step="0.01" value={framing.zoom} onChange={(event) => setFraming({ ...framing, zoom: Number(event.target.value) })} /></label><label>Horizontal<input type="range" min="-1" max="1" step="0.01" value={framing.offset_x} onChange={(event) => setFraming({ ...framing, offset_x: Number(event.target.value) })} /></label><label>Vertical<input type="range" min="-1" max="1" step="0.01" value={framing.offset_y} onChange={(event) => setFraming({ ...framing, offset_y: Number(event.target.value) })} /></label></div><div className="inspector-actions"><button className="button primary" disabled={Boolean(busy)} onClick={() => void tryAnother(selectedCard)}>Generate another result</button><button className="button secondary" disabled={Boolean(busy)} onClick={() => void render(selectedCard)}>{busy === `render-${selectedCard.item_id}` ? "Rerendering…" : "Save framing · no generation"}</button></div><ResultProvenance card={selectedCard} /></section>}
   </section>;
 }

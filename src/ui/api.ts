@@ -1,4 +1,4 @@
-import type { Approval, Bootstrap, Framing, PipelineStyle, ProductionBatch, SearchResult, Source, StyleBootstrap } from "./types";
+import type { Bootstrap, Framing, PipelineStyle, ProductionBatch, SearchResult, Source, StyleBootstrap } from "./types";
 
 const apiRoot = `${import.meta.env.BASE_URL.replace(/\/$/, "")}/api`;
 
@@ -25,8 +25,6 @@ export const api = {
   retryFailed: (id: string, consent = false) => request<{ batch: ProductionBatch }>(`/production/${id}/retry`, json("POST", { consent })),
   tryAnother: (id: string, source_id: string, consent = false) => request<{ batch: ProductionBatch }>(`/production/${id}/try-another`, json("POST", { source_id, consent })),
   renderFraming: (id: string, item_id: string, framing: Framing) => request<{ batch: ProductionBatch }>(`/production/${id}/render`, json("POST", { item_id, framing })),
-  approve: (id: string, item_id: string) => request<{ approval: Approval }>(`/production/${id}/approve`, json("POST", { item_id })),
-  bundle: (id: string) => request<{ download_url: string; manifest: Record<string, unknown> }>(`/production/${id}/bundle`, json("POST", {})),
   createDraft: () => request<{ style: PipelineStyle }>("/styles/draft", json("POST", {})),
   updateDraft: (patch: Partial<PipelineStyle>) => request<{ style: PipelineStyle }>("/styles/draft", json("PUT", patch)),
   uploadDraftReference: (file: File) => { const form = new FormData(); form.append("file", file); return request<{ style: PipelineStyle }>("/styles/draft/references", { method: "POST", body: form }); },

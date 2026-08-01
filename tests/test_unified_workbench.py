@@ -24,6 +24,7 @@ from tools.portraits.generation import (
     validate_request,
 )
 from tools.portraits.production import CardProductionManager
+from tools.portraits.server import _cards
 from tools.portraits.workspace import WorkspaceError, WorkspaceStore
 
 
@@ -82,6 +83,11 @@ def test_style_schema_checksum_store_and_asset_snapshots(tmp_path: Path) -> None
     styles.activate(locked["identity"]["style_version_id"])
     assert styles.active()["identity"]["style_version_id"] == locked["identity"]["style_version_id"]
     assert len(styles.versions()) == 2
+    version = styles.versions()[-1]
+    assert version["model_id"] == locked["generation"]["model_id"]
+    assert version["execution_mode"] == "live"
+    assert version["reference_count"] == 1
+    assert version["renderer_id"] == "amiga-ocs"
 
 
 def test_legacy_simulation_style_is_migrated_to_current_locked_version(tmp_path: Path) -> None:
@@ -144,6 +150,10 @@ def test_production_is_one_integrated_operation_and_excludes_target(tmp_path: Pa
     assert all(item["card_url"] and item["art_url"] for item in result["items"])
     assert all(reference["role"] != "target-example" for item in result["items"] for reference in item["reference_stack"])
     assert calls == [simulation_model()["id"]]
+    cards = _cards(manager)
+    assert cards[0]["pipeline_label"] == style["identity"]["label"]
+    assert cards[0]["batch_created_at"] == result["created_at"]
+    assert cards[0]["style_checksum_sha256"] == style["checksums"]["style_sha256"]
     approvals = [manager.approve(result["batch_id"], item["item_id"]) for item in result["items"]]
     assert len(approvals) == 2
     refreshed = manager.get(result["batch_id"])

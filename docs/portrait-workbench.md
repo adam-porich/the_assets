@@ -1,7 +1,8 @@
-# Unified card workbench contract
+# Source, pipeline, and card workbench contract
 
-The supported product surfaces are `Sources`, `Cards`, and `Style Studio`.
-The everyday decision is source selection followed by final-card approval.
+The supported product surfaces are `Sources`, `Pipelines`, and `Cards`.
+The everyday loop keeps a source cohort stable, changes a pipeline, and
+compares the produced cards. Approval is not part of the current UI.
 
 ## Style pipeline
 
@@ -18,7 +19,7 @@ for the live neutral portrait style version. It contains these sections:
 - `renderer`: driver ID, preprocess, palette, palette space, dither matrix and
   thresholds;
 - `card_assembly`: driver ID, logical card size, output scale, and layout/text;
-- `editor_descriptors`: fields exposed by Style Studio;
+- `editor_descriptors`: fields exposed by the Pipelines editor;
 - `provenance` and `checksums`: source information and canonical style/asset
   checksums.
 
@@ -38,8 +39,8 @@ configuration and every referenced asset checksum.
 `StyleStore` materializes the initial definition at bootstrap under
 `styles/versions/<style-version-id>/references/`. A draft is stored separately.
 Locked files are never edited. Locking creates a new opaque version and
-activation changes only the active pointer; existing batches and approvals keep
-their original snapshots.
+activation changes only the active pointer; existing batches keep their
+original snapshots and remain available in the comparison history.
 
 ## Renderer boundary
 
@@ -65,7 +66,7 @@ cannot enter a generation adapter request.
 
 ## Production batches
 
-`CardProductionManager` stores both normal batches and Style Studio trials.
+`CardProductionManager` stores both normal batches and pipeline comparison trials.
 Normal batches use `purpose: "card-production"` and a locked active style;
 trials use `purpose: "style-trial"` and a draft snapshot. A batch snapshots
 source membership/order, source bytes, style configuration, reference bytes,
@@ -82,52 +83,52 @@ are never overwritten.
 The generating phase is the neutral redraw; processing is deterministic Amiga
 rendering and card assembly. Every attempt snapshots the exact resolved
 request, including source-first/reference-after ordering and an explicit
-`target_examples_excluded` marker. Live paid actions require consent at the
-API boundary as well as in the browser.
+`target_examples_excluded` marker. Live paid actions keep an authorization
+record at the API boundary. In the browser the call count and unit cost sit
+beside the explicit run action, which starts without a second modal.
 
 Usage and provider response cost are the accounting source of truth. Unknown
 cost remains unknown; simulation reports zero. No paid action starts without an
 explicit request, and one active generation batch is allowed at a time.
 
-## Framing, approvals, and downloads
+## Framing and retained compatibility data
 
 The default framing is stored on every attempt. A framing save reads the
 immutable master, resolves a bounded cover transform, and writes a new render
 revision without calling the generation adapter. Previous revisions remain on
-disk. An approved card whose render changes needs a new explicit approval; the
-old approval record does not drift.
+disk. The supported UI treats every ready render as a result and does not gate
+it with approval or bundling.
 
-An approval includes source ID, attempt ID, batch ID, locked style version and
-checksum, card checksum, render revision, and timestamp. The current pointer is
-unique per source and style version; history is append-only. Approving another
-attempt supersedes the pointer without deleting either card.
+Historical approval records and their API methods remain readable for workspace
+compatibility, but the product no longer writes or surfaces them. They can be
+removed in a later storage migration once old workspaces no longer depend on
+that schema.
 
-The approved bundle follows selected source order and contains only current
-card PNGs plus `manifest.json`. The manifest carries attempt, style, render,
-and checksum provenance. Masters are diagnostic and omitted.
+## Pipelines
 
-## Style Studio
-
-The active style is shown first with generation references, the target example,
-palette, driver output, and checksum. The draft editor uses driver descriptors
-where appropriate and keeps advanced Generation, Amiga processing, and Card
+Saved pipelines and the working pipeline are shown as peer assets with result
+samples, generation references, target example, palette, driver output, and
+checksum. A pipeline anatomy diagram exposes each stage from input identity to
+assembled card. The draft editor keeps Generation, Amiga processing, and Card
 groups collapsible.
 
 The calibration cohort is capped at three workspace sources and persists across
 trials. A trial is reviewable only when every cohort item reaches final-card
-`ready`. Simulation trials validate mechanics but cannot activate a production
-style. Live activation rechecks that the draft checksum and referenced asset
-checksums still match the trial, then locks a new immutable version and moves
-the active pointer. It never regenerates existing cards.
+`ready`. The Cards matrix groups results by pipeline checksum, so two edits to
+the same draft remain separate comparison columns. Simulation trials validate
+mechanics but cannot activate a production pipeline. Live activation rechecks
+that the draft checksum and referenced asset checksums still match the trial,
+then locks a new immutable version and moves the active pointer. It never
+regenerates existing cards.
 
 To add a future family, implement the typed registry driver, define and validate
 its renderer/card sections, provide descriptors and proof assets, and exercise
-the shared batch/trial/approval contracts. No new family is user-selectable
+the shared batch/trial contracts. No new family is user-selectable
 until its driver is registered and proven.
 
 ## Historical data
 
-Existing workspace files are not rewritten or deleted by bootstrap. They remain
-outside current-style production and approval counts. The supported UI exposes
-only the current workflow; old files can be inspected or recovered directly by
-an operator when needed.
+Existing workspace files are not rewritten or deleted by bootstrap. Ready
+historical cards are exposed in the source-by-pipeline comparison when their
+source still belongs to the current cohort; other old files remain directly
+inspectable by an operator.

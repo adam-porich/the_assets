@@ -277,7 +277,19 @@ class StyleStore:
         for entry in self._index().get("versions", []):
             try:
                 style = self.get_version(str(entry["style_version_id"]))
-                result.append({"style_version_id": style["identity"]["style_version_id"], "label": style["identity"]["label"], "version": style["identity"].get("version"), "checksum_sha256": style["checksums"]["style_sha256"], "active": style["identity"]["style_version_id"] == self.active_id()})
+                result.append({
+                    "style_version_id": style["identity"]["style_version_id"],
+                    "label": style["identity"]["label"],
+                    "version": style["identity"].get("version"),
+                    "checksum_sha256": style["checksums"]["style_sha256"],
+                    "active": style["identity"]["style_version_id"] == self.active_id(),
+                    "created_at": entry.get("created_at"),
+                    "execution_mode": style["generation"]["execution_mode"],
+                    "model_id": style["generation"]["model_id"],
+                    "quality": style["generation"]["quality"],
+                    "reference_count": len([asset for asset in style["reference_pack"]["assets"] if asset.get("role") == "generation-reference"]),
+                    "renderer_id": style["renderer"]["driver_id"],
+                })
             except ValueError:
                 continue
         return result
