@@ -8,7 +8,8 @@
 - [x] Treat the source as identity evidence, not as a pose, expression,
   lighting, background, or photographic-composition template.
 - [x] Produce a canonical neutral portrait master with the same visual intent
-  as `generation-reference-01.png`: frontal head-and-shoulders composition,
+  as the face-free `generation-reference-02.png` style board: frontal
+  head-and-shoulders composition,
   calm expression, direct gaze, broad connected tonal planes, restrained
   background, and no narrative action.
 - [x] Render that master through the existing Amiga OCS driver so the 336×276
@@ -30,8 +31,9 @@
     → 420×600 finished card
   ```
 
-- [x] Use `generation-reference-01.png` as the generation-stage style and
-  composition reference.
+- [x] Use the face-free `generation-reference-02.png` as the generation-stage
+  style and composition reference; retain the face-bearing image only as
+  historical renderer-proof input.
 - [x] Use `target-example-01.png` only as the expected post-render appearance
   and review/golden-test target; never send it to the generation provider.
 - [x] Preserve recognizable facial structure, apparent age, hair silhouette,
@@ -57,13 +59,13 @@
 
 ## Definition of done
 
-- [ ] A fresh configured workspace can select sources and produce cards using
+- [x] A fresh configured workspace can select sources and produce cards using
   a live img2img-capable model through the normal Sources action.
-- [ ] The produced masters visibly converge on the neutral reference pose and
+- [x] The produced masters visibly converge on the neutral reference pose and
   treatment instead of copying arbitrary source pose and emotion.
 - [x] Every final card is traceable to its source, generation request,
   generated master, Amiga render, and style version.
 - [x] The current Sources/Cards UI remains the primary workflow and retains its
   present visual design.
-- [ ] Automated tests, a small visual cohort, documentation, plan archival,
+- [x] Automated tests, a small visual cohort, documentation, plan archival,
   commit, and push are complete.

@@ -52,8 +52,12 @@ The Amiga driver uses the proven deterministic implementation in
 `tools/cards/amiga.py`: 168×138 logical art, 336×276 art, a shared 32-color
 OCS-compatible palette, edge-aware ordered 4×4 Bayer dithering, pixel-native
 210×300 logical cards, and exact 2× enlargement. Framing is resolved before
-preparation and quantisation. The checked-in generation reference rendered
-through this path is pixel-identical to `target-example-01.png`.
+preparation and quantisation. The active generation reference is the face-free
+`generation-reference-02.png` style board, so it contributes palette, matte
+planes, edges, and background treatment without introducing a second subject.
+The older face-bearing `generation-reference-01.png` remains only as a
+historical renderer-proof input; rendered through this path it is
+pixel-identical to `target-example-01.png`.
 
 The target example is a review asset only. The production reference stack is
 always identity first, followed by saved generation references. A target role

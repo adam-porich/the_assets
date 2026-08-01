@@ -2,20 +2,20 @@
 
 ## Visual calibration
 
-- [ ] Choose a fixed local cohort containing varied head angles, expressions,
+- [x] Choose a fixed local cohort containing varied head angles, expressions,
   lighting, backgrounds, ages, skin tones, hair, and clothing.
-- [ ] With explicit authorization for paid calls, run the same locked draft on
-  the full cohort and retain every source, master, Amiga art, and card in the
-  trial record.
-- [ ] Review whether the generated masters converge on the reference's frontal
+- [x] With explicit authorization for paid calls, run the same unchanged live
+  draft on the full cohort, lock it only after review, and retain every source,
+  master, Amiga art, and card in the trial record.
+- [x] Review whether the generated masters converge on the reference's frontal
   bust, calm affect, direct gaze, restrained background, broad tonal planes,
   and consistent crop.
-- [ ] Review whether recognizable identity cues survive without preserving the
+- [x] Review whether recognizable identity cues survive without preserving the
   source's exact emotion, pose, scene, or camera treatment.
-- [ ] Review the post-render 336×276 art against `target-example-01.png` for
+- [x] Review the post-render 336×276 art against `target-example-01.png` for
   palette, edge hierarchy, dithering, value grouping, background restraint,
   and silhouette readability.
-- [ ] Adjust generation direction and references before renderer settings when
+- [x] Adjust generation direction and references before renderer settings when
   failures are semantic; adjust the deterministic renderer only when the
   canonical masters are already correct.
 
@@ -36,7 +36,7 @@
 
 ## Cutover and documentation
 
-- [ ] Activate the proven live style as a new immutable version without
+- [x] Activate the proven live style as a new immutable version without
   rewriting existing batches or approvals.
 - [x] Update README and workbench documentation to describe the canonical
   master and show the exact source → neutral master → Amiga art → card path.
@@ -45,5 +45,5 @@
   unrestricted workspace data.
 - [x] Run Python tests, UI tests, TypeScript build, `git diff --check`, and an
   empty-workspace smoke test.
-- [ ] Move these completed plans to `_notes/archived`, commit the implementation
+- [x] Move these completed plans to `_notes/archived`, commit the implementation
   in coherent increments, push the branch, and leave the worktree clean.

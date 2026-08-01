@@ -33,7 +33,7 @@ simulation remains available only for free Style Studio preview trials.
 
 Upload, search, inspect provenance, and select an ordered set of source images.
 The page shows the exact number of calls, model, execution mode, and available
-cost before the primary **Make N cards with Amiga OCS Neutral Portrait v2** action.
+cost before the primary **Make N cards with Amiga OCS Neutral Portrait v3** action.
 
 ### Cards
 
@@ -113,7 +113,8 @@ npm run build
 git diff --check
 ```
 
-The Amiga proof uses the registered production renderer:
+The historical Amiga renderer proof uses the registered production renderer
+and keeps the face-bearing stage reference out of live provider requests:
 
 ```bash
 uv run python -m tools.cards.amiga_proof \

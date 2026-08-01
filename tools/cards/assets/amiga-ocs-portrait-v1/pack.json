@@ -1,12 +1,12 @@
 {
   "id": "amiga-ocs-portrait-v1-reference-pack",
-  "version": 1,
-  "purpose": "Stage-specific reference pair for the Amiga OCS Portrait v1 house style.",
+  "version": 2,
+  "purpose": "Stage-specific reference pair for the Amiga OCS Neutral Portrait v3 house style.",
   "generation_references": [
     {
-      "path": "generation-reference-01.png",
-      "role": "img2img pre-quantisation master",
-      "checksum_sha256": "68ca995a8d308963278a2047863886b382adc8cd1230d05952c017b659838efe",
+      "path": "generation-reference-02.png",
+      "role": "face-free img2img style reference for pre-quantisation masters",
+      "checksum_sha256": "ad0a1277a27a61dee615652f6fd81fa163a6dd44d5db378d9ed745faae39085c",
       "provenance": {
         "kind": "generated",
         "generator": "Codex built-in image generation",

@@ -1,8 +1,25 @@
 {
-  "style_version_id": "style_amiga_ocs_portrait_v2",
+  "style_family": "amiga-ocs-portrait",
+  "style_version_id": "style_amiga_ocs_portrait_v5_8cc6de7e54",
+  "style_label": "Amiga OCS Neutral Portrait v3",
+  "style_checksum": "3c356a5703739391db690481b25991fb0a2a4b7595aa929ddeb46e141584987c",
+  "draft_checksum_proven_live": "a0fb28c3a90a3b8336fa4bbe8142fd861bdcae31145f0d9581376a0694c25609",
   "style_checksum_source": "tools/cards/styles/amiga-ocs-portrait-v1.json",
-  "generation_reference": "tools/cards/assets/amiga-ocs-portrait-v1/generation-reference-01.png",
+  "generation_reference": "tools/cards/assets/amiga-ocs-portrait-v1/generation-reference-02.png",
   "target_example_review_only": "tools/cards/assets/amiga-ocs-portrait-v1/target-example-01.png",
+  "model": {
+    "id": "openai/gpt-image-1-mini",
+    "execution_mode": "live",
+    "provider": "openai",
+    "quality": "medium",
+    "max_input_references": 16,
+    "requested_aspect_ratio": "28:23",
+    "effective_aspect_ratio": "1:1",
+    "target_examples_sent": false,
+    "pricing_metadata": [
+      {"billable": "output_image", "unit": "token", "cost_usd": 0.000008}
+    ]
+  },
   "pipeline": [
     "source image",
     "live img2img neutralisation",
@@ -14,10 +31,15 @@
   ],
   "cohort": {
     "maximum_items": 3,
+    "status": "accepted-live-cohort",
+    "batch_id": "batch_d30ed8a9a674",
+    "requested_paid_calls": 3,
+    "paid_calls": 3,
+    "reported_cost_usd": 0.0320865,
     "required_variation": [
       "head angle and expression",
       "lighting and background",
-      "age, skin tone, hair, and clothing"
+      "age, skin tone, hair, clothing, and distinctive accessories"
     ],
     "artifact_stages": [
       "source_snapshot",
@@ -26,13 +48,103 @@
       "amiga_art_2x",
       "finished_card"
     ],
-    "status": "awaiting-authorized-live-run",
-    "reason": "Paid provider calls require explicit operator confirmation and are never made by tests or bootstrap."
+    "items": [
+      {
+        "order": 0,
+        "source_id": "source_35686cd6e4fc",
+        "source_label": "Evelyn Carvajal",
+        "attempt_id": "item_9bc8cc25e657",
+        "attempt_number": 1,
+        "rubric": {
+          "identity_cues": "pass",
+          "neutralisation": "pass",
+          "composition": "pass",
+          "master_quality": "pass",
+          "amiga_treatment": "pass",
+          "card_legibility": "pass"
+        },
+        "artifacts": {
+          "source": "portrait-library/production/batch_d30ed8a9a674/inputs/sources/source_35686cd6e4fc.jpg",
+          "master": "portrait-library/production/batch_d30ed8a9a674/masters/item_9bc8cc25e657.png",
+          "logical_art": "portrait-library/production/batch_d30ed8a9a674/renders/item_9bc8cc25e657-r1-logical.png",
+          "art": "portrait-library/production/batch_d30ed8a9a674/renders/item_9bc8cc25e657-r1-art.png",
+          "card": "portrait-library/production/batch_d30ed8a9a674/renders/item_9bc8cc25e657-r1-card.png"
+        },
+        "checksums": {
+          "source": "1d5d76308d82ac48a1c09570107eb3e389ccf7391abed97025f56060e66529c0",
+          "master": "4c1a4200630a5a43ffd26d4ee9fa7f4d5a9f0ac7fd3b84fc6070976b0179cec3",
+          "card": "1f5c3ae72ead247f4665054ffca79a40e37d03fab954376cb1ad72a09b846817"
+        },
+        "render": {"logical_art_size": [168, 138], "art_size": [336, 276], "card_size": [420, 600], "palette_colours_used": 20}
+      },
+      {
+        "order": 1,
+        "source_id": "source_fe566562ba17",
+        "source_label": "Arian Fernandez",
+        "attempt_id": "item_d154b6cc60a2",
+        "attempt_number": 1,
+        "rubric": {
+          "identity_cues": "pass",
+          "neutralisation": "pass",
+          "composition": "pass",
+          "master_quality": "pass",
+          "amiga_treatment": "pass",
+          "card_legibility": "pass"
+        },
+        "artifacts": {
+          "source": "portrait-library/production/batch_d30ed8a9a674/inputs/sources/source_fe566562ba17.jpg",
+          "master": "portrait-library/production/batch_d30ed8a9a674/masters/item_d154b6cc60a2.png",
+          "logical_art": "portrait-library/production/batch_d30ed8a9a674/renders/item_d154b6cc60a2-r1-logical.png",
+          "art": "portrait-library/production/batch_d30ed8a9a674/renders/item_d154b6cc60a2-r1-art.png",
+          "card": "portrait-library/production/batch_d30ed8a9a674/renders/item_d154b6cc60a2-r1-card.png"
+        },
+        "checksums": {
+          "source": "93cbfb44f19ddd9fe332da2f0befbd8a6d28a965e080cd5e3bcfac18f2169458",
+          "master": "477668b5acd8eba07311748c1d345f2f91581f923669735d9dd16afb43b39944",
+          "card": "0499a6041cd8b66ca06c14f8ed628b776f71301bcbf243a362f22208b0cbe7c4"
+        },
+        "render": {"logical_art_size": [168, 138], "art_size": [336, 276], "card_size": [420, 600], "palette_colours_used": 17}
+      },
+      {
+        "order": 2,
+        "source_id": "source_eed19dd4f40e",
+        "source_label": "Eduardo López",
+        "attempt_id": "item_9fd564faf683",
+        "attempt_number": 1,
+        "rubric": {
+          "identity_cues": "pass",
+          "neutralisation": "pass",
+          "composition": "pass",
+          "master_quality": "pass",
+          "amiga_treatment": "pass",
+          "card_legibility": "pass"
+        },
+        "artifacts": {
+          "source": "portrait-library/production/batch_d30ed8a9a674/inputs/sources/source_eed19dd4f40e.jpg",
+          "master": "portrait-library/production/batch_d30ed8a9a674/masters/item_9fd564faf683.png",
+          "logical_art": "portrait-library/production/batch_d30ed8a9a674/renders/item_9fd564faf683-r1-logical.png",
+          "art": "portrait-library/production/batch_d30ed8a9a674/renders/item_9fd564faf683-r1-art.png",
+          "card": "portrait-library/production/batch_d30ed8a9a674/renders/item_9fd564faf683-r1-card.png"
+        },
+        "checksums": {
+          "source": "70917145e55ece938836083d924d9853bf48c80083d96ef292cc4e86bb0b324e",
+          "master": "5206e999174f5d82b77e7e7026e7c20d34946a1a4b98259851d7ded2f2f412d0",
+          "card": "a8f0967efe7cbe722fff5a9e1590d304cb425a80676e6e70fe87dfe26aec0788"
+        },
+        "render": {"logical_art_size": [168, 138], "art_size": [336, 276], "card_size": [420, 600], "palette_colours_used": 25}
+      }
+    ]
   },
+  "superseded_trials": [
+    {"batch_id": "batch_074f4b34538a", "status": "rejected", "reason": "generation reference subject copied across the cohort", "reported_cost_usd": 0.031044},
+    {"batch_id": "batch_525e3ccde5fc", "status": "rejected", "reason": "face-bearing reference still caused generic identity collapse; superseded by face-free style board", "reported_cost_usd": 0.0534775}
+  ],
   "acceptance": {
     "rubric": "rubric.md",
     "target_sent_to_provider": false,
     "simulation_can_activate": false,
-    "framing_triggers_generation": false
+    "framing_triggers_generation": false,
+    "reference_order": "identity first, face-free generation reference after",
+    "human_review": "pass for all three final cohort items"
   }
 }
