@@ -14,13 +14,12 @@ from typing import Any, Protocol
 import requests
 from PIL import Image, ImageDraw, ImageEnhance, ImageFilter, ImageOps
 
-from .recipes import resolve_recipe_instruction
 
 
 REQUESTED_ART_RATIO = (28, 23)
 REQUESTED_ART_RATIO_LABEL = "28:23"
 OPENROUTER_MODELS_URL = "https://openrouter.ai/api/v1/images/models"
-SIMULATION_MODEL_ID = "fake/painterly-deterministic"
+SIMULATION_MODEL_ID = "fake/amiga-ocs-deterministic"
 DEFAULT_LIVE_MODEL_ID = "openai/gpt-image-1-mini"
 
 
@@ -237,7 +236,7 @@ class GenerationResult:
     dimensions: list[int]
     effective_aspect_ratio: str
     usage: dict[str, Any]
-    cost_usd: float
+    cost_usd: float | None
 
 
 class GenerationAdapter(Protocol):
@@ -386,7 +385,8 @@ class OpenRouterGenerationAdapter:
         except Exception as exc:
             raise RuntimeError(f"OpenRouter returned an unsupported image payload: {exc}") from exc
         usage = dict(body.get("usage") or {})
-        cost = float(usage.get("cost") or 0.0)
+        cost_value = usage.get("cost")
+        cost = float(cost_value) if isinstance(cost_value, (int, float)) else None
         return GenerationResult(
             output_path=str(request.output_path), backend=self.name, model=request.model, seed=request.seed,
             elapsed_seconds=round(time.perf_counter() - started, 3), dimensions=dimensions,
@@ -402,12 +402,6 @@ def adapter_for(execution_mode: str, capabilities: AdapterCapabilities) -> Gener
     if execution_mode == "live":
         return OpenRouterGenerationAdapter(capabilities)
     raise ValueError("execution_mode must be live or simulation")
-
-
-def resolved_run_instruction(recipe: dict[str, Any], capabilities: AdapterCapabilities) -> str:
-    if capabilities.negative_prompt:
-        return resolve_recipe_instruction({**recipe, "avoid": ""})
-    return resolve_recipe_instruction(recipe)
 
 
 def stable_seed(item_id: str) -> int:

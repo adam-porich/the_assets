@@ -29,6 +29,7 @@ def _portable_path(path: Path) -> str:
 
 def build_proof(inputs: list[tuple[str, Path]], output_dir: Path) -> dict:
     style = load_amiga_style()
+    style_label = style.get("identity", {}).get("label", style.get("label", "Amiga OCS Portrait"))
     records = []
     renders = []
     for label, path in inputs:
@@ -59,7 +60,7 @@ def build_proof(inputs: list[tuple[str, Path]], output_dir: Path) -> dict:
     sheet = Image.new("RGB", (sheet_width, header_height + row_height * len(renders)), "#111111")
     draw = ImageDraw.Draw(sheet)
     font = ImageFont.load_default()
-    draw.text((30, 24), style["label"].upper(), fill="#eeddcc", font=font)
+    draw.text((30, 24), str(style_label).upper(), fill="#eeddcc", font=font)
     draw.text((30, 42), "IMG2IMG MASTER  >  FIXED OCS ART  >  PIXEL-NATIVE CARD", fill="#cc9933", font=font)
     draw.text((30, 60), "168x138 LOGICAL ART / SHARED 32-COLOUR 12-BIT PALETTE / ORDERED DITHER / 2X NEAREST", fill="#aabbcc", font=font)
     palette = amiga_palette(style)

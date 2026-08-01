@@ -35,6 +35,8 @@ def load_amiga_style() -> dict[str, Any]:
 
 def amiga_palette(style: dict[str, Any] | None = None) -> tuple[tuple[int, int, int], ...]:
     selected = style or load_amiga_style()
+    if "renderer" in selected:
+        selected = selected["renderer"]
     return tuple(tuple(bytes.fromhex(value.removeprefix("#"))) for value in selected["palette"])  # type: ignore[return-value]
 
 
@@ -71,12 +73,15 @@ def _luminance(colour: tuple[int, int, int]) -> float:
     return 0.2126 * red + 0.7152 * green + 0.0722 * blue
 
 
-def _prepare_master(master: Image.Image, logical_size: tuple[int, int], centering: tuple[float, float]) -> Image.Image:
+def _prepare_master(master: Image.Image, logical_size: tuple[int, int], centering: tuple[float, float], style: dict[str, Any] | None = None) -> Image.Image:
     source = ImageOps.exif_transpose(master).convert("RGB")
     source = ImageOps.fit(source, logical_size, method=Image.Resampling.LANCZOS, centering=centering)
-    source = ImageEnhance.Color(source).enhance(0.88)
-    source = ImageEnhance.Contrast(source).enhance(1.08)
-    return source.filter(ImageFilter.UnsharpMask(radius=0.8, percent=90, threshold=5))
+    selected = (style or load_amiga_style())
+    selected = selected.get("renderer", selected)
+    preprocess = selected.get("preprocess") or {}
+    source = ImageEnhance.Color(source).enhance(float(preprocess.get("color", 0.88)))
+    source = ImageEnhance.Contrast(source).enhance(float(preprocess.get("contrast", 1.08)))
+    return source.filter(ImageFilter.UnsharpMask(radius=float(preprocess.get("unsharp_radius", 0.8)), percent=int(preprocess.get("unsharp_percent", 90)), threshold=int(preprocess.get("unsharp_threshold", 5))))
 
 
 def _two_nearest(
@@ -116,12 +121,14 @@ def quantize_amiga(
     *,
     dither_strength: float | None = None,
     edge_threshold: float | None = None,
+    style: dict[str, Any] | None = None,
 ) -> Image.Image:
     """Map a logical-size master to the fixed OCS palette with edge-aware ordered dither."""
-    style = load_amiga_style()
-    selected_palette = palette or amiga_palette(style)
-    strength = float(style["dither"]["strength"] if dither_strength is None else dither_strength)
-    threshold = float(style["dither"]["edge_threshold"] if edge_threshold is None else edge_threshold)
+    selected_style = style or load_amiga_style()
+    selected_renderer = selected_style.get("renderer", selected_style)
+    selected_palette = palette or amiga_palette(selected_style)
+    strength = float(selected_renderer["dither"]["strength"] if dither_strength is None else dither_strength)
+    threshold = float(selected_renderer["dither"]["edge_threshold"] if edge_threshold is None else edge_threshold)
     source = image.convert("RGB")
     width, height = source.size
     raw = source.tobytes()
@@ -159,24 +166,27 @@ def render_amiga_art(
     style: dict[str, Any] | None = None,
 ) -> tuple[Image.Image, Image.Image, dict[str, Any]]:
     selected = style or load_amiga_style()
-    logical_size = tuple(int(value) for value in selected["logical_art_size"])
-    scale = int(selected["output_scale"])
-    prepared = _prepare_master(master, logical_size, centering)
-    logical = quantize_amiga(prepared, amiga_palette(selected))
+    renderer = selected.get("renderer", selected)
+    composition = selected.get("composition", {})
+    logical_size = tuple(int(value) for value in renderer["logical_art_size"])
+    scale = int(renderer["output_scale"])
+    effective_centering = tuple(float(value) for value in composition.get("centering", centering)) if composition else centering
+    prepared = _prepare_master(master, logical_size, effective_centering, selected)
+    logical = quantize_amiga(prepared, amiga_palette(selected), style=selected)
     art = logical.resize((logical.width * scale, logical.height * scale), Image.Resampling.NEAREST)
     colours = logical.getcolors(maxcolors=logical.width * logical.height) or []
     metadata = {
-        "style_id": selected["id"],
-        "style_version": selected["version"],
+        "style_id": selected.get("identity", {}).get("family_id", selected.get("id")),
+        "style_version": selected.get("identity", {}).get("version", selected.get("version")),
         "logical_art_size": list(logical.size),
         "output_art_size": list(art.size),
         "output_scale": scale,
-        "palette_space": selected["palette_space"],
-        "palette_limit": len(selected["palette"]),
+        "palette_space": renderer["palette_space"],
+        "palette_limit": len(renderer["palette"]),
         "palette_colours_used": len(colours),
-        "palette_sha256": hashlib.sha256("\n".join(selected["palette"]).encode("ascii")).hexdigest(),
-        "dither": dict(selected["dither"]),
-        "centering": list(centering),
+        "palette_sha256": hashlib.sha256("\n".join(renderer["palette"]).encode("ascii")).hexdigest(),
+        "dither": dict(renderer["dither"]),
+        "centering": list(effective_centering),
     }
     return logical, art, metadata
 
@@ -193,8 +203,10 @@ def render_amiga_card(
 ) -> Image.Image:
     """Compose the complete card on the same logical pixel grid as its art."""
     selected = style or load_amiga_style()
-    card_width, card_height = (int(value) for value in selected["logical_card_size"])
-    scale = int(selected["output_scale"])
+    renderer = selected.get("renderer", selected)
+    card_config = selected.get("card_assembly", selected)
+    card_width, card_height = (int(value) for value in card_config["logical_card_size"])
+    scale = int(card_config.get("output_scale", renderer["output_scale"]))
     palette = amiga_palette(selected)
     ink, deep_brown, slate, brown, umber = palette[0], palette[1], palette[3], palette[6], palette[7]
     border, title, copy, accent = palette[19], palette[16], palette[20], palette[22]
@@ -208,11 +220,11 @@ def render_amiga_card(
 
     draw.rectangle((17, 10, 192, 31), fill=deep_brown, outline=border, width=1)
     draw.line((20, 28, 189, 28), fill=umber, width=1)
-    _pixel_text(draw, (23, 16), "Portrait Workbench", title)
+    _pixel_text(draw, (23, 16), str((card_config.get("text") or {}).get("title", "Portrait Workbench")), title)
 
     art = logical_art.convert("RGB")
-    if art.size != tuple(selected["logical_art_size"]):
-        art = art.resize(tuple(selected["logical_art_size"]), Image.Resampling.NEAREST)
+    if art.size != tuple(renderer["logical_art_size"]):
+        art = art.resize(tuple(renderer["logical_art_size"]), Image.Resampling.NEAREST)
     draw.rectangle((18, 36, 192, 180), fill=ink, outline=border, width=2)
     canvas.paste(art, (21, 39))
     draw.rectangle((20, 38, 189, 177), outline=copy, width=1)
@@ -220,10 +232,11 @@ def render_amiga_card(
     draw.rectangle((16, 191, 194, 213), fill=deep_brown, outline=border, width=1)
     _pixel_text(draw, (22, 198), label[:28], title)
     draw.rectangle((16, 221, 194, 274), fill=deep_brown, outline=border, width=1)
-    _pixel_text(draw, (22, 229), "Amiga OCS / 32 colours", copy)
-    _pixel_text(draw, (22, 241), "House style v1", copy)
+    card_text = card_config.get("text") or {}
+    _pixel_text(draw, (22, 229), str(card_text.get("subtitle", "Amiga OCS / 32 colours")), copy)
+    _pixel_text(draw, (22, 241), str(card_text.get("version", "House style v1")), copy)
     draw.line((22, 256, 188, 256), fill=slate, width=1)
-    _pixel_text(draw, (22, 261), "Identity retained", border)
+    _pixel_text(draw, (22, 261), str(card_text.get("identity", "Identity retained")), border)
     # Pillow rasterises even its bitmap font through an antialiased mask. Snap
     # the complete logical card back to the same hardware palette before the
     # nearest-neighbour presentation scale is applied.
@@ -232,9 +245,11 @@ def render_amiga_card(
 
 
 def render_amiga(master: Image.Image, label: str, *, centering: tuple[float, float] = (0.5, 0.44)) -> AmigaRender:
-    logical, art, metadata = render_amiga_art(master, centering=centering)
-    card = render_amiga_card(logical, label)
-    metadata = {**metadata, "logical_card_size": load_amiga_style()["logical_card_size"], "output_card_size": list(card.size)}
+    selected = load_amiga_style()
+    logical, art, metadata = render_amiga_art(master, centering=centering, style=selected)
+    card = render_amiga_card(logical, label, style=selected)
+    card_config = selected.get("card_assembly", selected)
+    metadata = {**metadata, "logical_card_size": card_config["logical_card_size"], "output_card_size": list(card.size)}
     return AmigaRender(logical, art, card, metadata)
 
 

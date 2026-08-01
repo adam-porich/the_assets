@@ -1,0 +1,320 @@
+from __future__ import annotations
+
+import copy
+import json
+import shutil
+import threading
+import uuid
+import zipfile
+from pathlib import Path
+from typing import Any, Callable
+
+from PIL import Image
+
+from tools.cards.registry import RenderBundle, registry
+from tools.cards.style_pipeline import StyleStore, style_checksum, validate_style
+
+from .generation import AdapterCapabilities, GenerationRequest, adapter_for, stable_seed, validate_request
+from .workspace import WorkspaceError, WorkspaceStore, checksum, new_id, now_iso
+
+
+TERMINAL_ITEM_STATES = {"ready", "failed", "interrupted"}
+
+
+class CardProductionManager:
+    """The one worker used by card production and complete style trials."""
+
+    def __init__(self, store: WorkspaceStore, style_store: StyleStore | None = None, adapter_factory: Callable[[str, AdapterCapabilities], Any] | None = None) -> None:
+        self.store = store
+        self.store.ensure()
+        self.styles = style_store or StyleStore(store)
+        self.adapter_factory = adapter_factory or adapter_for
+        self._lock = threading.RLock()
+        self._active_batch: str | None = None
+        self.mark_interrupted()
+
+    def _path(self, batch_id: str) -> Path:
+        if not batch_id or "/" in batch_id or "\\" in batch_id or ".." in batch_id:
+            raise WorkspaceError("unsafe production batch ID")
+        return self.store.root / "production" / batch_id / "batch.json"
+
+    def _read(self, batch_id: str) -> dict[str, Any]:
+        path = self._path(batch_id)
+        record = self.store.read_json(path, None)
+        if not isinstance(record, dict):
+            raise ValueError(f"production batch {batch_id} does not exist")
+        return record
+
+    def _write(self, record: dict[str, Any]) -> None:
+        self.store.atomic_json(self._path(str(record["batch_id"])), record)
+
+    @staticmethod
+    def _copy(source: Path, destination: Path) -> None:
+        if not source.is_file():
+            raise ValueError(f"input asset is missing: {source}")
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        temporary = destination.with_name(f".{destination.name}.{uuid.uuid4().hex}.tmp")
+        shutil.copy2(source, temporary)
+        temporary.replace(destination)
+
+    @staticmethod
+    def _save_image(image: Image.Image, path: Path) -> None:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        temporary = path.with_name(f".{path.name}.{uuid.uuid4().hex}.tmp")
+        image.save(temporary, format="PNG", optimize=True)
+        temporary.replace(path)
+
+    def mark_interrupted(self) -> None:
+        production = self.store.root / "production"
+        for path in production.glob("*/batch.json") if production.exists() else []:
+            record = self.store.read_json(path, {})
+            if record.get("status") in {"queued", "running", "processing"}:
+                record["status"] = "interrupted"
+                record["error"] = "The worker stopped while this batch was active. Retry failed items to make new attempts."
+                for item in record.get("items", []):
+                    if item.get("status") not in TERMINAL_ITEM_STATES:
+                        item["status"] = "interrupted"
+                        item["error"] = record["error"]
+                record["updated_at"] = now_iso()
+                self.store.atomic_json(path, record)
+
+    def _model(self, style: dict[str, Any], models: list[dict[str, Any]]) -> dict[str, Any]:
+        generation = style["generation"]
+        model_id, mode = str(generation["model_id"]), str(generation["execution_mode"])
+        model = next((item for item in models if str(item.get("id")) == model_id and str(item.get("execution_mode")) == mode), None)
+        if not model:
+            raise ValueError(f"{model_id} is not an available {mode} model")
+        return model
+
+    def _validate_start(self, style: dict[str, Any], source_ids: list[str], models: list[dict[str, Any]]) -> tuple[dict[str, Any], AdapterCapabilities, dict[str, Any], list[dict[str, Any]]]:
+        if not source_ids:
+            raise ValueError("select at least one source image")
+        if len(source_ids) != len(set(source_ids)):
+            raise ValueError("selected source IDs must be unique")
+        model = self._model(style, models)
+        capabilities = AdapterCapabilities.from_model(model)
+        generation = style["generation"]
+        generation_refs = [asset for asset in style["reference_pack"]["assets"] if asset.get("role") == "generation-reference"]
+        mapping = validate_request({"model": generation["model_id"], "quality": generation["quality"]}, len(generation_refs), capabilities)
+        return model, capabilities, mapping, generation_refs
+
+    def create(self, source_ids: list[str], style: dict[str, Any], models: list[dict[str, Any]], *, purpose: str = "card-production") -> dict[str, Any]:
+        if purpose not in {"card-production", "style-trial"}:
+            raise ValueError("production purpose must be card-production or style-trial")
+        style = validate_style(copy.deepcopy(style), require_locked=purpose == "card-production")
+        with self._lock:
+            if self._active_batch:
+                raise ValueError("one paid generation batch is already active; wait for it to finish")
+            workspace = self.store.read()
+            sources = {str(item["id"]): item for item in workspace.get("sources", [])}
+            source_ids = [str(item) for item in source_ids]
+            if any(source_id not in sources for source_id in source_ids):
+                raise ValueError("selected source IDs contain a missing source")
+            model, capabilities, mapping, generation_refs = self._validate_start(style, source_ids, models)
+            batch_id = new_id("batch")
+            batch_dir = self._path(batch_id).parent
+            source_snapshots: list[dict[str, Any]] = []
+            for source_id in source_ids:
+                source = sources[source_id]
+                source_path = self.store.absolute_path(str(source.get("relative_path") or ""))
+                destination = batch_dir / "inputs" / "sources" / f"{source_id}{source_path.suffix.lower() or '.png'}"
+                self._copy(source_path, destination)
+                source_snapshots.append({**copy.deepcopy(source), "input_path": destination.relative_to(self.store.root).as_posix(), "input_checksum_sha256": checksum(destination)})
+            reference_snapshots: list[dict[str, Any]] = []
+            for reference in generation_refs:
+                path = self.store.absolute_path(str(reference.get("relative_path") or ""))
+                destination = batch_dir / "inputs" / "references" / f"{reference['id']}{path.suffix.lower() or '.png'}"
+                self._copy(path, destination)
+                reference_snapshots.append({**copy.deepcopy(reference), "input_path": destination.relative_to(self.store.root).as_posix(), "input_checksum_sha256": checksum(destination)})
+            created = now_iso()
+            items = []
+            for source in source_snapshots:
+                lineage_id = new_id("lineage")
+                items.append(self._new_item(source, 1, lineage_id, reference_snapshots))
+            record = {
+                "batch_id": batch_id, "purpose": purpose, "created_at": created, "updated_at": created,
+                "status": "queued", "style_snapshot": style, "style_version_id": style["identity"]["style_version_id"],
+                "style_checksum_sha256": style["checksums"]["style_sha256"], "selected_source_ids": source_ids,
+                "source_snapshots": source_snapshots, "reference_snapshots": reference_snapshots,
+                "model": model, "model_capabilities": capabilities.to_json(), "backend_mapping": mapping,
+                "requested_paid_calls": len(source_ids), "paid_calls": 0, "usage": {}, "cost_usd": 0.0,
+                "items": items, "calibration_source_ids": source_ids if purpose == "style-trial" else None,
+            }
+            self._write(record)
+            self._active_batch = batch_id
+            threading.Thread(target=self._work, args=(batch_id,), daemon=True, name=f"card-production-{batch_id}").start()
+            return self.payload(record)
+
+    def _new_item(self, source: dict[str, Any], attempt_number: int, lineage_id: str, references: list[dict[str, Any]]) -> dict[str, Any]:
+        return {
+            "item_id": new_id("item"), "source_id": source["id"], "source_label": source.get("label") or source["id"],
+            "attempt_number": attempt_number, "lineage_id": lineage_id, "status": "queued", "error": None,
+            "source_input_path": source["input_path"], "source_input_checksum_sha256": source["input_checksum_sha256"],
+            "reference_stack": [{"role": "identity", "source_id": source["id"], "input_path": source["input_path"], "checksum_sha256": source["input_checksum_sha256"]}, *[
+                {"role": "generation-reference", "reference_id": reference["id"], "input_path": reference["input_path"], "checksum_sha256": reference["input_checksum_sha256"]} for reference in references
+            ]],
+            "framing": None, "render_revision": 0, "render_revisions": [], "master_path": None, "master_checksum_sha256": None,
+            "logical_art_path": None, "art_path": None, "card_path": None, "card_checksum_sha256": None,
+            "generation": {}, "render_metadata": {}, "usage": {}, "cost_usd": None,
+        }
+
+    def _work(self, batch_id: str) -> None:
+        try:
+            record = self._read(batch_id)
+            record.update({"status": "running", "started_at": now_iso(), "updated_at": now_iso()}); self._write(record)
+            capabilities = AdapterCapabilities.from_model(record["model"])
+            adapter = self.adapter_factory(str(record["style_snapshot"]["generation"]["execution_mode"]), capabilities)
+            for item in record["items"]:
+                if item.get("status") not in {"queued"}:
+                    continue
+                try:
+                    item.update({"status": "generating", "started_at": now_iso()}); self._write(record)
+                    source_path = self.store.absolute_path(str(item["source_input_path"]))
+                    master_relative = Path("production") / batch_id / "masters" / f"{item['item_id']}.png"
+                    self.store.absolute_path(master_relative).parent.mkdir(parents=True, exist_ok=True)
+                    reference_paths = [self.store.absolute_path(str(reference["input_path"])) for reference in record["reference_snapshots"]]
+                    generation = record["style_snapshot"]["generation"]
+                    result = adapter.generate(GenerationRequest(
+                        identity_image=source_path, style_images=reference_paths,
+                        instruction="\n".join(str(value) for value in generation["direction"].values()),
+                        negative_prompt=str(generation.get("avoid") or ""), model=str(generation["model_id"]), quality=str(generation["quality"]),
+                        seed=stable_seed(str(item["item_id"])), effective_aspect_ratio=str(record["backend_mapping"]["effective_aspect_ratio"]),
+                        output_path=self.store.absolute_path(master_relative),
+                    ))
+                    item.update({"status": "processing", "master_path": master_relative.as_posix(), "master_checksum_sha256": checksum(self.store.absolute_path(master_relative)), "generation": {"backend": result.backend, "model": result.model, "seed": result.seed, "elapsed_seconds": result.elapsed_seconds, "dimensions": result.dimensions, "effective_aspect_ratio": result.effective_aspect_ratio, "usage": result.usage, "cost_usd": result.cost_usd}, "usage": result.usage, "cost_usd": result.cost_usd}); self._write(record)
+                    self._render_item(record, item, None)
+                    item["status"] = "ready"; item["finished_at"] = now_iso(); item["error"] = None
+                except Exception as exc:
+                    item.update({"status": "failed", "error": str(exc), "finished_at": now_iso()})
+                self._update_totals(record); record["updated_at"] = now_iso(); self._write(record)
+            self._update_totals(record)
+            statuses = [item.get("status") for item in record["items"]]
+            record["status"] = "ready" if statuses and all(status == "ready" for status in statuses) else "ready-with-errors" if any(status == "ready" for status in statuses) else "failed"
+            record["finished_at"] = now_iso(); record["updated_at"] = now_iso(); self._write(record)
+        except Exception as exc:
+            try:
+                record = self._read(batch_id); record.update({"status": "failed", "error": str(exc), "updated_at": now_iso()}); self._write(record)
+            except Exception:
+                pass
+        finally:
+            with self._lock:
+                if self._active_batch == batch_id:
+                    self._active_batch = None
+
+    def _update_totals(self, record: dict[str, Any]) -> None:
+        record["paid_calls"] = sum(1 for item in record.get("items", []) if item.get("generation"))
+        record["usage"] = {key: value for key, value in {key: sum(float(item.get("usage", {}).get(key, 0) or 0) for item in record["items"] if isinstance(item.get("usage", {}).get(key), (int, float))) for key in {key for item in record["items"] for key in (item.get("usage") or {})}}.items()}
+        costs = [item.get("cost_usd") for item in record["items"] if isinstance(item.get("cost_usd"), (int, float))]
+        record["cost_usd"] = round(sum(costs), 8) if costs else None
+
+    def _render_item(self, record: dict[str, Any], item: dict[str, Any], framing: dict[str, float] | None) -> None:
+        style = validate_style(record["style_snapshot"], require_locked=record["purpose"] == "card-production")
+        master_path = self.store.absolute_path(str(item["master_path"]))
+        with Image.open(master_path) as opened:
+            master = opened.convert("RGB")
+        revision = int(item.get("render_revision") or 0) + 1
+        bundle: RenderBundle = registry.render(style, master, str(item["source_label"]), framing)
+        base = Path("production") / record["batch_id"] / "renders" / f"{item['item_id']}-r{revision}"
+        logical_path, art_path, card_path = base.with_name(base.name + "-logical.png"), base.with_name(base.name + "-art.png"), base.with_name(base.name + "-card.png")
+        self._save_image(bundle.logical_art, self.store.absolute_path(logical_path)); self._save_image(bundle.art, self.store.absolute_path(art_path)); self._save_image(bundle.card, self.store.absolute_path(card_path))
+        item.update({"render_revision": revision, "framing": framing or style["composition"]["default_framing"], "logical_art_path": logical_path.as_posix(), "art_path": art_path.as_posix(), "card_path": card_path.as_posix(), "card_checksum_sha256": checksum(self.store.absolute_path(card_path)), "render_metadata": bundle.metadata})
+        item.setdefault("render_revisions", []).append({"revision": revision, "logical_art_path": logical_path.as_posix(), "art_path": art_path.as_posix(), "card_path": card_path.as_posix(), "card_checksum_sha256": item["card_checksum_sha256"], "framing": copy.deepcopy(item["framing"]), "render_metadata": bundle.metadata, "created_at": now_iso()})
+
+    def payload(self, record: dict[str, Any]) -> dict[str, Any]:
+        result = copy.deepcopy(record)
+        result["progress"] = self.progress(record)
+        current_approvals = self._approval_data().get("current", {})
+        result["progress"]["approved_cards"] = sum(1 for source_id in record.get("selected_source_ids", []) if f"{source_id}:{record.get('style_version_id')}" in current_approvals)
+        for item in result.get("items", []):
+            item["approved"] = current_approvals.get(f"{item.get('source_id')}:{record.get('style_version_id')}", {}).get("attempt_id") == item.get("item_id")
+            for field in ("master_path", "logical_art_path", "art_path", "card_path"):
+                item[field.replace("_path", "_url")] = self.store.asset_url(item.get(field))
+            item["source_url"] = self.store.asset_url(item.get("source_input_path"))
+            item["reference_urls"] = [self.store.asset_url(reference.get("input_path")) for reference in item.get("reference_stack", []) if reference.get("role") == "generation-reference"]
+        result["style_snapshot"] = self.styles.payload(result["style_snapshot"])
+        return result
+
+    @staticmethod
+    def progress(record: dict[str, Any]) -> dict[str, Any]:
+        items = record.get("items", [])
+        return {"selected_sources": len(record.get("selected_source_ids", [])), "ready_cards": sum(item.get("status") == "ready" for item in items), "approved_cards": 0, "failed_sources": len({item.get("source_id") for item in items if item.get("status") == "failed"}), "paid_calls": int(record.get("paid_calls") or 0), "total_attempts": len(items)}
+
+    def get(self, batch_id: str) -> dict[str, Any]:
+        return self.payload(self._read(batch_id))
+
+    def list(self) -> list[dict[str, Any]]:
+        records = []
+        for path in (self.store.root / "production").glob("*/batch.json"):
+            record = self.store.read_json(path, {})
+            if isinstance(record, dict):
+                item = {key: record.get(key) for key in ("batch_id", "purpose", "status", "style_version_id", "style_checksum_sha256", "created_at", "updated_at", "cost_usd", "paid_calls", "requested_paid_calls")}
+                item["progress"] = self.progress(record); records.append(item)
+        return sorted(records, key=lambda item: str(item.get("created_at") or ""), reverse=True)
+
+    def _append_attempt(self, record: dict[str, Any], source_id: str) -> dict[str, Any]:
+        sources = {str(source["id"]): source for source in record["source_snapshots"]}
+        source = sources.get(source_id)
+        if not source:
+            raise ValueError("source is not part of this batch")
+        existing = [item for item in record["items"] if str(item.get("source_id")) == source_id]
+        lineage = str(existing[0].get("lineage_id") if existing else new_id("lineage"))
+        references = record["reference_snapshots"]
+        item = self._new_item(source, max([int(candidate.get("attempt_number", 0)) for candidate in existing] + [0]) + 1, lineage, references)
+        record["items"].append(item); record["requested_paid_calls"] = int(record.get("requested_paid_calls") or 0) + 1; record["status"] = "queued"; record["updated_at"] = now_iso(); self._write(record)
+        return item
+
+    def retry_failed(self, batch_id: str) -> dict[str, Any]:
+        with self._lock:
+            if self._active_batch: raise ValueError("one paid generation batch is already active; wait for it to finish")
+            record = self._read(batch_id)
+            source_ids = list(dict.fromkeys(str(item["source_id"]) for item in record["items"] if item.get("status") in {"failed", "interrupted"}))
+            if not source_ids: raise ValueError("this batch has no failed or interrupted sources to retry")
+            for source_id in source_ids: self._append_attempt(record, source_id)
+            self._active_batch = batch_id; threading.Thread(target=self._work, args=(batch_id,), daemon=True, name=f"card-retry-{batch_id}").start()
+            return self.payload(record)
+
+    def try_another(self, batch_id: str, source_id: str) -> dict[str, Any]:
+        with self._lock:
+            if self._active_batch: raise ValueError("one paid generation batch is already active; wait for it to finish")
+            record = self._read(batch_id); self._append_attempt(record, str(source_id)); self._active_batch = batch_id
+            threading.Thread(target=self._work, args=(batch_id,), daemon=True, name=f"card-attempt-{batch_id}").start()
+            return self.payload(record)
+
+    def rerender(self, batch_id: str, item_id: str, framing: dict[str, float] | None) -> dict[str, Any]:
+        record = self._read(batch_id); item = next((candidate for candidate in record["items"] if candidate.get("item_id") == item_id), None)
+        if not item or item.get("status") != "ready": raise ValueError("only a ready card can be reframed")
+        style = record["style_snapshot"]; resolved = {**style["composition"]["default_framing"], **(framing or {})}
+        approvals = self._approval_data()
+        approval_key = f"{item['source_id']}:{record['style_version_id']}"
+        current_approval = approvals.get("current", {}).get(approval_key)
+        if current_approval and current_approval.get("attempt_id") == item_id and int(current_approval.get("render_revision", 0)) == int(item.get("render_revision", 0)):
+            approvals["current"].pop(approval_key, None)
+            self.store.atomic_json(self.store.root / "approvals" / "approvals.json", approvals)
+        self._render_item(record, item, resolved); item["status"] = "ready"; item["updated_at"] = now_iso(); self._write(record)
+        return self.payload(record)
+
+    def _approval_data(self) -> dict[str, Any]:
+        return self.store.read_json(self.store.root / "approvals" / "approvals.json", {"version": 1, "history": [], "current": {}})
+
+    def approve(self, batch_id: str, item_id: str) -> dict[str, Any]:
+        record = self._read(batch_id); item = next((candidate for candidate in record["items"] if candidate.get("item_id") == item_id), None)
+        if not item or item.get("status") != "ready": raise ValueError("only a ready final card can be approved")
+        key = f"{item['source_id']}:{record['style_version_id']}"
+        data = self._approval_data(); approval = {"approval_id": new_id("approval"), "source_id": item["source_id"], "attempt_id": item["item_id"], "batch_id": batch_id, "style_version_id": record["style_version_id"], "style_checksum_sha256": record["style_checksum_sha256"], "card_checksum_sha256": item["card_checksum_sha256"], "render_revision": item["render_revision"], "approved_at": now_iso()}
+        data["history"].append(approval); data["current"][key] = approval; self.store.atomic_json(self.store.root / "approvals" / "approvals.json", data)
+        return approval
+
+    def approvals_for_batch(self, batch_id: str) -> list[dict[str, Any]]:
+        record = self._read(batch_id); current = self._approval_data().get("current", {}); return [current[key] for key in (f"{source_id}:{record['style_version_id']}" for source_id in record["selected_source_ids"]) if key in current]
+
+    def bundle(self, batch_id: str) -> dict[str, Any]:
+        record = self._read(batch_id); approvals = {item["source_id"]: item for item in self.approvals_for_batch(batch_id)}
+        if len(approvals) != len(record["selected_source_ids"]): raise ValueError("approve one current card for every selected source before downloading the bundle")
+        batch_dir = self._path(batch_id).parent; output = self.store.root / "downloads" / f"{batch_id}-approved.zip"; manifest_items = []
+        with zipfile.ZipFile(output, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+            for index, source_id in enumerate(record["selected_source_ids"], 1):
+                approval = approvals[source_id]; item = next(candidate for candidate in record["items"] if candidate["item_id"] == approval["attempt_id"])
+                card_path = self.store.absolute_path(str(item["card_path"])); name = f"{index:02d}-{source_id}.png"; archive.writestr(name, card_path.read_bytes())
+                manifest_items.append({"order": index - 1, "source_id": source_id, "attempt_id": item["item_id"], "style_version_id": record["style_version_id"], "style_checksum_sha256": record["style_checksum_sha256"], "card_checksum_sha256": item["card_checksum_sha256"], "render_revision": item["render_revision"], "path": name})
+            archive.writestr("manifest.json", json.dumps({"batch_id": batch_id, "style_version_id": record["style_version_id"], "items": manifest_items}, indent=2, sort_keys=True) + "\n")
+        return {"download_url": self.store.asset_url(output.relative_to(self.store.root)), "manifest": {"batch_id": batch_id, "style_version_id": record["style_version_id"], "items": manifest_items}}

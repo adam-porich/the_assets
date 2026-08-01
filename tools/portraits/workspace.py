@@ -17,12 +17,10 @@ from PIL import Image
 WORKSPACE_VERSION = 1
 WORKSPACE_FILENAME = "workspace.json"
 DEFAULT_WORKSPACE = {
-    "version": WORKSPACE_VERSION,
-    "sources": [],
-    "benchmark_source_ids": [],
-    "references": [],
-    "recipes": [],
-    "active_recipe_id": None,
+  "version": WORKSPACE_VERSION,
+  "sources": [],
+  "benchmark_source_ids": [],
+  "references": [],
 }
 BUNDLED_REFERENCE_DIR = Path(__file__).parent / "assets" / "estate-card-v1"
 BUNDLED_REFERENCES = (
@@ -68,7 +66,7 @@ class WorkspaceStore:
 
     def ensure(self) -> None:
         with self._lock:
-            for directory in ("sources", "references", "prepared", "runs", "cards", "candidate-selections", "finishes", "sets"):
+            for directory in ("sources", "references", "styles", "production", "approvals", "downloads"):
                 (self.root / directory).mkdir(parents=True, exist_ok=True)
             if not self.workspace_path.exists():
                 self._atomic_json(self.workspace_path, _clone_default())
@@ -78,7 +76,7 @@ class WorkspaceStore:
             raise WorkspaceError(f"{WORKSPACE_FILENAME} must use workspace version {WORKSPACE_VERSION}")
         normalized = _clone_default()
         normalized.update(data)
-        for key in ("sources", "benchmark_source_ids", "references", "recipes"):
+        for key in ("sources", "benchmark_source_ids", "references"):
             if not isinstance(normalized.get(key), list):
                 raise WorkspaceError(f"{key} must be a list")
         source_values = [str(item.get("id")) for item in normalized["sources"]]
@@ -93,23 +91,6 @@ class WorkspaceStore:
         if len(reference_values) != len(set(reference_values)):
             raise WorkspaceError("references must have unique IDs")
         reference_ids = set(reference_values)
-        recipe_values = [str(item.get("id")) for item in normalized["recipes"]]
-        if len(recipe_values) != len(set(recipe_values)):
-            raise WorkspaceError("recipes must have unique IDs")
-        for recipe in normalized["recipes"]:
-            if not isinstance(recipe, dict):
-                raise WorkspaceError("recipes must contain objects")
-            if any(str(item) not in reference_ids for item in recipe.get("reference_ids", [])):
-                raise WorkspaceError(f"recipe {recipe.get('id', 'unknown')} contains an unknown reference")
-        active = normalized.get("active_recipe_id")
-        if active is not None and str(active) not in {str(item.get("id")) for item in normalized["recipes"]}:
-            raise WorkspaceError("active_recipe_id contains an unknown recipe")
-        active_set = normalized.get("active_set_id")
-        if active_set is not None and not str(active_set).strip():
-            raise WorkspaceError("active_set_id must be null or a non-empty ID")
-        selection = normalized.get("candidate_selection")
-        if selection is not None and not isinstance(selection, dict):
-            raise WorkspaceError("candidate_selection must be an object or null")
         return normalized
 
     def read(self) -> dict[str, Any]:
@@ -193,14 +174,6 @@ class WorkspaceStore:
     def reference_payload(self, reference: dict[str, Any]) -> dict[str, Any]:
         return {**reference, "image_url": self.asset_url(reference.get("relative_path"))}
 
-    def recipe_payload(self, recipe: dict[str, Any]) -> dict[str, Any]:
-        refs = {str(item["id"]): item for item in self.read().get("references", [])}
-        return {
-            **recipe,
-            "change_note": str(recipe.get("change_note") or ""),
-            "references": [self.reference_payload(refs[ref_id]) for ref_id in recipe.get("reference_ids", []) if ref_id in refs],
-        }
-
     def payload(self) -> dict[str, Any]:
         data = self.read()
         return {
@@ -208,42 +181,8 @@ class WorkspaceStore:
             "sources": [self.source_payload(item) for item in data["sources"]],
             "benchmark_source_ids": list(data["benchmark_source_ids"]),
             "references": [self.reference_payload(item) for item in data["references"]],
-            "recipes": [
-                {
-                    **recipe,
-                    "change_note": str(recipe.get("change_note") or ""),
-                    "references": [
-                        self.reference_payload(reference)
-                        for reference in data["references"]
-                        if reference.get("id") in recipe.get("reference_ids", [])
-                    ],
-                }
-                for recipe in data["recipes"]
-            ],
-            "active_recipe_id": data.get("active_recipe_id"),
-            "candidate_selection": self.candidate_selection_payload(data.get("candidate_selection")),
-            "active_set_id": data.get("active_set_id"),
-            "links": {"runs": "api/runs", "cards": "api/cards"},
+            "links": {"production": "api/production", "styles": "api/styles/bootstrap"},
         }
-
-    def candidate_selection_payload(self, selection: dict[str, Any] | None) -> dict[str, Any] | None:
-        """Add asset URLs without changing the immutable selection snapshot."""
-        if not isinstance(selection, dict):
-            return None
-        result = dict(selection)
-        items = selection.get("selected_items", selection.get("items", []))
-        if isinstance(items, list):
-            result["selected_items"] = [
-                {
-                    **item,
-                    "output_url": self.asset_url(item.get("output_path")),
-                    "source_url": self.asset_url(item.get("source_path")),
-                }
-                for item in items
-                if isinstance(item, dict)
-            ]
-            result["items"] = result["selected_items"]
-        return result
 
     def ensure_bundled_references(self) -> list[str]:
         """Copy the checked-in estate-card references into a new workspace once."""

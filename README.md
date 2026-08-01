@@ -1,14 +1,16 @@
 # Portrait Workbench
 
-Portrait Workbench is a browser-first, provenance-first portrait workflow:
+Portrait Workbench turns selected source portraits into finished, pixel-native
+cards through one explicit path:
 
-**Sources → Explore → Finish → Build Set → Frames → Completed**
+```text
+Sources → Cards
+```
 
-Explore is broad and disposable. Select 1–3 complete outputs from different
-source portraits, iterate one generative Finish across that cohort, lock a
-complete cohort, and build one named set from that immutable Finish. Painterly
-and Estate Pixel are deterministic card Treatments in Frames, not Finish
-choices.
+The active house style is **Amiga OCS Portrait v1**. Its locked pipeline owns
+the generation direction, ordered image references, framing, fixed-palette
+rendering, and card assembly as one versioned contract. Style Studio is opened
+from the active-style chip when that contract needs to evolve.
 
 ## Start it
 
@@ -18,48 +20,100 @@ npm install
 npm run dev
 ```
 
-Open the Vite URL. The Python service creates an ignored `portrait-library/`
-workspace, seeds two bundled estate style references, and creates a low-quality
-live recipe. Set `PEXELS_API_KEY` for Pexels search and starter images. Set
-`OPENROUTER_API_KEY` for live generation. Simulation is an explicit local
-workflow fixture, not generated artwork.
+The API creates an ignored `portrait-library/` workspace and materializes the
+checked-in Amiga style and its reference assets without making a generation
+call. Set `PEXELS_API_KEY` to enable Pexels search and starter imports. Set
+`OPENROUTER_API_KEY` only when live generation is explicitly authorized. The
+simulation model is local, deterministic, and free.
 
-## Browser workflow
+## Browser surfaces
 
-1. **Sources:** search Pexels, upload images, inspect provenance, and choose an
-   ordered project source set.
-2. **Explore:** edit a recipe and generate immutable exploration runs. Select
-   one complete output per source for the Finish handoff.
-3. **Finish:** apply one plain-language finish change to the complete cohort.
-   Trials are immutable and can be compared by candidate; only a complete trial
-   can be locked.
-4. **Build Set:** choose a locked Finish and name the set. Approved anchors are
-   reused byte-for-byte; only remaining sources are generated.
-5. **Frames:** drafts are created automatically for every ready active-set
-   item. Choose Bust/Tall/Torso, then the deterministic Treatment Painterly or
-   Estate Pixel.
-6. **Completed:** keep cards from the active coherent set, download PNGs, or
-   reconsider them in Frames. Historical sets and legacy cards remain
-   accessible but are never mixed into the active grid.
+### Sources
 
-The service validates missing keys, unavailable models, reference limits,
-invalid counts, duplicate source candidates, checksum drift, incomplete
-cohorts, and overlapping active runs. Exact returned usage and cost are
-recorded on runs, locked Finishes, and sets. Set retries create a new
-production run only for failed or interrupted items; successful items cannot
-be rerun.
+Upload, search, inspect provenance, and select an ordered set of source images.
+The page shows the exact number of calls, model, execution mode, and available
+cost before the primary **Make N cards with Amiga OCS Portrait v1** action.
 
-Finish inputs are generated artifacts, not new workspace sources. Set
-production sends references in this exact order: current source identity,
-approved locked-Finish anchors in candidate order, then the locked Finish's
-original style references. Each run item records that mapping and its
-checksums.
+### Cards
 
-Missing run purposes read as `exploration`; cards without `set_id`,
-`set_item_id`, and `finish_id` are legacy cards; missing `active_set_id` reads
-as `null`. Existing runs, cards, and generated files are never destructively
-migrated into a new set.
+Each selected source gets one immutable generation attempt by default. A card
+slot stays in progress until its master has been rendered into 336×276 art and
+a complete 420×600 card. Reviewers can approve a ready card, make one
+additional **Try another** attempt, adjust framing without generation, retry a
+failed source, download an individual PNG, or download the ordered approved
+bundle and manifest.
 
-See [docs/portrait-workbench.md](docs/portrait-workbench.md) for the data
-contracts, immutable provenance, preview caching, compatibility behavior, and
-reset procedure.
+### Style Studio
+
+The header chip opens Style Studio. A draft is derived from the active locked
+version. It can change the generation direction, ordered generation references,
+Amiga processing values, and card values. Up to three representative sources
+can run an integrated trial. Only a complete trial whose draft checksum still
+matches can be locked and activated.
+
+## Routes
+
+The refreshable hashes are `#sources`, `#cards`, `#cards/<batch-id>/<item-id>`,
+and `#style`. Superseded hashes redirect to the nearest current surface and do
+not expose an additional workflow.
+
+## Pipeline and provenance
+
+The production order is:
+
+```text
+identity source + ordered generation references
+  → img2img master
+  → resolved framing
+  → master preparation
+  → OCS palette mapping with edge-aware 4×4 Bayer dithering
+  → 168×138 logical art
+  → exact 2× enlargement to 336×276 art
+  → pixel-native 210×300 logical card
+  → exact 2× enlargement to 420×600 card
+```
+
+The master is an internal diagnostic artifact. The final card is the approval
+artifact. Every locked style, batch, attempt, render revision, and approval
+records the style checksum, asset checksums, ordered reference mapping,
+generation configuration, provider metadata, usage/cost, framing transform,
+and output checksums. Target examples are visible for review and golden tests,
+but are structurally excluded from provider payloads.
+
+Workspace data is stored below `portrait-library/`:
+
+```text
+styles/versions/<style-version>/style.json
+production/<batch>/batch.json
+production/<batch>/inputs/...
+production/<batch>/masters/...
+production/<batch>/renders/...
+approvals/approvals.json
+downloads/...
+```
+
+To reset local development, stop the server and delete only this repository's
+ignored `portrait-library/` directory, then restart the server. No reset is
+performed by normal workflow actions.
+
+## Verification
+
+```bash
+uv run --extra dev pytest -q
+npm test -- --run
+npm run build
+git diff --check
+```
+
+The Amiga proof uses the registered production renderer:
+
+```bash
+uv run python -m tools.cards.amiga_proof \
+  --input "stage-reference=tools/cards/assets/amiga-ocs-portrait-v1/generation-reference-01.png" \
+  --output-dir /tmp/amiga-proof
+```
+
+Future renderer families can register another driver implementing the typed
+renderer/assembler interface and its validated style sections. The current
+release registers only `amiga-ocs`; alternate raster families remain examples
+for that extension boundary, not user-facing options.

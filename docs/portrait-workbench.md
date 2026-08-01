@@ -1,148 +1,115 @@
-# Portrait Workbench contract
+# Unified card workbench contract
 
-The supported browser path is:
+The supported product surfaces are `Sources`, `Cards`, and `Style Studio`.
+The everyday decision is source selection followed by final-card approval.
 
-```text
-Sources → Explore → Finish → Build Set → Frames → Completed
-```
+## Style pipeline
 
-Hashes remain refreshable. Empty stages explain their missing prerequisite.
-The old `#styles`, `#lab`, `#run/<id>`, and `#cards` links continue to open
-Explore or Frames; old `#card/<id>` links reopen `#frames/<id>`.
+`tools/cards/styles/amiga-ocs-portrait-v1.json` is the checked-in definition
+for the initial locked version. It contains these sections:
 
-## Sources and Explore
+- `identity`: stable family ID, opaque version ID, numeric display version,
+  label, and draft/locked state;
+- `generation`: model ID, execution mode, quality, structured direction, avoid
+  text, requested aspect policy, and reference limit;
+- `reference_pack`: ordered assets with the closed role set
+  `generation-reference` and `target-example`;
+- `composition`: logical art size, normalized centering, and default framing;
+- `renderer`: driver ID, preprocess, palette, palette space, dither matrix and
+  thresholds;
+- `card_assembly`: driver ID, logical card size, output scale, and layout/text;
+- `editor_descriptors`: fields exposed by Style Studio;
+- `provenance` and `checksums`: source information and canonical style/asset
+  checksums.
 
-`benchmark_source_ids` is the ordered project source selection retained for
-compatibility. Source records retain checksums, dimensions, local paths, and
-Pexels or upload provenance.
+Validation rejects invalid dimensions, out-of-range framing/centering, bad
+palette colors, duplicate IDs, unknown roles, missing generation references,
+unsupported driver IDs, invalid model settings, and unsafe paths. The canonical
+checksum excludes mutable storage paths and state, then hashes the normalized
+configuration and every referenced asset checksum.
 
-Explore runs have `purpose: "exploration"`. A missing purpose is read as
-`exploration` without rewriting the historical `run.json`. Runs snapshot the
-visible recipe, resolved instruction, ordered references, source inputs,
-provider mapping, usage, cost, and each output checksum.
+`StyleStore` materializes the initial definition at bootstrap under
+`styles/versions/<style-version-id>/references/`. A draft is stored separately.
+Locked files are never edited. Locking creates a new opaque version and
+activation changes only the active pointer; existing batches and approvals keep
+their original snapshots.
 
-The baseline exploration run `run_59c947b99f90` is shown first when it exists;
-otherwise the newest complete exploration run is the starting batch. No
-subjective output is selected automatically.
+## Renderer boundary
 
-## Candidate selection
+`tools/cards/registry.py` is keyed by renderer driver ID. A driver accepts a
+validated style snapshot, master image, label, and optional framing override,
+and returns logical art, enlarged art, a complete card, and render metadata.
+Only `amiga-ocs` is registered.
 
-The current `candidate_selection` is a small versioned record backed by
-`candidate-selections/<selection-id>-r<revision>.json` and
-`candidate-selections/current.json`. It contains 1–3 complete Explore items,
-one per workspace source, in display order. Every item snapshots its run item,
-source identity, output path/checksum, source checksum, recipe, and references.
+The Amiga driver uses the proven deterministic implementation in
+`tools/cards/amiga.py`: 168×138 logical art, 336×276 art, a shared 32-color
+OCS-compatible palette, edge-aware ordered 4×4 Bayer dithering, pixel-native
+210×300 logical cards, and exact 2× enlargement. Framing is resolved before
+preparation and quantisation. The checked-in generation reference rendered
+through this path is pixel-identical to `target-example-01.png`.
 
-Selecting, removing, or reordering creates a new revision. Existing Finish
-trials and locked Finishes retain their original selection revision. The
-service rejects non-Explore runs, incomplete or missing output files, checksum
-drift, duplicate source IDs, duplicate IDs, and selections outside the 1–3
-limit.
+The target example is a review asset only. The production reference stack is
+always identity first, followed by saved generation references. A target role
+cannot enter a generation adapter request.
 
-## Finish
+## Production batches
 
-`POST /api/finish-trials` creates an immutable run with
-`purpose: "finish"`, `selection_revision`, exactly one item per candidate, and
-one generated output per item. A generated Explore output is copied below the
-trial's `inputs/candidates/` directory as an identity input; it is not
-pretended to be a workspace source. The trial records the originating Explore
-run/item, workspace source identity, candidate checksum, inherited recipe
-provenance, ordered style references, model mapping, usage, and cost.
+`CardProductionManager` stores both normal batches and Style Studio trials.
+Normal batches use `purpose: "card-production"` and a locked active style;
+trials use `purpose: "style-trial"` and a draft snapshot. A batch snapshots
+source membership/order, source bytes, style configuration, reference bytes,
+model capabilities, provider mapping, and the expected call count before the
+worker starts.
 
-Finish instructions resolve in stable order: the new
-`Requested finish change: …` note, then inherited art direction. If selected
-candidates came from different recipes, the first candidate initializes the
-draft and the differing recipe provenance remains in the snapshots.
+Each source begins with one immutable attempt and a stable lineage. Attempt
+stages are `queued`, `generating`, `processing`, `ready`, `failed`, and
+`interrupted`. A generated master is never ready until its render bundle and
+checksums have been atomically saved. `Try another` appends one attempt for one
+source. Retry appends attempts only for failed/interrupted sources. Successes
+are never overwritten.
 
-Trials are reviewed as candidate-aligned cohort sheets. Comparison is allowed
-only between complete trials from the same selection revision. Locking verifies
-that every expected item is complete, remains in selection order, and still
-has its saved output checksum. It then atomically creates
-`finishes/<finish-id>/finish.json` with a version, trial, candidate inputs,
-approved outputs, snapshots, model mapping, usage, cost, and lock timestamp.
-Locked Finishes are immutable; a later trial creates another version. No item
-from one trial can be mixed with an item from another.
+Usage and provider response cost are the accounting source of truth. Unknown
+cost remains unknown; simulation reports zero. No paid action starts without an
+explicit request, and one active generation batch is allowed at a time.
 
-## Build Set
+## Framing, approvals, and downloads
 
-Sets are stored under `sets/<set-id>/set.json`. Creation snapshots the current
-ordered project source selection and one locked Finish. Every source gets one
-set item before remaining work is queued. Anchor items point to their approved
-Finish output and preserve its bytes and checksum.
+The default framing is stored on every attempt. A framing save reads the
+immutable master, resolves a bounded cover transform, and writes a new render
+revision without calling the generation adapter. Previous revisions remain on
+disk. An approved card whose render changes needs a new explicit approval; the
+old approval record does not drift.
 
-For each remaining source, set production sends references in exactly this
-order:
+An approval includes source ID, attempt ID, batch ID, locked style version and
+checksum, card checksum, render revision, and timestamp. The current pointer is
+unique per source and style version; history is append-only. Approving another
+attempt supersedes the pointer without deleting either card.
 
-```text
-identity: current source snapshot
-style: approved Finish outputs in candidate order
-style: original Finish references in saved order
-```
+The approved bundle follows selected source order and contains only current
+card PNGs plus `manifest.json`. The manifest carries attempt, style, render,
+and checksum provenance. Masters are diagnostic and omitted.
 
-Reference-limit validation counts the identity plus every anchor and base
-reference before creation; anchors and references are never silently
-truncated. Set production runs have `purpose: "set-production"` and record the
-same stack on each item. No generation call is made for anchors.
+## Style Studio
 
-Sets are `building`, `ready-with-errors`, or `ready`. Successful items are
-immutable. Retry creates a new production run only for failed/interrupted
-items, preserves successful item paths, and aggregates usage and cost across
-all production attempts. Source membership and order cannot change under a set
-ID. The newest set becomes `active_set_id`; historical sets can be switched
-explicitly without mutating their Finish or items.
+The active style is shown first with generation references, the target example,
+palette, driver output, and checksum. The draft editor uses driver descriptors
+where appropriate and keeps advanced Generation, Amiga processing, and Card
+groups collapsible.
 
-## Frames and Completed
+The calibration cohort is capped at three workspace sources and persists across
+trials. A trial is reviewable only when every cohort item reaches final-card
+`ready`. Activation rechecks that the draft checksum and referenced asset
+checksums still match the trial, then locks a new immutable version and moves
+the active pointer. It never regenerates existing cards.
 
-A ready active set automatically receives one working card draft per set item.
-New cards persist `set_id`, `set_item_id`, `finish_id`, complete source
-provenance, and the set item's immutable art source. At most one working or
-kept card exists per set item. A discarded item may create a new draft with
-explicit lineage; reconsidering never detaches it from the set.
+To add a future family, implement the typed registry driver, define and validate
+its renderer/card sections, provide descriptors and proof assets, and exercise
+the shared batch/trial/approval contracts. No new family is user-selectable
+until its driver is registered and proven.
 
-Frames asks composition (Bust, Tall, Torso) and deterministic Treatment
-(Painterly or Estate Pixel). Treatment is never labelled Finish. Preview cache
-keys include source checksum, set/Finish provenance, template version, frame
-presets, Treatment versions, schema, and card label. Selecting a preview copies
-the exact cached PNG and art render into the card's saved paths, preserving
-byte-identical output.
+## Historical data
 
-Completed defaults strictly to kept cards whose `set_id` equals
-`active_set_id`, in set source order. It shows the active set and locked Finish
-and retains direct downloads, provenance, reconsider, keep, and discard
-behavior. Cards without the three set provenance IDs are legacy cards: they
-remain reachable through history and saved URLs, but never enter the active
-Completed grid.
-
-## Workspace and compatibility
-
-```text
-portrait-library/
-  workspace.json
-  sources/
-  references/
-  runs/<run-id>/
-  candidate-selections/
-  finishes/<finish-id>/finish.json
-  sets/<set-id>/set.json
-  cards/previews/<card-id>/
-```
-
-Existing version-1 workspaces open without destructive migration. Missing run
-purposes become Explore history, missing `active_set_id` is `null`, and old
-cards receive legacy payload defaults without being assigned to a set. Old
-numeric framing, treatment, run verdicts, and source selection remain stored.
-All metadata writes use a temporary sibling followed by `Path.replace`, with
-process-local locking. Asset requests reject absolute paths and traversal.
-
-To reset the experimental workspace, stop the API service, delete only this
-repository's ignored `portrait-library/`, and restart the service. Historical
-generated assets are not deleted by normal workflow actions.
-
-## External services
-
-OpenRouter discovery resolves each image-to-image model to a definitive
-provider endpoint and retains typed parameters, reference limits, provider
-tag, streaming support, and pricing. Generation pins that provider and sends
-only supported fields. Exact response usage and cost remain the accounting
-source of truth. Pexels records retain photo, photographer, source-page,
-query, and license-page provenance.
+Existing workspace files are not rewritten or deleted by bootstrap. They remain
+outside current-style production and approval counts. The supported UI exposes
+only the current workflow; old files can be inspected or recovered directly by
+an operator when needed.

@@ -1,49 +1,84 @@
 {
-  "id": "amiga-ocs-portrait-v1",
-  "version": 1,
-  "label": "Amiga OCS Portrait v1",
-  "reference_pack": "tools/cards/assets/amiga-ocs-portrait-v1/pack.json",
-  "logical_art_size": [168, 138],
-  "logical_card_size": [210, 300],
-  "output_scale": 2,
-  "palette_space": "Amiga OCS 12-bit RGB",
-  "dither": {
-    "matrix": "bayer-4x4",
-    "strength": 0.62,
-    "edge_threshold": 0.09
+  "schema_version": 1,
+  "identity": {
+    "family_id": "amiga-ocs-portrait",
+    "style_version_id": "style_amiga_ocs_portrait_v1",
+    "version": 1,
+    "state": "locked",
+    "label": "Amiga OCS Portrait v1"
   },
-  "palette": [
-    "#111111",
-    "#221111",
-    "#111122",
-    "#222233",
-    "#333333",
-    "#332211",
-    "#443322",
-    "#554422",
-    "#663322",
-    "#775544",
-    "#886644",
-    "#aa6644",
-    "#bb7755",
-    "#cc8866",
-    "#ddaa88",
-    "#eeccbb",
-    "#eeddcc",
-    "#ffeedd",
-    "#aa7722",
-    "#cc9933",
-    "#eeddaa",
-    "#772211",
-    "#994433",
-    "#bb5522",
-    "#551122",
-    "#223322",
-    "#445544",
-    "#668877",
-    "#113344",
-    "#445566",
-    "#778899",
-    "#665544"
-  ]
+  "generation": {
+    "model_id": "fake/amiga-ocs-deterministic",
+    "execution_mode": "simulation",
+    "quality": "low",
+    "direction": {
+      "intent": "Create a clean pre-quantisation portrait master for later reduction through the deterministic OCS renderer.",
+      "composition": "Square head-and-shoulders portrait with the subject inside a central 28:23 safe area and eyes near 42 percent from the top.",
+      "rendering": "Broad connected tonal shapes, deliberate edges, no more than five visible value steps per material, and minimal microtexture.",
+      "lighting": "Quiet upper-left key light with warm skin planes and cool reflected shadows.",
+      "palette_direction": "Muted charcoal, umber, rust, ochre, parchment, moss, and slate blue."
+    },
+    "avoid": "Visible pixels, dithering, checker patterns, scanlines, CRT effects, text, borders, card frames, UI, props, and invented narrative elements.",
+    "requested_aspect_policy": "28:23",
+    "reference_limit": 9
+  },
+  "reference_pack": {
+    "id": "amiga-ocs-portrait-v1-reference-pack",
+    "version": 1,
+    "assets": [
+      {
+        "id": "generation-reference-01",
+        "asset_key": "generation-reference-01.png",
+        "role": "generation-reference",
+        "label": "Amiga OCS generation reference",
+        "checked_in_path": "tools/cards/assets/amiga-ocs-portrait-v1/generation-reference-01.png",
+        "checksum_sha256": "68ca995a8d308963278a2047863886b382adc8cd1230d05952c017b659838efe"
+      },
+      {
+        "id": "target-example-01",
+        "asset_key": "target-example-01.png",
+        "role": "target-example",
+        "label": "Amiga OCS target example · review only",
+        "checked_in_path": "tools/cards/assets/amiga-ocs-portrait-v1/target-example-01.png",
+        "checksum_sha256": "abebad5ec4628651caefd601567c0c6b3c549e1bbff6b20bb4fd21afe7631d2a"
+      }
+    ]
+  },
+  "composition": {
+    "logical_art_size": [168, 138],
+    "default_framing": {"zoom": 1.0, "offset_x": 0.0, "offset_y": 0.0},
+    "centering": [0.5, 0.44],
+    "requested_art_ratio": "28:23"
+  },
+  "renderer": {
+    "driver_id": "amiga-ocs",
+    "logical_art_size": [168, 138],
+    "output_scale": 2,
+    "palette_space": "Amiga OCS 12-bit RGB",
+    "palette": [
+      "#111111", "#221111", "#111122", "#222233", "#333333", "#332211", "#443322", "#554422",
+      "#663322", "#775544", "#886644", "#aa6644", "#bb7755", "#cc8866", "#ddaa88", "#eeccbb",
+      "#eeddcc", "#ffeedd", "#aa7722", "#cc9933", "#eeddaa", "#772211", "#994433", "#bb5522",
+      "#551122", "#223322", "#445544", "#668877", "#113344", "#445566", "#778899", "#665544"
+    ],
+    "preprocess": {"color": 0.88, "contrast": 1.08, "unsharp_radius": 0.8, "unsharp_percent": 90, "unsharp_threshold": 5},
+    "dither": {"matrix": "bayer-4x4", "strength": 0.62, "edge_threshold": 0.09}
+  },
+  "card_assembly": {
+    "driver_id": "amiga-ocs",
+    "logical_card_size": [210, 300],
+    "output_scale": 2,
+    "layout": {"art_box": [18, 36, 192, 180], "title_box": [16, 191, 194, 213], "details_box": [16, 221, 194, 274]},
+    "text": {"title": "Portrait Workbench", "subtitle": "Amiga OCS / 32 colours", "version": "House style v1", "identity": "Identity retained"}
+  },
+  "editor_descriptors": [
+    {"id": "generation.direction", "label": "Direction", "type": "text", "group": "Generation"},
+    {"id": "generation.avoid", "label": "Avoid", "type": "text", "group": "Generation"},
+    {"id": "renderer.preprocess.color", "label": "Colour", "type": "range", "min": 0.0, "max": 2.0, "step": 0.01, "group": "Amiga processing"},
+    {"id": "renderer.dither.strength", "label": "Dither strength", "type": "range", "min": 0.0, "max": 1.0, "step": 0.01, "group": "Amiga processing"},
+    {"id": "renderer.dither.edge_threshold", "label": "Edge threshold", "type": "range", "min": 0.0, "max": 1.0, "step": 0.01, "group": "Amiga processing"},
+    {"id": "composition.centering", "label": "Default centering", "type": "number", "group": "Amiga processing"}
+  ],
+  "provenance": {"source": "checked-in", "pack_path": "tools/cards/assets/amiga-ocs-portrait-v1/pack.json"},
+  "checksums": {}
 }
