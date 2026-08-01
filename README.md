@@ -43,14 +43,17 @@ outputs. The pipeline anatomy makes the complete source + reference → generate
 master → Amiga art → assembled card path visible. A working configuration can
 change the model direction, ordered references, renderer values, and card
 values, then run the same three-source comparison cohort repeatedly. Each
-checksum keeps its own result column.
+checksum remains attached to the candidates it produced.
 
 ### Cards
 
-Cards are shown as a source-by-pipeline matrix: rows keep identity constant and
-columns expose each stored pipeline checksum. Open a result to inspect its
-source, generated master, rendered art, final card, and provenance. **New
-result** adds an attempt immediately; framing changes rerender the existing
+Cards are shown as a source-by-strategy matrix: rows keep identity constant and
+the two columns separate **Interpretive redraw** from the deterministic **Direct
+render** baseline. Every ready generation is retained inside its strategy
+gallery; pipeline version, checksum, and attempt stay as compact candidate
+metadata instead of becoming extra columns. Open any candidate to inspect its
+source, generated master, rendered art, final card, and provenance. **Generate
+again** adds an attempt immediately; framing changes rerender the existing
 master without another model call. Approval and bundle gates are intentionally
 absent while the visual pipeline is still being developed.
 

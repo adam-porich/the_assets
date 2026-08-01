@@ -154,6 +154,8 @@ def test_production_is_one_integrated_operation_and_excludes_target(tmp_path: Pa
     assert cards[0]["pipeline_label"] == style["identity"]["label"]
     assert cards[0]["batch_created_at"] == result["created_at"]
     assert cards[0]["style_checksum_sha256"] == style["checksums"]["style_sha256"]
+    assert cards[0]["strategy_id"] == "direct-render"
+    assert cards[0]["strategy_label"] == "Direct render"
     approvals = [manager.approve(result["batch_id"], item["item_id"]) for item in result["items"]]
     assert len(approvals) == 2
     refreshed = manager.get(result["batch_id"])
@@ -274,6 +276,7 @@ def test_live_provenance_and_consent_use_semantic_fake_without_provider_call(tmp
     assert item["generation_request"]["target_examples_excluded"] is True
     assert item["master_url"] and item["art_url"] and item["card_url"]
     assert batch["generation_authorization"]["consent"] is True
+    assert _cards(manager)[0]["strategy_id"] == "interpretive-redraw"
 
 
 def test_simulation_is_preview_only_for_lock_and_normal_production(tmp_path: Path) -> None:
@@ -327,3 +330,6 @@ def test_failed_retry_and_try_another_keep_attempt_provenance(tmp_path: Path) ->
     assert [candidate["attempt_number"] for candidate in attempts] == [1, 2, 3]
     assert len({candidate["master_url"] for candidate in attempts if candidate.get("master_url")}) == 2
     assert another["progress"]["total_attempts"] == 3
+    exposed = _cards(manager)
+    assert sorted(card["attempt_number"] for card in exposed) == [2, 3]
+    assert all(card["strategy_id"] == "direct-render" for card in exposed)

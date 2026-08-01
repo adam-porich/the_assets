@@ -10,7 +10,7 @@ const model = { id: "live-model", name: "Live image model", execution_mode: "liv
 const base = { workspace: { sources: [{ id: "source-1", label: "Ada", image_url: "/ada.png" }], benchmark_source_ids: ["source-1"] }, sources: [{ id: "source-1", label: "Ada", image_url: "/ada.png" }], selected_source_ids: ["source-1"], style: { active: style, draft: null, versions: [version], driver: { id: "amiga-ocs", label: "Amiga OCS", output: "420×600 final cards" } }, batches: [], cards: [], models: [model], integrations: { pexels: { configured: false }, openrouter: { configured: true } }, starter: { photo_ids: [] } };
 
 function produced(overrides: Record<string, unknown> = {}) {
-  return { item_id: "item-1", source_id: "source-1", source_label: "Ada", attempt_number: 1, lineage_id: "lineage", status: "ready" as const, source_url: "/ada.png", master_url: "/master.png", art_url: "/art.png", card_url: "/card.png", card_checksum_sha256: "card-checksum", render_revision: 1, render_revisions: [], framing: { zoom: 1, offset_x: 0, offset_y: 0 }, generation: { execution_mode: "live", model: "live-model" }, reference_stack: [], batch_id: "batch-1", batch_created_at: "2026-08-02T00:00:00Z", purpose: "card-production" as const, style_version_id: style.identity.style_version_id, style_checksum_sha256: "style-checksum", pipeline_label: style.identity.label, pipeline_version: 2, ...overrides };
+  return { item_id: "item-1", source_id: "source-1", source_label: "Ada", attempt_number: 1, lineage_id: "lineage", status: "ready" as const, source_url: "/ada.png", master_url: "/master.png", art_url: "/art.png", card_url: "/card.png", card_checksum_sha256: "card-checksum", render_revision: 1, render_revisions: [], framing: { zoom: 1, offset_x: 0, offset_y: 0 }, generation: { execution_mode: "live", model: "live-model" }, reference_stack: [], batch_id: "batch-1", batch_created_at: "2026-08-02T00:00:00Z", purpose: "card-production" as const, style_version_id: style.identity.style_version_id, style_checksum_sha256: "style-checksum", pipeline_label: style.identity.label, pipeline_version: 2, strategy_id: "interpretive-redraw" as const, strategy_label: "Interpretive redraw", strategy_description: "Image-model redraw followed by Amiga rendering", ...overrides };
 }
 
 let container: HTMLDivElement; let root: Root;
@@ -50,25 +50,26 @@ describe("pipeline workbench", () => {
     expect(api.createProduction).toHaveBeenCalledWith(["source-1"], style.identity.style_version_id, true);
   });
 
-  it("shows source-stable pipeline comparisons and no approval workflow", async () => {
-    const older = produced({ item_id: "item-old", batch_id: "batch-old", batch_created_at: "2026-08-01T00:00:00Z", style_version_id: "style-v1", style_checksum_sha256: "old-checksum", pipeline_label: "Neutral pipeline v1", pipeline_version: 1, card_url: "/old-card.png" });
+  it("collapses configurations into source-stable strategies and no approval workflow", async () => {
+    const older = produced({ item_id: "item-old", batch_id: "batch-old", batch_created_at: "2026-08-01T00:00:00Z", style_version_id: "style-v1", style_checksum_sha256: "old-checksum", pipeline_label: "Neutral pipeline v1", pipeline_version: 1, card_url: "/old-card.png", generation: { execution_mode: "simulation", model: "fake/painterly-deterministic" }, strategy_id: "direct-render", strategy_label: "Direct render", strategy_description: "Source-led deterministic rendering baseline" });
     vi.spyOn(api, "bootstrap").mockResolvedValue({ ...base, cards: [produced(), older] } as never);
     await act(async () => { window.location.hash = "#cards"; root.render(<App />); });
-    expect(container.textContent).toContain("See exactly what changed");
-    expect(container.textContent).toContain("2 configurations");
-    expect(container.querySelector('img[alt="Ada produced by Amiga OCS Neutral Portrait v2"]')).toBeTruthy();
-    expect(container.querySelector('img[alt="Ada produced by Neutral pipeline v1"]')).toBeTruthy();
+    expect(container.textContent).toContain("Two strategies, every generation");
+    expect(container.textContent).toContain("2 strategies · 2 generations");
+    expect(container.querySelector('img[alt="Ada Interpretive redraw generation 1"]')).toBeTruthy();
+    expect(container.querySelector('img[alt="Ada Direct render generation 1"]')).toBeTruthy();
     expect(container.textContent).not.toContain("Approve");
     expect(container.textContent).not.toContain("approved cards");
   });
 
-  it("keeps distinct draft checksums as distinct result columns", async () => {
+  it("keeps every generation while folding draft checksums into one strategy", async () => {
     const first = produced({ item_id: "first", batch_id: "first-batch", style_version_id: "draft-1", style_checksum_sha256: "checksum-one", pipeline_label: "Working pipeline", pipeline_version: null });
     const second = produced({ item_id: "second", batch_id: "second-batch", batch_created_at: "2026-08-01T23:00:00Z", style_version_id: "draft-1", style_checksum_sha256: "checksum-two", pipeline_label: "Working pipeline", pipeline_version: null });
     vi.spyOn(api, "bootstrap").mockResolvedValue({ ...base, cards: [first, second] } as never);
     await act(async () => { window.location.hash = "#cards"; root.render(<App />); });
+    expect(container.textContent).toContain("1 strategy · 2 generations");
     expect(container.textContent).toContain("2 configurations");
-    expect(container.textContent).toContain("checksum");
+    expect(container.querySelectorAll('img[alt^="Ada Interpretive redraw generation"]')).toHaveLength(2);
   });
 
   it("opens a produced asset as a complete source-to-card stage inspector", async () => {

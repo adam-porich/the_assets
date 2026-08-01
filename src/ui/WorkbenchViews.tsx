@@ -186,22 +186,34 @@ export function PipelinesView({ bootstrap, navigate, refresh, notify, pipelineId
   </section>;
 }
 
-type ResultGroup = { key: string; styleId: string; checksum: string; label: string; version?: number | null; cards: ProducedCard[]; createdAt: string; active: boolean };
+type StrategyGroup = { id: string; label: string; description: string; cards: ProducedCard[]; configurations: string[]; active: boolean };
 
-function resultGroups(bootstrap: Bootstrap): ResultGroup[] {
-  const groups = new Map<string, ResultGroup>();
-  const active = bootstrap.style.active;
-  [...bootstrap.cards].sort((a, b) => b.batch_created_at.localeCompare(a.batch_created_at) || b.attempt_number - a.attempt_number).forEach((card) => {
-    const key = `${card.style_version_id}:${card.style_checksum_sha256}`;
-    const group = groups.get(key) || { key, styleId: card.style_version_id, checksum: card.style_checksum_sha256, label: card.pipeline_label, version: card.pipeline_version, cards: [], createdAt: card.batch_created_at, active: card.style_version_id === active.identity.style_version_id && card.style_checksum_sha256 === active.checksums.style_sha256 };
-    if (!group.cards.some((item) => item.source_id === card.source_id)) group.cards.push(card);
-    groups.set(key, group);
-  });
-  return [...groups.values()].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+function cardStrategy(card: ProducedCard) {
+  if (card.strategy_id) return { id: card.strategy_id, label: card.strategy_label, description: card.strategy_description };
+  const interpretive = card.generation?.execution_mode === "live" || !String(card.generation?.model || "").startsWith("fake/");
+  return interpretive
+    ? { id: "interpretive-redraw", label: "Interpretive redraw", description: "Image-model redraw followed by Amiga rendering" }
+    : { id: "direct-render", label: "Direct render", description: "Source-led deterministic rendering baseline" };
 }
 
-function configurationName(group: ResultGroup) {
-  return group.styleId.startsWith("draft_") ? "Experiment" : versionName(group.version);
+function strategyGroups(bootstrap: Bootstrap): StrategyGroup[] {
+  const groups = new Map<string, StrategyGroup>();
+  const active = bootstrap.style.active;
+  [...bootstrap.cards].sort((a, b) => b.batch_created_at.localeCompare(a.batch_created_at) || b.attempt_number - a.attempt_number).forEach((card) => {
+    const strategy = cardStrategy(card);
+    const configuration = `${card.style_version_id}:${card.style_checksum_sha256}`;
+    const group = groups.get(strategy.id) || { ...strategy, cards: [], configurations: [], active: false };
+    group.cards.push(card);
+    if (!group.configurations.includes(configuration)) group.configurations.push(configuration);
+    if (card.style_version_id === active.identity.style_version_id && card.style_checksum_sha256 === active.checksums.style_sha256) group.active = true;
+    groups.set(strategy.id, group);
+  });
+  return [...groups.values()].sort((a, b) => Number(b.id === "interpretive-redraw") - Number(a.id === "interpretive-redraw"));
+}
+
+function generationOrigin(card: ProducedCard) {
+  const pipeline = card.style_version_id.startsWith("draft_") ? `experiment ${shortChecksum(card.style_checksum_sha256)}` : versionName(card.pipeline_version);
+  return `${pipeline} · attempt ${card.attempt_number}`;
 }
 
 function ResultProvenance({ card }: { card: ProducedCard }) {
@@ -210,7 +222,7 @@ function ResultProvenance({ card }: { card: ProducedCard }) {
 }
 
 export function CardsView({ bootstrap, navigate, refresh, notify, batchId, cardId }: Shared & { batchId?: string; cardId?: string }) {
-  const groups = useMemo(() => resultGroups(bootstrap), [bootstrap.cards, bootstrap.style.active.identity.style_version_id]);
+  const groups = useMemo(() => strategyGroups(bootstrap), [bootstrap.cards, bootstrap.style.active.identity.style_version_id]);
   const sources = selectedSources(bootstrap);
   const [busy, setBusy] = useState("");
   const selectedCard = bootstrap.cards.find((card) => card.item_id === cardId && (!batchId || card.batch_id === batchId));
@@ -237,16 +249,16 @@ export function CardsView({ bootstrap, navigate, refresh, notify, batchId, cardI
   if (!groups.length) return <section className="page cards-page"><div className="page-heading"><div><p className="eyebrow">Cards</p><h2>Produced assets appear here</h2><p>Run a source set through the active pipeline to start a visual history.</p></div></div><div className="empty-panel surface"><span className="empty-glyph">→</span><h3>No pipeline results yet</h3><button className="button primary" onClick={() => navigate("#sources")}>Choose sources</button></div></section>;
 
   return <section className="page cards-page">
-    <div className="page-heading"><div><p className="eyebrow">Cards · pipeline comparison</p><h2>See exactly what changed</h2><p>Rows hold identity constant. Columns show the newest result for each pipeline configuration.</p></div><div className="heading-actions"><span className="status-chip">{groups.length} configurations</span><small className="run-cost">{sources.length} calls · {modelCost(model)} each</small><button className="button primary" disabled={Boolean(activeBatch) || Boolean(busy) || !sources.length || !model?.available || !model.credentials_configured} onClick={() => void generate()}>{activeBatch ? "Pipeline running…" : `Run active pipeline · ${sources.length}`}</button></div></div>
-    {activeBatch && <div className="surface running-banner"><span className="spinner" /><div><strong>Producing a new comparison column</strong><small>{activeBatch.progress.ready_cards} / {activeBatch.progress.selected_sources} cards ready</small></div></div>}
+    <div className="page-heading"><div><p className="eyebrow">Cards · strategy comparison</p><h2>Two strategies, every generation</h2><p>Rows hold identity constant. Each strategy keeps every generated candidate, with pipeline details tucked underneath.</p></div><div className="heading-actions"><span className="status-chip">{groups.length} {groups.length === 1 ? "strategy" : "strategies"} · {bootstrap.cards.length} generations</span><small className="run-cost">{sources.length} calls · {modelCost(model)} each</small><button className="button primary" disabled={Boolean(activeBatch) || Boolean(busy) || !sources.length || !model?.available || !model.credentials_configured} onClick={() => void generate()}>{activeBatch ? "Pipeline running…" : `Run active pipeline · ${sources.length}`}</button></div></div>
+    {activeBatch && <div className="surface running-banner"><span className="spinner" /><div><strong>Producing new generations</strong><small>{activeBatch.progress.ready_cards} / {activeBatch.progress.selected_sources} cards ready</small></div></div>}
     <div className="results-matrix surface" style={{ "--pipeline-count": groups.length } as React.CSSProperties}>
       <div className="matrix-corner"><small>Source identity</small><strong>{sources.length} pinned</strong></div>
-      {groups.map((group) => <button className={`matrix-pipeline ${group.active ? "active" : ""}`} key={group.key} onClick={() => navigate(`#pipelines/${group.styleId}`)}><span>{group.active ? "active" : configurationName(group)}</span><strong>{group.label}</strong><small>{shortChecksum(group.checksum)} · {group.cards.length} cards</small></button>)}
+      {groups.map((group) => <div className={`matrix-pipeline ${group.active ? "active" : ""}`} key={group.id}><span>{group.active ? "active strategy" : "baseline strategy"}</span><strong>{group.label}</strong><small>{group.description} · {group.configurations.length} configuration{group.configurations.length === 1 ? "" : "s"}</small></div>)}
       {sources.map((source) => <div className="matrix-row" key={source.id}>
         <div className="matrix-source">{source.image_url && <img src={source.image_url} alt={source.label} />}<div><small>source</small><strong>{source.label}</strong></div></div>
-        {groups.map((group) => { const card = group.cards.find((candidate) => candidate.source_id === source.id); return <article className={`matrix-result ${card ? "produced" : "missing"}`} key={group.key}>{card?.card_url ? <><button className="result-image" onClick={() => navigate(`#cards/${card.batch_id}/${card.item_id}`)}><img src={card.card_url} alt={`${source.label} produced by ${group.label}`} /></button><div className="result-actions"><span>attempt {card.attempt_number}</span><button disabled={Boolean(busy) || Boolean(activeBatch)} onClick={() => void tryAnother(card)}>New result</button></div></> : <><span className="empty-glyph">＋</span><small>No result for this source</small>{group.active && <button className="text-button" disabled={Boolean(activeBatch) || Boolean(busy)} onClick={() => void generate([source.id])}>Generate</button>}</>}</article>; })}
+        {groups.map((group) => { const cards = group.cards.filter((candidate) => candidate.source_id === source.id); const latest = cards[0]; return <article className={`matrix-result ${cards.length ? "produced" : "missing"}`} key={group.id}>{cards.length ? <><div className="generation-gallery">{cards.map((card, index) => <button className={`generation-card ${selectedCard?.item_id === card.item_id ? "selected" : ""}`} key={`${card.batch_id}:${card.item_id}`} onClick={() => navigate(`#cards/${card.batch_id}/${card.item_id}`)}><img src={card.card_url} alt={`${source.label} ${group.label} generation ${index + 1}`} /><span><strong>Gen {String(index + 1).padStart(2, "0")}</strong><small>{generationOrigin(card)}</small></span></button>)}</div><div className="strategy-result-footer"><span>{cards.length} generation{cards.length === 1 ? "" : "s"}</span><button disabled={Boolean(busy) || Boolean(activeBatch)} onClick={() => void tryAnother(latest)}>Generate again</button></div></> : <><span className="empty-glyph">＋</span><small>No {group.label.toLowerCase()} result</small>{group.active && <button className="text-button" disabled={Boolean(activeBatch) || Boolean(busy)} onClick={() => void generate([source.id])}>Generate</button>}</>}</article>; })}
       </div>)}
     </div>
-    {selectedCard && <section className="surface result-inspector"><div className="panel-heading"><div><p className="eyebrow">Produced asset · {selectedCard.source_label}</p><h3>{selectedCard.pipeline_label}</h3><p>Inspect every stage or rerender the existing master. A new model result is one click away.</p></div><button className="button secondary" onClick={() => navigate("#cards")}>Close</button></div><div className="asset-stages"><figure><img src={selectedCard.source_url} alt="Source" /><figcaption>Source</figcaption></figure><span>→</span><figure><img src={selectedCard.master_url} alt="Generated master" /><figcaption>Generated master</figcaption></figure><span>→</span><figure><img className="pixelated" src={selectedCard.art_url} alt="Amiga art" /><figcaption>Rendered art</figcaption></figure><span>→</span><figure className="final-stage"><img className="pixelated" src={selectedCard.card_url} alt="Final card" /><figcaption>Card</figcaption></figure></div><div className="framing-controls"><label>Zoom<input type="range" min="1" max="3" step="0.01" value={framing.zoom} onChange={(event) => setFraming({ ...framing, zoom: Number(event.target.value) })} /></label><label>Horizontal<input type="range" min="-1" max="1" step="0.01" value={framing.offset_x} onChange={(event) => setFraming({ ...framing, offset_x: Number(event.target.value) })} /></label><label>Vertical<input type="range" min="-1" max="1" step="0.01" value={framing.offset_y} onChange={(event) => setFraming({ ...framing, offset_y: Number(event.target.value) })} /></label></div><div className="inspector-actions"><button className="button primary" disabled={Boolean(busy)} onClick={() => void tryAnother(selectedCard)}>Generate another result</button><button className="button secondary" disabled={Boolean(busy)} onClick={() => void render(selectedCard)}>{busy === `render-${selectedCard.item_id}` ? "Rerendering…" : "Save framing · no generation"}</button></div><ResultProvenance card={selectedCard} /></section>}
+    {selectedCard && <section className="surface result-inspector"><div className="panel-heading"><div><p className="eyebrow">{selectedCard.strategy_label} · {selectedCard.source_label}</p><h3>{selectedCard.pipeline_label}</h3><p>Inspect every stage or rerender the existing master. This candidate remains part of its strategy gallery.</p></div><button className="button secondary" onClick={() => navigate("#cards")}>Close</button></div><div className="asset-stages"><figure><img src={selectedCard.source_url} alt="Source" /><figcaption>Source</figcaption></figure><span>→</span><figure><img src={selectedCard.master_url} alt="Generated master" /><figcaption>Generated master</figcaption></figure><span>→</span><figure><img className="pixelated" src={selectedCard.art_url} alt="Amiga art" /><figcaption>Rendered art</figcaption></figure><span>→</span><figure className="final-stage"><img className="pixelated" src={selectedCard.card_url} alt="Final card" /><figcaption>Card</figcaption></figure></div><div className="framing-controls"><label>Zoom<input type="range" min="1" max="3" step="0.01" value={framing.zoom} onChange={(event) => setFraming({ ...framing, zoom: Number(event.target.value) })} /></label><label>Horizontal<input type="range" min="-1" max="1" step="0.01" value={framing.offset_x} onChange={(event) => setFraming({ ...framing, offset_x: Number(event.target.value) })} /></label><label>Vertical<input type="range" min="-1" max="1" step="0.01" value={framing.offset_y} onChange={(event) => setFraming({ ...framing, offset_y: Number(event.target.value) })} /></label></div><div className="inspector-actions"><button className="button primary" disabled={Boolean(busy)} onClick={() => void tryAnother(selectedCard)}>Generate another result</button><button className="button secondary" disabled={Boolean(busy)} onClick={() => void render(selectedCard)}>{busy === `render-${selectedCard.item_id}` ? "Rerendering…" : "Save framing · no generation"}</button></div><ResultProvenance card={selectedCard} /></section>}
   </section>;
 }

@@ -114,7 +114,14 @@ def _cards(manager: CardProductionManager) -> list[dict[str, Any]]:
             detail = manager.get(str(batch["batch_id"]))
         except ValueError:
             continue
-        for item in manager.latest_items(detail):
+        generation = detail.get("style_snapshot", {}).get("generation", {})
+        live = generation.get("execution_mode") == "live"
+        strategy = {
+            "strategy_id": "interpretive-redraw" if live else "direct-render",
+            "strategy_label": "Interpretive redraw" if live else "Direct render",
+            "strategy_description": "Image-model redraw followed by Amiga rendering" if live else "Source-led deterministic rendering baseline",
+        }
+        for item in detail.get("items", []):
             if item.get("status") == "ready":
                 identity = detail.get("style_snapshot", {}).get("identity", {})
                 cards.append({
@@ -126,6 +133,7 @@ def _cards(manager: CardProductionManager) -> list[dict[str, Any]]:
                     "style_checksum_sha256": detail["style_checksum_sha256"],
                     "pipeline_label": identity.get("label") or detail["style_version_id"],
                     "pipeline_version": identity.get("version"),
+                    **strategy,
                 })
     return cards
 

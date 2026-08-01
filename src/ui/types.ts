@@ -40,6 +40,7 @@ export type ProductionSummary = Omit<ProductionBatch, "items" | "style_snapshot"
 export type ProducedCard = ProductionItem & {
   batch_id: string; batch_created_at: string; purpose: ProductionBatch["purpose"];
   style_version_id: string; style_checksum_sha256: string; pipeline_label: string; pipeline_version?: number | null;
+  strategy_id: "interpretive-redraw" | "direct-render"; strategy_label: string; strategy_description: string;
 };
 
 export type Bootstrap = { workspace: { sources: Source[]; benchmark_source_ids: string[] }; sources: Source[]; selected_source_ids: string[]; style: StyleBootstrap; batches: ProductionSummary[]; cards: ProducedCard[]; models: Model[]; integrations: { pexels: { configured: boolean }; openrouter: { configured: boolean } }; starter: { photo_ids: number[] } };

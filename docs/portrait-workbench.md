@@ -78,7 +78,8 @@ stages are `queued`, `generating`, `processing`, `ready`, `failed`, and
 `interrupted`. A generated master is never ready until its render bundle and
 checksums have been atomically saved. `Try another` appends one attempt for one
 source. Retry appends attempts only for failed/interrupted sources. Successes
-are never overwritten.
+are never overwritten. The workspace bootstrap exposes every ready attempt;
+historical generations are not reduced to one latest item per source.
 
 The generating phase is the neutral redraw; processing is deterministic Amiga
 rendering and card assembly. Every attempt snapshots the exact resolved
@@ -114,8 +115,11 @@ groups collapsible.
 
 The calibration cohort is capped at three workspace sources and persists across
 trials. A trial is reviewable only when every cohort item reaches final-card
-`ready`. The Cards matrix groups results by pipeline checksum, so two edits to
-the same draft remain separate comparison columns. Simulation trials validate
+`ready`. The Cards matrix has two strategy columns: live image-model attempts
+are **Interpretive redraw**, while simulation-era deterministic previews are
+the **Direct render** baseline. Pipeline checksums and attempt numbers remain
+on each candidate inside the strategy gallery, so configuration history is
+available without turning every edit into a column. Simulation trials validate
 mechanics but cannot activate a production pipeline. Live activation rechecks
 that the draft checksum and referenced asset checksums still match the trial,
 then locks a new immutable version and moves the active pointer. It never
@@ -129,6 +133,6 @@ until its driver is registered and proven.
 ## Historical data
 
 Existing workspace files are not rewritten or deleted by bootstrap. Ready
-historical cards are exposed in the source-by-pipeline comparison when their
+historical cards are exposed in the source-by-strategy comparison when their
 source still belongs to the current cohort; other old files remain directly
 inspectable by an operator.
