@@ -6,7 +6,7 @@ The everyday decision is source selection followed by final-card approval.
 ## Style pipeline
 
 `tools/cards/styles/amiga-ocs-portrait-v1.json` is the checked-in definition
-for the initial locked version. It contains these sections:
+for the live neutral portrait style version. It contains these sections:
 
 - `identity`: stable family ID, opaque version ID, numeric display version,
   label, and draft/locked state;
@@ -21,6 +21,13 @@ for the initial locked version. It contains these sections:
 - `editor_descriptors`: fields exposed by Style Studio;
 - `provenance` and `checksums`: source information and canonical style/asset
   checksums.
+
+The generation direction is deliberately structured: identity cues to retain,
+composition to normalize, expression/pose to discard, rendering language, and
+avoid instructions. It asks an img2img-capable model to redraw the source as
+an interpretive frontal, calm, head-and-shoulders portrait. It does not promise
+biometric identity preservation and does not ask the provider to produce pixel
+effects or card furniture.
 
 Validation rejects invalid dimensions, out-of-range framing/centering, bad
 palette colors, duplicate IDs, unknown roles, missing generation references,
@@ -68,6 +75,12 @@ checksums have been atomically saved. `Try another` appends one attempt for one
 source. Retry appends attempts only for failed/interrupted sources. Successes
 are never overwritten.
 
+The generating phase is the neutral redraw; processing is deterministic Amiga
+rendering and card assembly. Every attempt snapshots the exact resolved
+request, including source-first/reference-after ordering and an explicit
+`target_examples_excluded` marker. Live paid actions require consent at the
+API boundary as well as in the browser.
+
 Usage and provider response cost are the accounting source of truth. Unknown
 cost remains unknown; simulation reports zero. No paid action starts without an
 explicit request, and one active generation batch is allowed at a time.
@@ -98,7 +111,8 @@ groups collapsible.
 
 The calibration cohort is capped at three workspace sources and persists across
 trials. A trial is reviewable only when every cohort item reaches final-card
-`ready`. Activation rechecks that the draft checksum and referenced asset
+`ready`. Simulation trials validate mechanics but cannot activate a production
+style. Live activation rechecks that the draft checksum and referenced asset
 checksums still match the trial, then locks a new immutable version and moves
 the active pointer. It never regenerates existing cards.
 

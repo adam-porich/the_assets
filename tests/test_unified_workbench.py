@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import copy
 import shutil
 import time
 from pathlib import Path
@@ -11,7 +12,17 @@ from PIL import Image, ImageChops
 from tools.cards.amiga import amiga_palette, palette_is_ocs_12_bit
 from tools.cards.registry import registry
 from tools.cards.style_pipeline import StyleStore, load_checked_in_style, style_checksum, validate_style
-from tools.portraits.generation import FakeGenerationAdapter, GenerationResult, simulation_model
+from tools.portraits.generation import (
+    AdapterCapabilities,
+    FakeGenerationAdapter,
+    GenerationRequest,
+    GenerationResult,
+    OpenRouterGenerationAdapter,
+    SemanticFakeGenerationAdapter,
+    simulation_model,
+    unavailable_live_model,
+    validate_request,
+)
 from tools.portraits.production import CardProductionManager
 from tools.portraits.workspace import WorkspaceError, WorkspaceStore
 
@@ -40,6 +51,13 @@ def wait_for(manager: CardProductionManager, batch_id: str) -> dict:
             return record
         time.sleep(0.02)
     raise AssertionError("production worker did not finish")
+
+
+def simulation_trial_style(styles: StyleStore) -> dict:
+    style = copy.deepcopy(styles.raw_version(styles.active_id()))
+    style["identity"] = {**style["identity"], "state": "draft", "style_version_id": "draft_preview"}
+    style["generation"] = {**style["generation"], "model_id": simulation_model()["id"], "execution_mode": "simulation", "quality": "low"}
+    return validate_style(style)
 
 
 def test_style_schema_checksum_store_and_asset_snapshots(tmp_path: Path) -> None:
@@ -109,7 +127,7 @@ class ReferenceReturningAdapter(FakeGenerationAdapter):
 def test_production_is_one_integrated_operation_and_excludes_target(tmp_path: Path) -> None:
     store = WorkspaceStore(tmp_path / "library")
     styles = StyleStore(store)
-    style = styles.raw_version(styles.active_id())
+    style = simulation_trial_style(styles)
     first, second = source(store, "one"), source(store, "two")
     calls: list[object] = []
 
@@ -118,7 +136,7 @@ def test_production_is_one_integrated_operation_and_excludes_target(tmp_path: Pa
         return ReferenceReturningAdapter(capabilities)
 
     manager = CardProductionManager(store, styles, factory)
-    batch = manager.create([first["id"], second["id"]], style, [simulation_model()])
+    batch = manager.create([first["id"], second["id"]], style, [simulation_model()], purpose="style-trial")
     result = wait_for(manager, batch["batch_id"])
     assert result["status"] == "ready"
     assert [item["status"] for item in result["items"]] == ["ready", "ready"]
@@ -147,7 +165,7 @@ def test_framing_rerenders_without_generation_and_approval_is_revisioned(tmp_pat
 
     manager = CardProductionManager(store, styles, factory)
     item = source(store)
-    batch = wait_for(manager, manager.create([item["id"]], styles.raw_version(styles.active_id()), [simulation_model()])["batch_id"])
+    batch = wait_for(manager, manager.create([item["id"]], simulation_trial_style(styles), [simulation_model()], purpose="style-trial")["batch_id"])
     production_item = batch["items"][0]
     manager.approve(batch["batch_id"], production_item["item_id"])
     old_checksum = production_item["card_checksum_sha256"]
@@ -168,3 +186,98 @@ def test_style_validation_rejects_target_only_and_bad_dimensions() -> None:
     bad_size = {**style, "composition": {**style["composition"], "centering": [1.5, 0.4]}}
     with pytest.raises(ValueError, match="centering"):
         validate_style(bad_size)
+
+
+def live_model() -> dict:
+    return {
+        "id": "provider/neutral",
+        "name": "Provider neutral",
+        "execution_mode": "live",
+        "available": True,
+        "credentials_configured": True,
+        "supported_parameters": {
+            "input_references": {"type": "range", "min": 1, "max": 4},
+            "aspect_ratio": {"type": "enum", "values": ["1:1", "4:3"]},
+            "quality": {"type": "enum", "values": ["low", "medium"]},
+            "negative_prompt": {"type": "string"},
+        },
+        "pricing": [{"cost_usd": 0.04}],
+        "provider_slug": "provider",
+        "provider_tag": "neutral-endpoint",
+        "endpoint_id": "endpoint-1",
+    }
+
+
+def test_live_request_validation_covers_mode_credentials_capacity_quality_and_aspect() -> None:
+    capabilities = AdapterCapabilities.from_model(live_model())
+    mapping = validate_request({"model": capabilities.model, "execution_mode": "live", "quality": "medium", "provider_aspect_ratio": "1:1"}, 2, capabilities)
+    assert mapping["reference_mapping"] == "identity_first_style_after"
+    assert mapping["effective_aspect_ratio"] == "1:1"
+    with pytest.raises(ValueError, match="execution mode"):
+        validate_request({"model": capabilities.model, "execution_mode": "simulation", "quality": "medium"}, 1, capabilities)
+    with pytest.raises(ValueError, match="quality"):
+        validate_request({"model": capabilities.model, "execution_mode": "live", "quality": "high"}, 1, capabilities)
+    with pytest.raises(ValueError, match="aspect ratio"):
+        validate_request({"model": capabilities.model, "execution_mode": "live", "quality": "medium", "provider_aspect_ratio": "16:9"}, 1, capabilities)
+    with pytest.raises(ValueError, match="at most"):
+        validate_request({"model": capabilities.model, "execution_mode": "live", "quality": "medium"}, 4, capabilities)
+    missing_key = AdapterCapabilities.from_model({**live_model(), "credentials_configured": False})
+    with pytest.raises(ValueError, match="OPENROUTER_API_KEY"):
+        validate_request({"model": missing_key.model, "execution_mode": "live", "quality": "medium"}, 1, missing_key)
+    unavailable = AdapterCapabilities.from_model(unavailable_live_model("provider/missing"))
+    with pytest.raises(ValueError, match="unavailable"):
+        validate_request({"model": unavailable.model, "execution_mode": "live", "quality": "medium"}, 1, unavailable)
+
+
+def test_openrouter_payload_is_identity_first_and_rejects_targets(tmp_path: Path) -> None:
+    source_path, reference_path, target_path = (tmp_path / name for name in ("source.png", "reference.png", "target.png"))
+    for path, colour in ((source_path, (1, 2, 3)), (reference_path, (4, 5, 6)), (target_path, (7, 8, 9))):
+        Image.new("RGB", (4, 4), colour).save(path)
+    adapter = OpenRouterGenerationAdapter(AdapterCapabilities.from_model(live_model()), api_key="test-key")
+    request = GenerationRequest(source_path, [reference_path], "neutral", "avoid", "provider/neutral", "medium", 1, "1:1", tmp_path / "out.png", ("generation-reference",))
+    payload = adapter.build_payload(request)
+    references = payload["input_references"]
+    assert len(references) == 2
+    assert references[0]["image_url"]["url"].endswith(__import__("base64").b64encode(source_path.read_bytes()).decode())
+    assert references[1]["image_url"]["url"].endswith(__import__("base64").b64encode(reference_path.read_bytes()).decode())
+    target_request = GenerationRequest(source_path, [target_path], "neutral", "avoid", "provider/neutral", "medium", 1, "1:1", tmp_path / "out.png", ("target-example",))
+    with pytest.raises(ValueError, match="review-only"):
+        adapter.build_payload(target_request)
+
+
+def test_live_provenance_and_consent_use_semantic_fake_without_provider_call(tmp_path: Path) -> None:
+    store = WorkspaceStore(tmp_path / "library")
+    styles = StyleStore(store)
+    first = source(store, "semantic")
+    style = styles.raw_version(styles.active_id())
+    model = live_model()
+    style["generation"] = {**style["generation"], "model_id": model["id"], "quality": "medium"}
+    style = validate_style(style)
+    manager = CardProductionManager(store, styles, lambda mode, capabilities: SemanticFakeGenerationAdapter(capabilities))
+    with pytest.raises(ValueError, match="explicit consent"):
+        manager.create([first["id"]], style, [model])
+    batch = wait_for(manager, manager.create([first["id"]], style, [model], consent=True)["batch_id"])
+    item = batch["items"][0]
+    assert item["generation"]["execution_mode"] == "live"
+    assert item["generation_request"]["reference_order"][0]["role"] == "identity"
+    assert item["generation_request"]["reference_order"][1]["role"] == "generation-reference"
+    assert item["generation_request"]["target_examples_excluded"] is True
+    assert item["master_url"] and item["art_url"] and item["card_url"]
+    assert batch["generation_authorization"]["consent"] is True
+
+
+def test_simulation_is_preview_only_for_lock_and_normal_production(tmp_path: Path) -> None:
+    store = WorkspaceStore(tmp_path / "library")
+    styles = StyleStore(store)
+    preview = simulation_trial_style(styles)
+    preview["identity"] = {**preview["identity"], "state": "locked"}
+    preview = validate_style(preview, require_locked=True)
+    item = source(store, "preview")
+    manager = CardProductionManager(store, styles, lambda mode, capabilities: FakeGenerationAdapter(capabilities))
+    with pytest.raises(ValueError, match="preview-only"):
+        manager.create([item["id"]], preview, [simulation_model()])
+    draft = styles.create_or_resume_draft()
+    simulation = {**draft["generation"], "model_id": simulation_model()["id"], "execution_mode": "simulation", "quality": "low"}
+    styles.update_draft({"generation": simulation})
+    with pytest.raises(ValueError, match="preview"):
+        styles.lock_draft()

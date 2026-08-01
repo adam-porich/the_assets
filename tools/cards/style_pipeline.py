@@ -15,6 +15,7 @@ STYLE_DEFINITION_PATH = Path(__file__).parent / "styles" / "amiga-ocs-portrait-v
 ASSET_ROOT = Path(__file__).parent / "assets" / "amiga-ocs-portrait-v1"
 STYLE_FAMILY_ID = "amiga-ocs-portrait"
 LEGACY_SIMULATION_MODEL_ID = "fake/painterly-deterministic"
+SIMULATION_MODEL_IDS = {LEGACY_SIMULATION_MODEL_ID, "fake/amiga-ocs-deterministic"}
 
 
 def _json_copy(value: Any) -> Any:
@@ -82,6 +83,10 @@ def validate_style(style: dict[str, Any], *, require_locked: bool = False) -> di
         raise ValueError("generation.model_id is required")
     if str(generation.get("quality") or "") not in {"low", "medium", "high"}:
         raise ValueError("generation.quality must be low, medium, or high")
+    if not isinstance(generation.get("reference_limit"), int) or generation["reference_limit"] < 2:
+        raise ValueError("generation.reference_limit must allow an identity image and at least one style reference")
+    if not str(generation.get("requested_aspect_policy") or "").strip():
+        raise ValueError("generation.requested_aspect_policy is required")
     direction = generation.get("direction")
     if not isinstance(direction, dict) or not any(str(value).strip() for value in direction.values()):
         raise ValueError("generation.direction must contain text")
@@ -107,6 +112,8 @@ def validate_style(style: dict[str, Any], *, require_locked: bool = False) -> di
     generation_count = sum(1 for asset in references if asset.get("role") == "generation-reference")
     if generation_count < 1:
         raise ValueError("at least one generation-reference is required")
+    if generation_count + 1 > int(generation["reference_limit"]):
+        raise ValueError("the style reference pack exceeds generation.reference_limit")
     composition = style.get("composition")
     renderer = style.get("renderer")
     card = style.get("card_assembly")
@@ -195,7 +202,7 @@ class StyleStore:
         if active_id and self._style_path(str(active_id)).is_file():
             active = self.raw_version(str(active_id))
             checked_in = load_checked_in_style()
-            if active["generation"].get("model_id") != LEGACY_SIMULATION_MODEL_ID:
+            if active["generation"].get("model_id") not in SIMULATION_MODEL_IDS and active["generation"].get("execution_mode") != "simulation":
                 return self.payload(active)
             expected_checksum = style_checksum(checked_in)
             matching_version = next((entry for entry in index.get("versions", []) if entry.get("checksum_sha256") == expected_checksum and str(entry.get("style_version_id")) != str(active_id)), None)
@@ -337,6 +344,8 @@ class StyleStore:
     def lock_draft(self) -> dict[str, Any]:
         draft_path = self.store.root / "styles" / "draft.json"
         draft = validate_style(self.store.read_json(draft_path, {}))
+        if draft["generation"].get("execution_mode") != "live":
+            raise ValueError("simulation-only styles are previews and cannot be locked for production")
         for asset in draft["reference_pack"]["assets"]:
             path = self._asset_path(asset)
             if not path.is_file() or checksum(path) != asset["checksum_sha256"]:

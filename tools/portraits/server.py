@@ -30,6 +30,8 @@ def fetch_models() -> list[dict[str, Any]]:
     import time
     if _models_cache and time.time() - _models_cache[1] < 3600:
         return _models_cache[0]
+    if not os.environ.get("OPENROUTER_API_KEY"):
+        return [simulation_model(), unavailable_live_model(DEFAULT_LIVE_MODEL_ID)]
     try:
         models = fetch_model_catalogue()
         if len(models) > 1:
@@ -224,7 +226,7 @@ class WorkbenchHandler(BaseHTTPRequestHandler):
             if path == "/api/production":
                 payload = self._json(); style_id = str(payload.get("style_version_id") or self.styles.active_id()); style = self.styles.raw_version(style_id)
                 if style_id != self.styles.active_id(): raise ValueError("normal card production must use the active locked style version")
-                batch = self.manager.create([str(item) for item in payload.get("source_ids") or []], style, _models_for_store(self.store, self.styles), purpose="card-production")
+                batch = self.manager.create([str(item) for item in payload.get("source_ids") or []], style, _models_for_store(self.store, self.styles), purpose="card-production", consent=bool(payload.get("consent")))
                 self.send_json({"batch": batch}, HTTPStatus.ACCEPTED); return
             if path == "/api/styles/draft":
                 self.send_json({"style": self.styles.create_or_resume_draft()}); return
@@ -236,8 +238,8 @@ class WorkbenchHandler(BaseHTTPRequestHandler):
             match = re.fullmatch(r"/api/production/([^/]+)/(retry|try-another|render|approve|bundle)", path)
             if match:
                 batch_id, action = match.groups(); payload = self._json()
-                if action == "retry": result = {"batch": self.manager.retry_failed(batch_id)}
-                elif action == "try-another": result = {"batch": self.manager.try_another(batch_id, str(payload.get("source_id") or ""))}
+                if action == "retry": result = {"batch": self.manager.retry_failed(batch_id, consent=bool(payload.get("consent")))}
+                elif action == "try-another": result = {"batch": self.manager.try_another(batch_id, str(payload.get("source_id") or ""), consent=bool(payload.get("consent")))}
                 elif action == "render": result = {"batch": self.manager.rerender(batch_id, str(payload.get("item_id") or ""), dict(payload.get("framing") or {}))}
                 elif action == "approve": result = {"approval": self.manager.approve(batch_id, str(payload.get("item_id") or ""))}
                 else: result = self.manager.bundle(batch_id)
@@ -247,12 +249,13 @@ class WorkbenchHandler(BaseHTTPRequestHandler):
                 if not draft: raise ValueError("create a draft style before starting a trial")
                 source_ids = [str(item) for item in payload.get("source_ids") or self.store.read().get("benchmark_source_ids", [])][:3]
                 if not source_ids: raise ValueError("pin at least one calibration source")
-                trial = self.manager.create(source_ids, self.styles.raw_draft() or {}, _models_for_store(self.store, self.styles), purpose="style-trial")
+                trial = self.manager.create(source_ids, self.styles.raw_draft() or {}, _models_for_store(self.store, self.styles), purpose="style-trial", consent=bool(payload.get("consent")))
                 self.send_json({"batch": trial}, HTTPStatus.ACCEPTED); return
             match = re.fullmatch(r"/api/styles/trials/([^/]+)/activate", path)
             if match:
                 trial = self.manager.get(match.group(1))
                 if trial["purpose"] != "style-trial" or trial["status"] != "ready" or any(item.get("status") != "ready" for item in trial.get("items", [])): raise ValueError("only a complete style trial can be activated")
+                if trial.get("model_capabilities", {}).get("execution_mode") != "live": raise ValueError("simulation trials are previews and cannot activate a production style")
                 draft = self.styles.draft()
                 if not draft or draft["checksums"]["style_sha256"] != trial["style_checksum_sha256"]: raise ValueError("the draft changed after this trial; run it again before activation")
                 locked = self.styles.lock_draft(); self.styles.activate(locked["identity"]["style_version_id"]); self.send_json({"style": self.styles.bootstrap()}); return

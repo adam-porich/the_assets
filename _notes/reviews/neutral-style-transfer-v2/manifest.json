@@ -1,0 +1,38 @@
+{
+  "style_version_id": "style_amiga_ocs_portrait_v2",
+  "style_checksum_source": "tools/cards/styles/amiga-ocs-portrait-v1.json",
+  "generation_reference": "tools/cards/assets/amiga-ocs-portrait-v1/generation-reference-01.png",
+  "target_example_review_only": "tools/cards/assets/amiga-ocs-portrait-v1/target-example-01.png",
+  "pipeline": [
+    "source image",
+    "live img2img neutralisation",
+    "immutable canonical portrait master",
+    "deterministic Amiga OCS render",
+    "336x276 Amiga art",
+    "card assembly",
+    "420x600 finished card"
+  ],
+  "cohort": {
+    "maximum_items": 3,
+    "required_variation": [
+      "head angle and expression",
+      "lighting and background",
+      "age, skin tone, hair, and clothing"
+    ],
+    "artifact_stages": [
+      "source_snapshot",
+      "canonical_master",
+      "logical_amiga_art",
+      "amiga_art_2x",
+      "finished_card"
+    ],
+    "status": "awaiting-authorized-live-run",
+    "reason": "Paid provider calls require explicit operator confirmation and are never made by tests or bootstrap."
+  },
+  "acceptance": {
+    "rubric": "rubric.md",
+    "target_sent_to_provider": false,
+    "simulation_can_activate": false,
+    "framing_triggers_generation": false
+  }
+}

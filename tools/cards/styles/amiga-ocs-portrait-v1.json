@@ -2,29 +2,28 @@
   "schema_version": 1,
   "identity": {
     "family_id": "amiga-ocs-portrait",
-    "style_version_id": "style_amiga_ocs_portrait_v1",
-    "version": 1,
+    "style_version_id": "style_amiga_ocs_portrait_v2",
+    "version": 2,
     "state": "locked",
-    "label": "Amiga OCS Portrait v1"
+    "label": "Amiga OCS Neutral Portrait v2"
   },
   "generation": {
-    "model_id": "fake/amiga-ocs-deterministic",
-    "execution_mode": "simulation",
+    "model_id": "openai/gpt-image-1-mini",
+    "execution_mode": "live",
     "quality": "low",
     "direction": {
-      "intent": "Create a clean pre-quantisation portrait master for later reduction through the deterministic OCS renderer.",
-      "composition": "Square head-and-shoulders portrait with the subject inside a central 28:23 safe area and eyes near 42 percent from the top.",
-      "rendering": "Broad connected tonal shapes, deliberate edges, no more than five visible value steps per material, and minimal microtexture.",
-      "lighting": "Quiet upper-left key light with warm skin planes and cool reflected shadows.",
-      "palette_direction": "Muted charcoal, umber, rust, ochre, parchment, moss, and slate blue."
+      "identity_to_retain": "Redraw the source as an interpretive portrait while retaining recognizable facial geometry, apparent age, hair silhouette, skin tone, and genuinely identifying features. Exact biometric likeness is not promised.",
+      "composition_to_normalize": "Ignore the source composition. Create a centered frontal head-and-shoulders bust with level shoulders, direct gaze, eyes near 42 percent from the top, restrained clothing, a quiet abstract background, and a consistent 28:23 safe crop.",
+      "expression_pose_to_discard": "Discard the source pose, head angle, facial emotion, gesture, props, scene, camera perspective, and photographic mood. Use a calm affect, closed or gently resting mouth, and even studio-like lighting.",
+      "rendering_language": "Make a pre-quantisation master with broad connected matte tonal planes, deliberate edges, no more than five visible value steps per material, restrained texture, and muted charcoal, umber, rust, ochre, parchment, moss, and slate blue accents."
     },
-    "avoid": "Visible pixels, dithering, checker patterns, scanlines, CRT effects, text, borders, card frames, UI, props, and invented narrative elements.",
+    "avoid": "Enhancing, filtering, tracing, or preserving the source photograph; strong expression, tilted or dramatic pose, gesture, props, scenery, action, dramatic lighting, wide-angle distortion, photographic texture, visible pixels, pixel grids, dithering, checker patterns, scanlines, CRT effects, text, borders, card frames, UI, and invented narrative elements.",
     "requested_aspect_policy": "28:23",
     "reference_limit": 9
   },
   "reference_pack": {
-    "id": "amiga-ocs-portrait-v1-reference-pack",
-    "version": 1,
+    "id": "amiga-ocs-neutral-portrait-v2-reference-pack",
+    "version": 2,
     "assets": [
       {
         "id": "generation-reference-01",
@@ -69,7 +68,7 @@
     "logical_card_size": [210, 300],
     "output_scale": 2,
     "layout": {"art_box": [18, 36, 192, 180], "title_box": [16, 191, 194, 213], "details_box": [16, 221, 194, 274]},
-    "text": {"title": "Portrait Workbench", "subtitle": "Amiga OCS / 32 colours", "version": "House style v1", "identity": "Identity retained"}
+    "text": {"title": "Portrait Workbench", "subtitle": "Amiga OCS / 32 colours", "version": "Neutral style v2", "identity": "Identity retained · interpretive redraw"}
   },
   "editor_descriptors": [
     {"id": "generation.direction", "label": "Direction", "type": "text", "group": "Generation"},
@@ -79,6 +78,6 @@
     {"id": "renderer.dither.edge_threshold", "label": "Edge threshold", "type": "range", "min": 0.0, "max": 1.0, "step": 0.01, "group": "Amiga processing"},
     {"id": "composition.centering", "label": "Default centering", "type": "number", "group": "Amiga processing"}
   ],
-  "provenance": {"source": "checked-in", "pack_path": "tools/cards/assets/amiga-ocs-portrait-v1/pack.json"},
+  "provenance": {"source": "checked-in", "pack_path": "tools/cards/assets/amiga-ocs-portrait-v1/pack.json", "contract": "neutral-portrait-img2img-v2"},
   "checksums": {}
 }

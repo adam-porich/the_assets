@@ -70,6 +70,7 @@ textarea { min-height: 100px; resize: vertical; line-height: 1.45; }
 .card-image-button { width: 100%; display: block; padding: 0; border: 0; background: #100d0b; }
 .final-card-image { display: block; width: 100%; height: auto; image-rendering: pixelated; }
 .card-placeholder { aspect-ratio: 420 / 600; display: grid; place-content: center; gap: 10px; color: #a99d90; background: #181412; text-align: center; }
+.phase-label { color: #d6b477; font-size: 12px; margin: 10px 0 0; }
 .spinner { display: inline-block; width: 20px; height: 20px; border: 2px solid #72583c; border-top-color: #e0aa5d; border-radius: 50%; animation: spin 1s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
 .card-actions { display: flex; gap: 7px; flex-wrap: wrap; padding: 14px 0 8px; }

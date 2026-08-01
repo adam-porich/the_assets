@@ -4,8 +4,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { App, readRoute } from "./App";
 import { api } from "./api";
 
-const style = { identity: { family_id: "amiga-ocs-portrait", style_version_id: "style_amiga_ocs_portrait_v1", version: 1, state: "locked", label: "Amiga OCS Portrait v1" }, generation: { model_id: "fake/painterly-deterministic", execution_mode: "simulation", quality: "low", direction: { intent: "Portrait" }, avoid: "", requested_aspect_policy: "28:23", reference_limit: 9 }, reference_pack: { id: "pack", version: 1, assets: [{ id: "gen", label: "Generation reference", role: "generation-reference" as const, checksum_sha256: "gen", image_url: "/gen.png" }, { id: "target", label: "Target", role: "target-example" as const, checksum_sha256: "target", image_url: "/target.png" }] }, composition: { logical_art_size: [168, 138] as [number, number], default_framing: { zoom: 1, offset_x: 0, offset_y: 0 }, centering: [0.5, 0.44] as [number, number], requested_art_ratio: "28:23" }, renderer: { driver_id: "amiga-ocs", logical_art_size: [168, 138] as [number, number], output_scale: 2, palette_space: "Amiga", palette: ["#111111"], preprocess: {}, dither: { matrix: "bayer-4x4", strength: .62, edge_threshold: .09 } }, card_assembly: { driver_id: "amiga-ocs", logical_card_size: [210, 300] as [number, number], output_scale: 2, layout: {}, text: {} }, editor_descriptors: [], checksums: { style_sha256: "style-checksum" } };
-const base = { workspace: { sources: [{ id: "source-1", label: "Ada", image_url: "/ada.png" }], benchmark_source_ids: ["source-1"] }, sources: [{ id: "source-1", label: "Ada", image_url: "/ada.png" }], selected_source_ids: ["source-1"], style: { active: style, draft: null, versions: [], driver: { id: "amiga-ocs", label: "Amiga OCS", output: "420×600 final cards" } }, batches: [], cards: [], models: [{ id: "fake/painterly-deterministic", name: "Simulation", execution_mode: "simulation" as const, available: true, max_input_references: 9, qualities: ["low"], aspect_ratios: ["5:4"], pricing: [{ cost_usd: 0 }] }], integrations: { pexels: { configured: false }, openrouter: { configured: false } }, starter: { photo_ids: [] } };
+const style = { identity: { family_id: "amiga-ocs-portrait", style_version_id: "style_amiga_ocs_portrait_v2", version: 2, state: "locked", label: "Amiga OCS Neutral Portrait v2" }, generation: { model_id: "live-model", execution_mode: "live", quality: "low", direction: { identity_to_retain: "Portrait" }, avoid: "", requested_aspect_policy: "28:23", reference_limit: 9 }, reference_pack: { id: "pack", version: 1, assets: [{ id: "gen", label: "Generation reference", role: "generation-reference" as const, checksum_sha256: "gen", image_url: "/gen.png" }, { id: "target", label: "Target", role: "target-example" as const, checksum_sha256: "target", image_url: "/target.png" }] }, composition: { logical_art_size: [168, 138] as [number, number], default_framing: { zoom: 1, offset_x: 0, offset_y: 0 }, centering: [0.5, 0.44] as [number, number], requested_art_ratio: "28:23" }, renderer: { driver_id: "amiga-ocs", logical_art_size: [168, 138] as [number, number], output_scale: 2, palette_space: "Amiga", palette: ["#111111"], preprocess: {}, dither: { matrix: "bayer-4x4", strength: .62, edge_threshold: .09 } }, card_assembly: { driver_id: "amiga-ocs", logical_card_size: [210, 300] as [number, number], output_scale: 2, layout: {}, text: {} }, editor_descriptors: [], checksums: { style_sha256: "style-checksum" } };
+const base = { workspace: { sources: [{ id: "source-1", label: "Ada", image_url: "/ada.png" }], benchmark_source_ids: ["source-1"] }, sources: [{ id: "source-1", label: "Ada", image_url: "/ada.png" }], selected_source_ids: ["source-1"], style: { active: style, draft: null, versions: [], driver: { id: "amiga-ocs", label: "Amiga OCS", output: "420×600 final cards" } }, batches: [], cards: [], models: [{ id: "live-model", name: "Live image model", execution_mode: "live" as const, available: true, credentials_configured: true, max_input_references: 9, qualities: ["low"], aspect_ratios: ["5:4"], pricing: [{ cost_usd: 0.04 }] }], integrations: { pexels: { configured: false }, openrouter: { configured: true } }, starter: { photo_ids: [] } };
 
 let container: HTMLDivElement; let root: Root;
 beforeEach(() => { container = document.createElement("div"); document.body.appendChild(container); root = createRoot(container); });
@@ -25,8 +25,8 @@ describe("unified workbench", () => {
     vi.spyOn(api, "bootstrap").mockResolvedValue(base as never);
     await act(async () => root.render(<App />));
     expect(container.textContent).toContain("Sources");
-    expect(container.textContent).toContain("Amiga OCS Portrait v1");
-    expect(container.textContent).toContain("Make 1 card with Amiga OCS Portrait v1");
+    expect(container.textContent).toContain("Amiga OCS Neutral Portrait v2");
+    expect(container.textContent).toContain("Make 1 card with Amiga OCS Neutral Portrait v2");
   });
 
   it("shows final cards first and keeps provenance collapsed", async () => {
@@ -43,9 +43,10 @@ describe("unified workbench", () => {
   it("makes framing a render action and keeps the paid action distinct", async () => {
     vi.spyOn(api, "bootstrap").mockResolvedValue(base as never);
     vi.spyOn(api, "createProduction").mockResolvedValue({ batch: { batch_id: "batch-1" } } as never);
+    vi.spyOn(window, "confirm").mockReturnValue(true);
     await act(async () => root.render(<App />));
     const make = [...container.querySelectorAll("button")].find((button) => button.textContent?.includes("Make 1 card"));
     await act(async () => make?.click());
-    expect(api.createProduction).toHaveBeenCalledWith(["source-1"], style.identity.style_version_id);
+    expect(api.createProduction).toHaveBeenCalledWith(["source-1"], style.identity.style_version_id, true);
   });
 });

@@ -21,6 +21,7 @@ REQUESTED_ART_RATIO_LABEL = "28:23"
 OPENROUTER_MODELS_URL = "https://openrouter.ai/api/v1/images/models"
 SIMULATION_MODEL_ID = "fake/amiga-ocs-deterministic"
 DEFAULT_LIVE_MODEL_ID = "openai/gpt-image-1-mini"
+LIVE_PROVIDER = "openrouter"
 
 
 def simulation_model() -> dict[str, Any]:
@@ -45,6 +46,7 @@ def simulation_model() -> dict[str, Any]:
         "pricing": [{"billable": "output_image", "unit": "image", "cost_usd": 0}],
         "provider_slug": "local",
         "provider_tag": "local",
+        "credentials_configured": True,
     }
 
 
@@ -65,6 +67,7 @@ def unavailable_live_model(model_id: str = DEFAULT_LIVE_MODEL_ID) -> dict[str, A
         "pricing": [],
         "provider_slug": None,
         "provider_tag": None,
+        "credentials_configured": False,
     }
 
 
@@ -95,6 +98,7 @@ def normalize_live_model(model: dict[str, Any], endpoint: dict[str, Any]) -> dic
         "description": str(model.get("description") or ""),
         "execution_mode": "live",
         "available": True,
+        "credentials_configured": bool(os.environ.get("OPENROUTER_API_KEY")),
         "architecture": dict(model.get("architecture") or {}),
         "supported_parameters": parameters,
         "max_input_references": _descriptor_max(parameters, "input_references"),
@@ -107,6 +111,8 @@ def normalize_live_model(model: dict[str, Any], endpoint: dict[str, Any]) -> dic
         "provider_name": endpoint.get("provider_name"),
         "provider_slug": endpoint.get("provider_slug"),
         "provider_tag": endpoint.get("provider_tag"),
+        "endpoint_id": endpoint.get("id") or endpoint.get("endpoint_id"),
+        "endpoint_url": endpoint.get("url") or endpoint.get("endpoint_url"),
         "allowed_passthrough_parameters": list(endpoint.get("allowed_passthrough_parameters") or []),
     }
 
@@ -164,6 +170,9 @@ class AdapterCapabilities:
     supports_streaming: bool
     pricing: list[dict[str, Any]]
     reference_roles: bool = False
+    credentials_configured: bool = False
+    endpoint_id: str | None = None
+    endpoint_url: str | None = None
 
     @classmethod
     def from_model(cls, model: dict[str, Any]) -> "AdapterCapabilities":
@@ -177,6 +186,9 @@ class AdapterCapabilities:
             supports_streaming=bool(model.get("supports_streaming")),
             pricing=list(model.get("pricing") or []),
             reference_roles=bool(model.get("supports_reference_roles")),
+            credentials_configured=bool(model.get("credentials_configured", str(model.get("execution_mode") or "live") != "live")),
+            endpoint_id=model.get("endpoint_id"),
+            endpoint_url=model.get("endpoint_url"),
         )
 
     @property
@@ -224,6 +236,7 @@ class GenerationRequest:
     seed: int
     effective_aspect_ratio: str
     output_path: Path
+    reference_roles: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -265,8 +278,17 @@ def model_capabilities(model: str, models: list[dict[str, Any]] | None = None) -
 
 
 def validate_request(recipe: dict[str, Any], style_count: int, capabilities: AdapterCapabilities) -> dict[str, Any]:
+    requested_mode = str(recipe.get("execution_mode") or capabilities.execution_mode)
+    if requested_mode != capabilities.execution_mode:
+        raise ValueError(f"execution mode mismatch: {recipe.get('model')} is configured for {requested_mode}, but the selected capability is {capabilities.execution_mode}")
     if not capabilities.available:
         raise ValueError(f"{recipe.get('model')} is unavailable; explicitly choose an available replacement")
+    if capabilities.execution_mode == "live" and not capabilities.credentials_configured:
+        raise ValueError("OPENROUTER_API_KEY is missing; configure the live image provider before starting generation")
+    if capabilities.execution_mode == "live" and not (capabilities.endpoint_id or capabilities.provider_slug or capabilities.provider_tag):
+        raise ValueError("the selected live model has no resolved provider endpoint")
+    if capabilities.execution_mode == "simulation" and capabilities.model != SIMULATION_MODEL_ID:
+        raise ValueError("simulation runs must explicitly select the deterministic simulation model")
     total = 1 + style_count
     if not capabilities.supports("input_references"):
         raise ValueError(f"{recipe.get('model')} does not support image references and cannot run this portrait workflow")
@@ -278,12 +300,20 @@ def validate_request(recipe: dict[str, Any], style_count: int, capabilities: Ada
     quality = str(recipe.get("quality") or "")
     if capabilities.qualities and quality not in capabilities.qualities:
         raise ValueError(f"{recipe.get('model')} does not support quality {quality}")
+    requested_provider_ratio = str(recipe.get("provider_aspect_ratio") or recipe.get("aspect_ratio") or "")
+    supported_ratios = tuple(capabilities.aspect_ratios)
+    if requested_provider_ratio and supported_ratios and requested_provider_ratio not in supported_ratios:
+        raise ValueError(f"{recipe.get('model')} does not support aspect ratio {requested_provider_ratio}")
     return {
         "requested_aspect_ratio": REQUESTED_ART_RATIO_LABEL,
-        "effective_aspect_ratio": negotiate_aspect_ratio(capabilities.aspect_ratios),
+        "effective_aspect_ratio": requested_provider_ratio if requested_provider_ratio else negotiate_aspect_ratio(capabilities.aspect_ratios),
         "quality_mapping": "native" if capabilities.supports("quality") else "omitted-provider-default",
         "negative_prompt_mapping": "native_negative_prompt" if capabilities.negative_prompt else "explicit_avoid_instruction",
         "reference_mapping": "role_aware" if capabilities.reference_roles else "identity_first_style_after",
+        "provider": LIVE_PROVIDER if capabilities.execution_mode == "live" else "local",
+        "endpoint_id": capabilities.endpoint_id,
+        "endpoint_url": capabilities.endpoint_url,
+        "credentials_configured": capabilities.credentials_configured,
         "sent_parameters": [
             name for name in ("input_references", "aspect_ratio", "quality", "negative_prompt", "background", "seed", "n", "output_format")
             if capabilities.supports(name)
@@ -325,6 +355,49 @@ class FakeGenerationAdapter:
         )
 
 
+class SemanticFakeGenerationAdapter:
+    """Free semantic stand-in for tests; it never crops, filters, or copies the source.
+
+    The normal simulation adapter exists to exercise the renderer with a real
+    image quickly. This adapter is intentionally abstract and neutral so an
+    end-to-end test cannot accidentally treat source filtering as style transfer.
+    """
+
+    def __init__(self, capabilities: AdapterCapabilities | None = None) -> None:
+        self.capabilities = capabilities or AdapterCapabilities.from_model(simulation_model())
+        self.name = "semantic-fake"
+
+    def generate(self, request: GenerationRequest) -> GenerationResult:
+        started = time.perf_counter()
+        width, height = (336, 276)
+        if request.effective_aspect_ratio == "5:4":
+            width, height = (320, 256)
+        elif request.effective_aspect_ratio == "3:2":
+            width, height = (360, 240)
+        image = Image.new("RGB", (width, height), (54, 60, 68))
+        draw = ImageDraw.Draw(image)
+        cx = width // 2
+        skin = (190, 145, 112)
+        shadow = (105, 75, 68)
+        light = (219, 182, 144)
+        draw.rectangle((0, int(height * .73), width, height), fill=(38, 43, 48))
+        draw.ellipse((cx - int(width * .23), int(height * .10), cx + int(width * .23), int(height * .68)), fill=skin)
+        draw.polygon([(cx - int(width * .23), int(height * .27)), (cx - int(width * .14), int(height * .04)), (cx + int(width * .15), int(height * .04)), (cx + int(width * .23), int(height * .27)), (cx + int(width * .18), int(height * .13)), (cx - int(width * .18), int(height * .13))], fill=(42, 35, 34))
+        draw.polygon([(cx - int(width * .23), int(height * .46)), (cx - int(width * .18), int(height * .69)), (cx - int(width * .32), height), (cx - int(width * .06), height), (cx - int(width * .04), int(height * .68))], fill=shadow)
+        draw.polygon([(cx + int(width * .23), int(height * .46)), (cx + int(width * .18), int(height * .69)), (cx + int(width * .32), height), (cx + int(width * .06), height), (cx + int(width * .04), int(height * .68))], fill=light)
+        draw.ellipse((cx - int(width * .13), int(height * .36), cx - int(width * .07), int(height * .39)), fill=(28, 30, 31))
+        draw.ellipse((cx + int(width * .07), int(height * .36), cx + int(width * .13), int(height * .39)), fill=(28, 30, 31))
+        draw.line((cx, int(height * .39), cx - int(width * .01), int(height * .51), cx + int(width * .03), int(height * .53)), fill=shadow, width=max(1, width // 90))
+        draw.line((cx - int(width * .08), int(height * .58), cx + int(width * .08), int(height * .58)), fill=shadow, width=max(1, width // 90))
+        image.save(request.output_path, format="PNG")
+        return GenerationResult(
+            output_path=str(request.output_path), backend=self.name, model=request.model, seed=request.seed,
+            elapsed_seconds=round(time.perf_counter() - started, 3), dimensions=[width, height],
+            effective_aspect_ratio=request.effective_aspect_ratio,
+            usage={"images": 1, "cost": 0.0, "semantic_fake": True}, cost_usd=0.0,
+        )
+
+
 class OpenRouterGenerationAdapter:
     def __init__(self, capabilities: AdapterCapabilities, api_key: str | None = None) -> None:
         self.api_key = api_key or os.environ.get("OPENROUTER_API_KEY")
@@ -340,7 +413,9 @@ class OpenRouterGenerationAdapter:
         media_type = "image/png" if path.suffix.lower() == ".png" else "image/jpeg"
         return f"data:{media_type};base64,{base64.b64encode(path.read_bytes()).decode('ascii')}"
 
-    def generate(self, request: GenerationRequest) -> GenerationResult:
+    def build_payload(self, request: GenerationRequest) -> dict[str, Any]:
+        if "target-example" in request.reference_roles:
+            raise ValueError("target-example assets are review-only and cannot enter a provider request")
         references = [{"type": "image_url", "image_url": {"url": self._data_url(request.identity_image)}}]
         references.extend({"type": "image_url", "image_url": {"url": self._data_url(path)}} for path in request.style_images)
         payload: dict[str, Any] = {"model": request.model, "prompt": request.instruction}
@@ -362,6 +437,10 @@ class OpenRouterGenerationAdapter:
             payload["seed"] = request.seed
         if self.capabilities.provider_tag:
             payload["provider"] = {"only": [self.capabilities.provider_tag], "allow_fallbacks": False}
+        return payload
+
+    def generate(self, request: GenerationRequest) -> GenerationResult:
+        payload = self.build_payload(request)
 
         started = time.perf_counter()
         response = requests.post(
@@ -374,9 +453,14 @@ class OpenRouterGenerationAdapter:
             raise RuntimeError(f"OpenRouter image generation failed {response.status_code}: {response.text[:500]}")
         body = response.json()
         data = body.get("data") or []
-        if not data or not data[0].get("b64_json"):
+        if not data or not (data[0].get("b64_json") or data[0].get("url")):
             raise RuntimeError("OpenRouter returned no image data")
-        raw = base64.b64decode(data[0]["b64_json"])
+        if data[0].get("b64_json"):
+            raw = base64.b64decode(data[0]["b64_json"])
+        else:
+            image_response = requests.get(str(data[0]["url"]), timeout=180)
+            image_response.raise_for_status()
+            raw = image_response.content
         try:
             with Image.open(io.BytesIO(raw)) as opened:
                 generated = opened.convert("RGB")
@@ -386,7 +470,10 @@ class OpenRouterGenerationAdapter:
             raise RuntimeError(f"OpenRouter returned an unsupported image payload: {exc}") from exc
         usage = dict(body.get("usage") or {})
         cost_value = usage.get("cost")
-        cost = float(cost_value) if isinstance(cost_value, (int, float)) else None
+        try:
+            cost = float(cost_value) if cost_value is not None else None
+        except (TypeError, ValueError):
+            cost = None
         return GenerationResult(
             output_path=str(request.output_path), backend=self.name, model=request.model, seed=request.seed,
             elapsed_seconds=round(time.perf_counter() - started, 3), dimensions=dimensions,

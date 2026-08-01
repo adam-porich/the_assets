@@ -21,10 +21,11 @@ npm run dev
 ```
 
 The API creates an ignored `portrait-library/` workspace and materializes the
-checked-in Amiga style and its reference assets without making a generation
-call. Set `PEXELS_API_KEY` to enable Pexels search and starter imports. Set
-`OPENROUTER_API_KEY` only when live generation is explicitly authorized. The
-simulation model is local, deterministic, and free.
+checked-in live Amiga neutral-portrait style and its reference assets without
+making a generation call. Set `PEXELS_API_KEY` to enable Pexels search and
+starter imports, and configure `OPENROUTER_API_KEY` before live generation.
+The capability catalogue is resolved from OpenRouter image endpoints; a local
+simulation remains available only for free Style Studio preview trials.
 
 ## Browser surfaces
 
@@ -32,13 +33,14 @@ simulation model is local, deterministic, and free.
 
 Upload, search, inspect provenance, and select an ordered set of source images.
 The page shows the exact number of calls, model, execution mode, and available
-cost before the primary **Make N cards with Amiga OCS Portrait v1** action.
+cost before the primary **Make N cards with Amiga OCS Neutral Portrait v2** action.
 
 ### Cards
 
-Each selected source gets one immutable generation attempt by default. A card
-slot stays in progress until its master has been rendered into 336×276 art and
-a complete 420×600 card. Reviewers can approve a ready card, make one
+Each selected source gets one immutable live generation attempt by default. A
+card slot first redraws the source into a canonical neutral portrait master,
+then stays in progress until that master has been rendered into 336×276 art
+and a complete 420×600 card. Reviewers can approve a ready card, make one
 additional **Try another** attempt, adjust framing without generation, retry a
 failed source, download an individual PNG, or download the ordered approved
 bundle and manifest.
@@ -73,12 +75,18 @@ identity source + ordered generation references
   → exact 2× enlargement to 420×600 card
 ```
 
-The master is an internal diagnostic artifact. The final card is the approval
-artifact. Every locked style, batch, attempt, render revision, and approval
-records the style checksum, asset checksums, ordered reference mapping,
-generation configuration, provider metadata, usage/cost, framing transform,
-and output checksums. Target examples are visible for review and golden tests,
-but are structurally excluded from provider payloads.
+The canonical master is an inspectable provenance artifact; the final card is
+the everyday approval artifact. Every locked style, batch, attempt, render
+revision, and approval records the source snapshot, resolved instruction and
+negative instruction, ordered reference mapping, model/provider capabilities,
+execution mode, usage/cost, framing transform, and output checksums. Target
+examples are visible for review and golden tests, but are structurally
+excluded from provider payloads.
+
+Live production, trials, retries, and **Try another** each require an explicit
+confirmation. The Sources action shows the selected live model, call count,
+and known/unknown cost before it can be used. Simulation output is labelled as
+a preview and cannot be used to lock or activate a production style.
 
 Workspace data is stored below `portrait-library/`:
 

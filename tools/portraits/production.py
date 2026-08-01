@@ -21,6 +21,26 @@ from .workspace import WorkspaceError, WorkspaceStore, checksum, new_id, now_iso
 TERMINAL_ITEM_STATES = {"ready", "failed", "interrupted"}
 
 
+def generation_instruction(direction: dict[str, Any]) -> str:
+    """Resolve structured style direction into the exact prompt sent to a provider."""
+    labels = {
+        "identity_to_retain": "Identity to retain",
+        "composition_to_normalize": "Composition to normalize",
+        "expression_pose_to_discard": "Expression and pose to discard",
+        "rendering_language": "Rendering language",
+        "intent": "Intent",
+        "composition": "Composition",
+        "rendering": "Rendering",
+        "lighting": "Lighting",
+        "palette_direction": "Palette direction",
+    }
+    return "\n".join(
+        f"{labels.get(str(key), str(key).replace('_', ' ').title())}: {str(value).strip()}"
+        for key, value in direction.items()
+        if str(value).strip()
+    )
+
+
 class CardProductionManager:
     """The one worker used by card production and complete style trials."""
 
@@ -74,6 +94,7 @@ class CardProductionManager:
                 for item in record.get("items", []):
                     if item.get("status") not in TERMINAL_ITEM_STATES:
                         item["status"] = "interrupted"
+                        item["phase"] = "interrupted"
                         item["error"] = record["error"]
                 record["updated_at"] = now_iso()
                 self.store.atomic_json(path, record)
@@ -86,7 +107,7 @@ class CardProductionManager:
             raise ValueError(f"{model_id} is not an available {mode} model")
         return model
 
-    def _validate_start(self, style: dict[str, Any], source_ids: list[str], models: list[dict[str, Any]]) -> tuple[dict[str, Any], AdapterCapabilities, dict[str, Any], list[dict[str, Any]]]:
+    def _validate_start(self, style: dict[str, Any], source_ids: list[str], models: list[dict[str, Any]], purpose: str) -> tuple[dict[str, Any], AdapterCapabilities, dict[str, Any], list[dict[str, Any]]]:
         if not source_ids:
             raise ValueError("select at least one source image")
         if len(source_ids) != len(set(source_ids)):
@@ -94,11 +115,13 @@ class CardProductionManager:
         model = self._model(style, models)
         capabilities = AdapterCapabilities.from_model(model)
         generation = style["generation"]
+        if purpose == "card-production" and str(generation.get("execution_mode")) != "live":
+            raise ValueError("the active production style must use live image generation; simulation is preview-only")
         generation_refs = [asset for asset in style["reference_pack"]["assets"] if asset.get("role") == "generation-reference"]
-        mapping = validate_request({"model": generation["model_id"], "quality": generation["quality"]}, len(generation_refs), capabilities)
+        mapping = validate_request({"model": generation["model_id"], "quality": generation["quality"], "execution_mode": generation["execution_mode"]}, len(generation_refs), capabilities)
         return model, capabilities, mapping, generation_refs
 
-    def create(self, source_ids: list[str], style: dict[str, Any], models: list[dict[str, Any]], *, purpose: str = "card-production") -> dict[str, Any]:
+    def create(self, source_ids: list[str], style: dict[str, Any], models: list[dict[str, Any]], *, purpose: str = "card-production", consent: bool = False) -> dict[str, Any]:
         if purpose not in {"card-production", "style-trial"}:
             raise ValueError("production purpose must be card-production or style-trial")
         style = validate_style(copy.deepcopy(style), require_locked=purpose == "card-production")
@@ -110,7 +133,9 @@ class CardProductionManager:
             source_ids = [str(item) for item in source_ids]
             if any(source_id not in sources for source_id in source_ids):
                 raise ValueError("selected source IDs contain a missing source")
-            model, capabilities, mapping, generation_refs = self._validate_start(style, source_ids, models)
+            model, capabilities, mapping, generation_refs = self._validate_start(style, source_ids, models, purpose)
+            if capabilities.execution_mode == "live" and not consent:
+                raise ValueError("explicit consent is required before starting paid image generation")
             batch_id = new_id("batch")
             batch_dir = self._path(batch_id).parent
             source_snapshots: list[dict[str, Any]] = []
@@ -137,6 +162,7 @@ class CardProductionManager:
                 "style_checksum_sha256": style["checksums"]["style_sha256"], "selected_source_ids": source_ids,
                 "source_snapshots": source_snapshots, "reference_snapshots": reference_snapshots,
                 "model": model, "model_capabilities": capabilities.to_json(), "backend_mapping": mapping,
+                "generation_authorization": {"required": capabilities.execution_mode == "live", "consent": bool(consent), "granted_at": now_iso() if consent else None, "purpose": purpose},
                 "requested_paid_calls": len(source_ids), "paid_calls": 0, "usage": {}, "cost_usd": 0.0,
                 "items": items, "calibration_source_ids": source_ids if purpose == "style-trial" else None,
             }
@@ -148,14 +174,14 @@ class CardProductionManager:
     def _new_item(self, source: dict[str, Any], attempt_number: int, lineage_id: str, references: list[dict[str, Any]]) -> dict[str, Any]:
         return {
             "item_id": new_id("item"), "source_id": source["id"], "source_label": source.get("label") or source["id"],
-            "attempt_number": attempt_number, "lineage_id": lineage_id, "status": "queued", "error": None,
+            "attempt_number": attempt_number, "lineage_id": lineage_id, "status": "queued", "phase": "queued", "error": None,
             "source_input_path": source["input_path"], "source_input_checksum_sha256": source["input_checksum_sha256"],
             "reference_stack": [{"role": "identity", "source_id": source["id"], "input_path": source["input_path"], "checksum_sha256": source["input_checksum_sha256"]}, *[
                 {"role": "generation-reference", "reference_id": reference["id"], "input_path": reference["input_path"], "checksum_sha256": reference["input_checksum_sha256"]} for reference in references
             ]],
             "framing": None, "render_revision": 0, "render_revisions": [], "master_path": None, "master_checksum_sha256": None,
             "logical_art_path": None, "art_path": None, "card_path": None, "card_checksum_sha256": None,
-            "generation": {}, "render_metadata": {}, "usage": {}, "cost_usd": None,
+            "generation": {}, "generation_request": {}, "render_metadata": {}, "usage": {}, "cost_usd": None,
         }
 
     def _work(self, batch_id: str) -> None:
@@ -168,24 +194,44 @@ class CardProductionManager:
                 if item.get("status") not in {"queued"}:
                     continue
                 try:
-                    item.update({"status": "generating", "started_at": now_iso()}); self._write(record)
+                    item.update({"status": "generating", "phase": "redrawing neutral portrait", "started_at": now_iso()}); self._write(record)
                     source_path = self.store.absolute_path(str(item["source_input_path"]))
                     master_relative = Path("production") / batch_id / "masters" / f"{item['item_id']}.png"
                     self.store.absolute_path(master_relative).parent.mkdir(parents=True, exist_ok=True)
                     reference_paths = [self.store.absolute_path(str(reference["input_path"])) for reference in record["reference_snapshots"]]
                     generation = record["style_snapshot"]["generation"]
-                    result = adapter.generate(GenerationRequest(
+                    generation_refs = record["reference_snapshots"]
+                    request = GenerationRequest(
                         identity_image=source_path, style_images=reference_paths,
-                        instruction="\n".join(str(value) for value in generation["direction"].values()),
+                        instruction=generation_instruction(generation["direction"]),
                         negative_prompt=str(generation.get("avoid") or ""), model=str(generation["model_id"]), quality=str(generation["quality"]),
                         seed=stable_seed(str(item["item_id"])), effective_aspect_ratio=str(record["backend_mapping"]["effective_aspect_ratio"]),
                         output_path=self.store.absolute_path(master_relative),
-                    ))
-                    item.update({"status": "processing", "master_path": master_relative.as_posix(), "master_checksum_sha256": checksum(self.store.absolute_path(master_relative)), "generation": {"backend": result.backend, "model": result.model, "seed": result.seed, "elapsed_seconds": result.elapsed_seconds, "dimensions": result.dimensions, "effective_aspect_ratio": result.effective_aspect_ratio, "usage": result.usage, "cost_usd": result.cost_usd}, "usage": result.usage, "cost_usd": result.cost_usd}); self._write(record)
+                        reference_roles=tuple(["generation-reference"] * len(generation_refs)),
+                    )
+                    item["generation_request"] = {
+                        "execution_mode": capabilities.execution_mode,
+                        "model": request.model,
+                        "provider": capabilities.provider_slug or ("local" if capabilities.execution_mode == "simulation" else "openrouter"),
+                        "endpoint_id": capabilities.endpoint_id,
+                        "quality": request.quality,
+                        "seed": request.seed,
+                        "instruction": request.instruction,
+                        "negative_prompt": request.negative_prompt,
+                        "requested_aspect_ratio": generation.get("requested_aspect_policy"),
+                        "effective_aspect_ratio": request.effective_aspect_ratio,
+                        "reference_order": [
+                            {"order": 0, "role": "identity", "source_id": item["source_id"], "checksum_sha256": item["source_input_checksum_sha256"]},
+                            *[{"order": index, "role": "generation-reference", "reference_id": reference["id"], "checksum_sha256": reference["input_checksum_sha256"]} for index, reference in enumerate(generation_refs, 1)],
+                        ],
+                        "target_examples_excluded": True,
+                    }
+                    result = adapter.generate(request)
+                    item.update({"status": "processing", "phase": "applying Amiga rendering and assembling card", "master_path": master_relative.as_posix(), "master_checksum_sha256": checksum(self.store.absolute_path(master_relative)), "generation": {"backend": result.backend, "model": result.model, "execution_mode": capabilities.execution_mode, "seed": result.seed, "elapsed_seconds": result.elapsed_seconds, "dimensions": result.dimensions, "effective_aspect_ratio": result.effective_aspect_ratio, "usage": result.usage, "cost_usd": result.cost_usd}, "usage": result.usage, "cost_usd": result.cost_usd}); self._write(record)
                     self._render_item(record, item, None)
-                    item["status"] = "ready"; item["finished_at"] = now_iso(); item["error"] = None
+                    item["status"] = "ready"; item["phase"] = "complete"; item["finished_at"] = now_iso(); item["error"] = None
                 except Exception as exc:
-                    item.update({"status": "failed", "error": str(exc), "finished_at": now_iso()})
+                    item.update({"status": "failed", "phase": "failed", "error": str(exc), "finished_at": now_iso()})
                 self._update_totals(record); record["updated_at"] = now_iso(); self._write(record)
             self._update_totals(record)
             statuses = [item.get("status") for item in record["items"]]
@@ -231,6 +277,8 @@ class CardProductionManager:
                 item[field.replace("_path", "_url")] = self.store.asset_url(item.get(field))
             item["source_url"] = self.store.asset_url(item.get("source_input_path"))
             item["reference_urls"] = [self.store.asset_url(reference.get("input_path")) for reference in item.get("reference_stack", []) if reference.get("role") == "generation-reference"]
+            for reference in item.get("reference_stack", []):
+                reference["url"] = self.store.asset_url(reference.get("input_path"))
         result["style_snapshot"] = self.styles.payload(result["style_snapshot"])
         return result
 
@@ -263,20 +311,29 @@ class CardProductionManager:
         record["items"].append(item); record["requested_paid_calls"] = int(record.get("requested_paid_calls") or 0) + 1; record["status"] = "queued"; record["updated_at"] = now_iso(); self._write(record)
         return item
 
-    def retry_failed(self, batch_id: str) -> dict[str, Any]:
+    def _require_action_consent(self, record: dict[str, Any], consent: bool) -> None:
+        if record.get("model_capabilities", {}).get("execution_mode") == "live" and not consent:
+            raise ValueError("explicit consent is required for every live retry or additional generation attempt")
+
+    def retry_failed(self, batch_id: str, *, consent: bool = False) -> dict[str, Any]:
         with self._lock:
             if self._active_batch: raise ValueError("one paid generation batch is already active; wait for it to finish")
             record = self._read(batch_id)
+            self._require_action_consent(record, consent)
             source_ids = list(dict.fromkeys(str(item["source_id"]) for item in record["items"] if item.get("status") in {"failed", "interrupted"}))
             if not source_ids: raise ValueError("this batch has no failed or interrupted sources to retry")
             for source_id in source_ids: self._append_attempt(record, source_id)
+            record.setdefault("generation_authorization", {"required": record.get("model_capabilities", {}).get("execution_mode") == "live"})["last_action"] = {"action": "retry", "consent": bool(consent), "granted_at": now_iso() if consent else None}
+            self._write(record)
             self._active_batch = batch_id; threading.Thread(target=self._work, args=(batch_id,), daemon=True, name=f"card-retry-{batch_id}").start()
             return self.payload(record)
 
-    def try_another(self, batch_id: str, source_id: str) -> dict[str, Any]:
+    def try_another(self, batch_id: str, source_id: str, *, consent: bool = False) -> dict[str, Any]:
         with self._lock:
             if self._active_batch: raise ValueError("one paid generation batch is already active; wait for it to finish")
-            record = self._read(batch_id); self._append_attempt(record, str(source_id)); self._active_batch = batch_id
+            record = self._read(batch_id); self._require_action_consent(record, consent); self._append_attempt(record, str(source_id)); self._active_batch = batch_id
+            record.setdefault("generation_authorization", {"required": record.get("model_capabilities", {}).get("execution_mode") == "live"})["last_action"] = {"action": "try-another", "consent": bool(consent), "granted_at": now_iso() if consent else None}
+            self._write(record)
             threading.Thread(target=self._work, args=(batch_id,), daemon=True, name=f"card-attempt-{batch_id}").start()
             return self.payload(record)
 
