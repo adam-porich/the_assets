@@ -16,17 +16,25 @@ type Props = {
   onMessage: (message: string, kind?: "success" | "error") => void;
 };
 
+function isCurrentFinishRun(candidate: Run | undefined, selection?: CandidateSelection | null) {
+  return Boolean(
+    candidate?.purpose === "finish" &&
+    candidate.selection_id === selection?.selection_id &&
+    candidate.selection_revision === selection?.revision,
+  );
+}
+
 export function FinishStage({ workspace, selection, runs, finishes = [], models, initialRun, onRun, onRefresh, onNavigate, onMessage }: Props) {
   const inherited = selection?.selected_items[0]?.recipe_snapshot || workspace.recipes.find((item) => item.id === workspace.active_recipe_id) || workspace.recipes[0];
   const [recipe, setRecipe] = useState<Recipe | undefined>(inherited);
-  const [run, setRun] = useState<Run | undefined>(initialRun);
+  const [run, setRun] = useState<Run | undefined>(() => isCurrentFinishRun(initialRun, selection) ? initialRun : undefined);
   const [busy, setBusy] = useState("");
   const [compareId, setCompareId] = useState("");
   const [comparison, setComparison] = useState<Awaited<ReturnType<typeof api.compareFinishTrials>>["comparison"]>();
-  const finishRuns = useMemo(() => runs.filter((item) => item.purpose === "finish" && item.selection_id === selection?.selection_id), [runs, selection?.selection_id]);
+  const finishRuns = useMemo(() => runs.filter((item) => item.purpose === "finish" && item.selection_id === selection?.selection_id && item.selection_revision === selection?.revision), [runs, selection?.selection_id, selection?.revision]);
 
   useEffect(() => { setRecipe(inherited); }, [inherited?.id, selection?.revision]);
-  useEffect(() => { if (initialRun) setRun(initialRun); }, [initialRun?.run_id, initialRun?.updated_at]);
+  useEffect(() => { setRun(isCurrentFinishRun(initialRun, selection) ? initialRun : undefined); }, [initialRun?.run_id, initialRun?.updated_at, initialRun?.purpose, initialRun?.selection_id, initialRun?.selection_revision, selection?.selection_id, selection?.revision]);
   useEffect(() => {
     if (!run || !["queued", "running"].includes(run.status)) return;
     const timer = window.setInterval(async () => {
@@ -50,7 +58,7 @@ export function FinishStage({ workspace, selection, runs, finishes = [], models,
   }
 
   async function lock() {
-    if (!run || run.status !== "complete") return;
+    if (!run || run.status !== "complete" || !isCurrentFinishRun(run, selection)) return;
     setBusy("lock");
     try { await api.lockFinish(run.run_id); await onRefresh(); onMessage("Finish locked as an immutable cohort"); onNavigate("#set"); }
     catch (error) { onMessage((error as Error).message, "error"); }

@@ -27,6 +27,30 @@ export function readRoute(): Route {
   return { view: "sources" };
 }
 
+export function runIdForStage(
+  view: Route["view"],
+  activeRun: Run | undefined,
+  runs: Bootstrap["runs"],
+  selection?: Bootstrap["candidate_selection"] | null,
+): string | undefined {
+  if (view === "finish") {
+    if (
+      activeRun?.purpose === "finish" &&
+      activeRun.selection_id === selection?.selection_id &&
+      activeRun.selection_revision === selection?.revision
+    ) return activeRun.run_id;
+    return runs.find(
+      (run) =>
+        run.purpose === "finish" &&
+        run.selection_id === selection?.selection_id &&
+        run.selection_revision === selection?.revision,
+    )?.run_id;
+  }
+  if (view !== "styles") return undefined;
+  if (activeRun?.purpose !== "finish") return activeRun?.run_id || runs[0]?.run_id;
+  return runs.find((run) => run.purpose !== "finish")?.run_id;
+}
+
 export function App() {
   const [bootstrap, setBootstrap] = useState<Bootstrap>();
   const [route, setRoute] = useState<Route>(readRoute);
@@ -45,8 +69,10 @@ export function App() {
       setCandidateSelection(next.candidate_selection || next.workspace.candidate_selection || null);
       setLoadError("");
       if (route.view === "styles" || route.view === "finish") {
-        const runId = route.runId || activeRun?.run_id || next.runs[0]?.run_id;
+        const selection = next.candidate_selection || next.workspace.candidate_selection;
+        const runId = route.runId || runIdForStage(route.view, activeRun, next.runs, selection);
         if (runId) setActiveRun((await api.getRun(runId)).run);
+        else if (route.view === "finish" && activeRun) setActiveRun(undefined);
       }
       if (route.view === "frames" && route.id) setActiveCard((await api.getCard(route.id)).card);
       const activeSet = next.sets?.find((item) => item.set_id === next.active_set_id);

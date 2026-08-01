@@ -81,6 +81,8 @@ def test_finish_lock_set_production_and_active_set_cards(tmp_path: Path) -> None
     assert trial["sources_snapshot"][0]["input_role"] == "generated-artifact"
     assert trial["sources_snapshot"][0]["input_checksum_sha256"] == selection["selected_items"][0]["output_checksum_sha256"]
     assert trial["resolved_instruction"].startswith("Requested finish change:")
+    with pytest.raises(ValueError, match="current candidate selection revision"):
+        lock_finish(store, trial, {**selection, "revision": selection["revision"] + 1})
     finish = lock_finish(store, trial, selection)
     assert FinishStore(store).read(finish["finish_id"])["state"] == "locked"
     with pytest.raises(ValueError, match="immutable"):

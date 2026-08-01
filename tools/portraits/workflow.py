@@ -379,6 +379,12 @@ def lock_finish(store: WorkspaceStore, trial_run: dict[str, Any], selection: dic
     """Atomically create a complete immutable finish cohort."""
     if run_purpose(trial_run) != "finish":
         raise ValueError("only a Finish trial can be locked")
+    try:
+        same_revision = int(trial_run.get("selection_revision", -1)) == int(selection.get("revision", -2))
+    except (TypeError, ValueError):
+        same_revision = False
+    if trial_run.get("selection_id") != selection.get("selection_id") or not same_revision:
+        raise ValueError("Finish trial does not match the current candidate selection revision")
     expected = list(selection.get("selected_items") or [])
     items = list(trial_run.get("items") or [])
     if trial_run.get("status") != "complete" or len(items) != len(expected) or not items or any(item.get("status") != "complete" for item in items):

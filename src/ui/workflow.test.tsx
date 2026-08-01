@@ -2,10 +2,11 @@ import React, { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { api } from "./api";
-import { readRoute } from "./App";
+import { readRoute, runIdForStage } from "./App";
 import { CompletedStage, FramesStage } from "./CardViews";
+import { FinishStage } from "./FinishLab";
 import { SourcesStage, StylesStage } from "./StyleLab";
-import type { Card, CardPreviewOption, Model, Recipe, Run, Source, Workspace } from "./types";
+import type { CandidateSelection, Card, CardPreviewOption, Model, Recipe, Run, Source, Workspace } from "./types";
 
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -64,6 +65,24 @@ function setText(element: HTMLInputElement | HTMLTextAreaElement, value: string)
 async function flush() { await act(async () => { await Promise.resolve(); await Promise.resolve(); }); }
 
 describe("guided six-stage graphics workflow", () => {
+  it("keeps Explore runs out of Finish and selects only the current Finish cohort", () => {
+    const explore = runFixture();
+    const finish = { ...runFixture(), run_id: "finish_1", purpose: "finish" as const, selection_id: "selection_1", selection_revision: 2 };
+    const selection = { selection_id: "selection_1", revision: 2 } as CandidateSelection;
+    expect(runIdForStage("finish", explore, [finish], selection)).toBe("finish_1");
+    expect(runIdForStage("finish", finish, [], selection)).toBe("finish_1");
+    expect(runIdForStage("styles", finish, [explore], selection)).toBe("run_1");
+  });
+
+  it("does not offer Finish locking for an Explore run", () => {
+    const selection: CandidateSelection = {
+      selection_id: "selection_1", revision: 1, created_at: "2026-01-01", updated_at: "2026-01-01", source_ids: [sourceOne.id],
+      selected_items: [{ order: 0, run_id: "run_1", item_id: "item_one_0", source_id: sourceOne.id, source_label: sourceOne.label, output_path: "runs/run_1/item.png", output_checksum_sha256: "checksum", output_url: "/asset/output.png", recipe_snapshot: recipe }],
+    };
+    mount(<FinishStage workspace={workspace} selection={selection} runs={[]} models={[liveModel]} initialRun={runFixture()} onRun={() => undefined} onRefresh={async () => undefined} onNavigate={() => undefined} onMessage={() => undefined} />);
+    expect(container.textContent).not.toContain("Lock this finish");
+  });
+
   it("keeps the new stage hashes refreshable and redirects legacy hashes", () => {
     window.location.hash = "#frames/card_7";
     expect(readRoute()).toEqual({ view: "frames", id: "card_7" });
