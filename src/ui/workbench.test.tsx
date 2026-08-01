@@ -31,10 +31,12 @@ describe("unified workbench", () => {
 
   it("shows final cards first and keeps provenance collapsed", async () => {
     const batch = { batch_id: "batch-1", purpose: "card-production" as const, status: "ready", created_at: "now", updated_at: "now", style_version_id: style.identity.style_version_id, style_checksum_sha256: "style-checksum", selected_source_ids: ["source-1"], requested_paid_calls: 1, paid_calls: 1, cost_usd: 0, progress: { selected_sources: 1, ready_cards: 1, approved_cards: 0, failed_sources: 0, paid_calls: 1, total_attempts: 1 }, items: [{ item_id: "item-1", source_id: "source-1", source_label: "Ada", attempt_number: 1, lineage_id: "lineage", status: "ready" as const, card_url: "/card.png", art_url: "/art.png", render_revision: 1, render_revisions: [], reference_stack: [] }] };
-    vi.spyOn(api, "bootstrap").mockResolvedValue({ ...base, batches: [batch] } as never);
-    vi.spyOn(api, "getProduction").mockResolvedValue({ batch } as never);
+    const trial = { ...batch, batch_id: "trial-1", purpose: "style-trial" as const, style_snapshot: style };
+    vi.spyOn(api, "bootstrap").mockResolvedValue({ ...base, batches: [trial, batch] } as never);
+    vi.spyOn(api, "getProduction").mockImplementation(async (batchId) => ({ batch: batchId === "trial-1" ? trial : batch }) as never);
     await act(async () => { window.location.hash = "#cards"; root.render(<App />); });
     expect(container.querySelector('img[alt="Ada finished card"]')).toBeTruthy();
+    expect(container.textContent).toContain("Live style trial");
     expect(container.textContent).toContain("How this was made");
     expect(document.querySelector("details")?.open).toBe(false);
     expect([...container.querySelectorAll("button")].some((button) => button.textContent?.includes("Approve card"))).toBe(true);
