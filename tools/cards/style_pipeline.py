@@ -14,6 +14,7 @@ from tools.portraits.workspace import WorkspaceError, WorkspaceStore, checksum, 
 STYLE_DEFINITION_PATH = Path(__file__).parent / "styles" / "amiga-ocs-portrait-v1.json"
 ASSET_ROOT = Path(__file__).parent / "assets" / "amiga-ocs-portrait-v1"
 STYLE_FAMILY_ID = "amiga-ocs-portrait"
+LEGACY_SIMULATION_MODEL_ID = "fake/painterly-deterministic"
 
 
 def _json_copy(value: Any) -> Any:
@@ -192,8 +193,24 @@ class StyleStore:
         index = self._index()
         active_id = index.get("active_version_id")
         if active_id and self._style_path(str(active_id)).is_file():
-            return self.get_version(str(active_id))
+            active = self.raw_version(str(active_id))
+            checked_in = load_checked_in_style()
+            if active["generation"].get("model_id") != LEGACY_SIMULATION_MODEL_ID:
+                return self.payload(active)
+            expected_checksum = style_checksum(checked_in)
+            matching_version = next((entry for entry in index.get("versions", []) if entry.get("checksum_sha256") == expected_checksum and str(entry.get("style_version_id")) != str(active_id)), None)
+            if matching_version:
+                index["active_version_id"] = str(matching_version["style_version_id"])
+                self._write_index(index)
+                return self.get_version(str(matching_version["style_version_id"]))
+            next_version = max([int(self.raw_version(str(entry["style_version_id"])).get("identity", {}).get("version", 0)) for entry in index.get("versions", [])] + [0]) + 1
+            checked_in["identity"] = {**checked_in["identity"], "state": "locked", "version": next_version, "style_version_id": f"style_{STYLE_FAMILY_ID.replace('-', '_')}_v{next_version}_{uuid.uuid4().hex[:10]}"}
+            checked_in["provenance"] = {"derived_from": active["identity"]["style_version_id"], "materialized_at": now_iso(), "source": "checked-in-migration"}
+            return self._materialize_locked(checked_in, index, activate=True)
         style = load_checked_in_style()
+        return self._materialize_locked(style, index, activate=True)
+
+    def _materialize_locked(self, style: dict[str, Any], index: dict[str, Any], *, activate: bool) -> dict[str, Any]:
         version_id = str(style["identity"]["style_version_id"])
         version_dir = self._style_path(version_id).parent
         version_dir.mkdir(parents=True, exist_ok=True)
@@ -207,10 +224,16 @@ class StyleStore:
             if checksum(destination) != asset["checksum_sha256"]:
                 raise WorkspaceError(f"checked-in asset checksum mismatch: {asset['asset_key']}")
             asset["relative_path"] = destination.relative_to(self.store.root).as_posix()
-        style["provenance"] = {**style.get("provenance", {}), "materialized_at": now_iso(), "source": "checked-in"}
+        style["provenance"] = {**style.get("provenance", {}), "materialized_at": now_iso(), "source": style.get("provenance", {}).get("source", "checked-in")}
         style["checksums"] = {"style_sha256": style_checksum(style), "assets": {asset["id"]: asset["checksum_sha256"] for asset in style["reference_pack"]["assets"]}}
         self.store.atomic_json(self._style_path(version_id), style)
-        index = {"version": 1, "active_version_id": version_id, "versions": [{"style_version_id": version_id, "checksum_sha256": style["checksums"]["style_sha256"], "created_at": now_iso()}], "draft": None}
+        versions = [entry for entry in index.get("versions", []) if entry.get("style_version_id") != version_id]
+        versions.append({"style_version_id": version_id, "checksum_sha256": style["checksums"]["style_sha256"], "created_at": now_iso()})
+        index["version"] = 1
+        index["versions"] = versions
+        index.setdefault("draft", None)
+        if activate:
+            index["active_version_id"] = version_id
         self._write_index(index)
         return self.get_version(version_id)
 

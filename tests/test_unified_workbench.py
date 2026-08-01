@@ -66,6 +66,22 @@ def test_style_schema_checksum_store_and_asset_snapshots(tmp_path: Path) -> None
     assert len(styles.versions()) == 2
 
 
+def test_legacy_simulation_style_is_migrated_to_current_locked_version(tmp_path: Path) -> None:
+    store = WorkspaceStore(tmp_path / "library")
+    styles = StyleStore(store)
+    original = styles.raw_version(styles.active_id())
+    original["generation"]["model_id"] = "fake/painterly-deterministic"
+    original["checksums"]["style_sha256"] = style_checksum(original)
+    store.atomic_json(styles._style_path(original["identity"]["style_version_id"]), original)
+
+    migrated = styles.active()
+
+    assert migrated["generation"]["model_id"] == load_checked_in_style()["generation"]["model_id"]
+    assert migrated["identity"]["style_version_id"] != original["identity"]["style_version_id"]
+    assert styles.raw_version(original["identity"]["style_version_id"])["generation"]["model_id"] == "fake/painterly-deterministic"
+    assert len(styles.versions()) == 2
+
+
 def test_amiga_registered_engine_is_deterministic_and_matches_golden() -> None:
     style = load_checked_in_style()
     with Image.open(ASSETS / "generation-reference-01.png") as master:
