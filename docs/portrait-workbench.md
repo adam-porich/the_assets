@@ -1,7 +1,7 @@
 # Source, pipeline, candidate, and collection workbench contract
 
-The supported product surfaces are `Sources`, `Pipelines`, `Candidates`, and
-`Collection`. The everyday loop keeps a source cohort stable, runs either real
+The supported product surfaces are `Sources`, `Pipeline`, `Candidates`, and
+`Collection`. The everyday loop keeps a source cohort stable, runs the universal
 pipeline, compares its candidates, and favorites useful cards into Collection.
 
 ## Style pipeline
@@ -11,8 +11,8 @@ for the live neutral portrait style version. It contains these sections:
 
 - `identity`: stable family ID, opaque version ID, numeric display version,
   label, and draft/locked state;
-- `generation`: model ID, execution mode, quality, structured direction, avoid
-  text, requested aspect policy, and reference limit;
+- `generation`: shared model settings plus one Normalise prompt and one Stylise
+  prompt, requested aspect policy, and reference limit;
 - `reference_pack`: ordered assets with the closed role set
   `generation-reference` and `target-example`;
 - `composition`: logical art size, normalized centering, and default framing;
@@ -23,12 +23,10 @@ for the live neutral portrait style version. It contains these sections:
 - `provenance` and `checksums`: source information and canonical style/asset
   checksums.
 
-The generation direction is deliberately structured: identity cues to retain,
-composition to normalize, expression/pose to discard, rendering language, and
-avoid instructions. It asks an img2img-capable model to redraw the source as
-an interpretive frontal, calm, head-and-shoulders portrait. It does not promise
-biometric identity preservation and does not ask the provider to produce pixel
-effects or card furniture.
+Stage one sends only the source and the Normalise prompt. Stage two sends the
+saved normalised image first, followed by style-only references and the Stylise
+prompt. The deterministic renderer then produces pixel effects and card
+assembly. Each card therefore requests two provider calls.
 
 Validation rejects invalid dimensions, out-of-range framing/centering, bad
 palette colors, duplicate IDs, unknown roles, missing generation references,
@@ -109,20 +107,18 @@ compatibility data and are not migrated into Collection.
 
 ## Pipelines
 
-The overview shows exactly two top-level live pipelines with result samples,
-generation references, target example, palette, driver output, and checksum:
-**Face-free Style Board** and **Portrait Style Reference**. The latter differs
-only by using the original portrait reference shared by historical Pipelines
-01/02. Saved revisions are collapsed inside their pipeline rather than shown as
-peer pipelines. A pipeline anatomy diagram exposes each stage from input
-identity to assembled card.
+The overview shows one top-level **Amiga Style Transfer** pipeline with result
+samples, its two prompts, generation reference, target example, palette, driver
+output, and checksum. Historical portrait-reference revisions remain readable
+for provenance but are no longer runnable. The diagram exposes both generation
+stages through assembled card.
 
 The calibration cohort is capped at three workspace sources and persists across
 trials. A trial is reviewable only when every cohort item reaches final-card
 `ready`. Trials remain in the pipeline editor and never appear as production
 candidates. Candidate packs keep the three newest cards for each source in view;
 each card retains its pipeline checksum and attempt number. The Generate tile
-offers either real pipeline for the source, and a compact hover above it exposes
+starts the universal pipeline, and a compact hover above it exposes
 the source identity without reducing the card tray width. An active production
 run appears as a card-shaped loading slot at the front of the relevant source
 pack instead of a global progress banner. Simulation trials
@@ -138,9 +134,9 @@ until its driver is registered and proven.
 
 ## Historical data
 
-The explicit `cleanup-workspace` migration removes simulation pipeline versions
-and their production assets after seeding the two real pipelines. Bootstrap
-does not perform broad deletion. Ready live production attempts are exposed in
+The explicit `cleanup-workspace` migration removes obsolete simulation output.
+The schema-v2 migration activates the universal pipeline while retaining locked
+legacy styles and their production assets for provenance. Ready live production attempts are exposed in
 a per-source pack when their source belongs to the current cohort. Older
 attempts remain durable but roll out of the visible pack; favorites remain
 visible in Collection regardless of the current source selection.

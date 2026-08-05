@@ -9,7 +9,7 @@ export type StyleAsset = { id: string; asset_key?: string; label: string; role: 
 export type PipelineStyle = {
   schema_version: number;
   identity: { family_id: string; pipeline_id?: string; style_version_id: string; version: number; state: "draft" | "locked"; label: string };
-  generation: { model_id: string; execution_mode: "simulation" | "live"; quality: "low" | "medium" | "high"; direction: Record<string, string>; avoid: string; requested_aspect_policy: string; reference_limit: number };
+  generation: { model_id: string; execution_mode: "simulation" | "live"; quality: "low" | "medium" | "high"; stages?: { normalise: { prompt: string }; stylise: { prompt: string } }; direction?: Record<string, string>; avoid?: string; requested_aspect_policy: string; reference_limit: number };
   reference_pack: { id: string; version: number; assets: StyleAsset[] };
   composition: { logical_art_size: [number, number]; default_framing: { zoom: number; offset_x: number; offset_y: number }; centering: [number, number]; requested_art_ratio: string };
   renderer: { driver_id: string; logical_art_size: [number, number]; output_scale: number; palette_space: string; palette: string[]; preprocess: Record<string, number>; dither: { matrix: string; strength: number; edge_threshold: number } };
@@ -36,7 +36,7 @@ export type Framing = { zoom: number; offset_x: number; offset_y: number };
 export type ProductionItem = {
   item_id: string; source_id: string; source_label: string; attempt_number: number; lineage_id: string; approved?: boolean; status: "queued" | "generating" | "processing" | "ready" | "failed" | "interrupted";
   error?: string | null; phase?: string; source_url?: string; master_url?: string; logical_art_url?: string; art_url?: string; card_url?: string; card_checksum_sha256?: string | null;
-  master_checksum_sha256?: string | null; render_revision: number; render_revisions: Array<Record<string, unknown>>; framing?: Framing | null; generation?: Record<string, unknown>; render_metadata?: Record<string, unknown>; usage?: Record<string, unknown>; cost_usd?: number | null;
+  normalised_url?: string; normalised_checksum_sha256?: string | null; master_checksum_sha256?: string | null; render_revision: number; render_revisions: Array<Record<string, unknown>>; framing?: Framing | null; generation?: Record<string, unknown>; generation_stages?: Array<Record<string, unknown>>; render_metadata?: Record<string, unknown>; usage?: Record<string, unknown>; cost_usd?: number | null;
   reference_stack: Array<Record<string, unknown>>; reference_urls?: Array<string | null>;
   favorite?: boolean; favorited_at?: string | null;
 };

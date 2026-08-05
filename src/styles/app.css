@@ -94,7 +94,7 @@ textarea { min-height: 100px; resize: vertical; line-height: 1.45; }
 .pipeline-samples span { margin-left: auto; align-self: end; color: #d8aa66; font-size: 20px; }
 .pipeline-diagram { padding: 20px; overflow: hidden; }
 .diagram-heading > span { color: #a99d90; font-size: 12px; }
-.diagram-track { display: grid; grid-template-columns: 120px 25px 120px minmax(75px, 1fr) 120px minmax(75px, 1fr) 120px minmax(75px, 1fr) 120px; align-items: center; min-width: 1080px; overflow-x: auto; gap: 7px; padding-bottom: 8px; }
+.diagram-track { display: grid; grid-template-columns: 120px minmax(75px, 1fr) 120px 25px 120px minmax(75px, 1fr) 120px minmax(75px, 1fr) 120px minmax(75px, 1fr) 120px; align-items: center; min-width: 1320px; overflow-x: auto; gap: 7px; padding-bottom: 8px; }
 .diagram-track figure { margin: 0; }
 .diagram-track figure > img, .diagram-empty { width: 120px; height: 120px; display: grid; place-items: center; object-fit: cover; background: #181412; border: 1px solid #544335; }
 .diagram-track .diagram-card > img, .diagram-track .diagram-card > .diagram-empty { height: 170px; object-fit: contain; background: #181412; }
@@ -181,8 +181,9 @@ summary { cursor: pointer; color: #cdb98e; }
 .pipeline-choice small { color: #a99a89; font-size: 9px; }
 .result-inspector { margin-top: 20px; padding: 20px; scroll-margin-top: 20px; }
 .result-inspector .panel-heading p:not(.eyebrow) { color: #a99c90; margin: 5px 0 0; }
-.asset-stages { display: grid; grid-template-columns: 1fr 35px 1fr 35px 1fr 35px .72fr; align-items: center; gap: 8px; padding: 18px; background: #181412; border: 1px solid #45372d; }
-.asset-stages figure { margin: 0; }
+.asset-stages { display: flex; align-items: center; gap: 8px; padding: 18px; background: #181412; border: 1px solid #45372d; }
+.asset-stages figure { flex: 1; min-width: 0; margin: 0; }
+.asset-stages figure.final-stage { flex: .72; }
 .asset-stages > span { color: #a37745; text-align: center; }
 .asset-stages img { display: block; width: 100%; aspect-ratio: 1; object-fit: cover; }
 .asset-stages .final-stage img { aspect-ratio: 420 / 600; object-fit: contain; }
@@ -220,7 +221,7 @@ summary { cursor: pointer; color: #cdb98e; }
   .pipeline-rail strong { font-size: 12px; }
   .reference-columns, .form-grid, .framing-controls { grid-template-columns: 1fr; }
   .search-row { flex-direction: column; }
-  .asset-stages { grid-template-columns: repeat(4, minmax(120px, 1fr)); overflow-x: auto; }
+  .asset-stages { display: grid; grid-template-columns: repeat(5, minmax(120px, 1fr)); overflow-x: auto; }
   .asset-stages > span { display: none; }
   .launcher-flow { grid-template-columns: 1fr auto 1.5fr; }
   .launcher-flow > div:last-child, .launcher-flow > i:last-of-type { display: none; }

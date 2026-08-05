@@ -74,6 +74,10 @@ def test_style_schema_checksum_store_and_asset_snapshots(tmp_path: Path) -> None
     store = WorkspaceStore(tmp_path / "library")
     styles = StyleStore(store)
     active = styles.active()
+    assert active["schema_version"] == 2
+    prompts = " ".join(stage["prompt"] for stage in active["generation"]["stages"].values()).lower()
+    assert "head-and-shoulders" not in prompts and "redraw the person" not in prompts
+    assert "subject category" in prompts and "sole source of content" in prompts
     assert active["identity"]["style_version_id"]
     assert active["identity"]["state"] == "locked"
     assert style_checksum(active) == active["checksums"]["style_sha256"]
@@ -91,8 +95,8 @@ def test_style_schema_checksum_store_and_asset_snapshots(tmp_path: Path) -> None
     assert all(asset["relative_path"].startswith(f"styles/versions/{locked['identity']['style_version_id']}/") for asset in locked["reference_pack"]["assets"])
     styles.activate(locked["identity"]["style_version_id"])
     assert styles.active()["identity"]["style_version_id"] == locked["identity"]["style_version_id"]
-    assert len(styles.versions()) == 3
-    assert {pipeline["pipeline_id"] for pipeline in styles.pipelines()} == {FACE_FREE_PIPELINE_ID, PORTRAIT_REFERENCE_PIPELINE_ID}
+    assert len(styles.versions()) == 2
+    assert {pipeline["pipeline_id"] for pipeline in styles.pipelines()} == {FACE_FREE_PIPELINE_ID}
     version = styles.versions()[-1]
     assert version["model_id"] == locked["generation"]["model_id"]
     assert version["execution_mode"] == "live"
@@ -113,21 +117,17 @@ def test_legacy_simulation_style_is_migrated_to_current_locked_version(tmp_path:
     assert migrated["generation"]["model_id"] == load_checked_in_style()["generation"]["model_id"]
     assert migrated["identity"]["style_version_id"] != original["identity"]["style_version_id"]
     assert styles.raw_version(original["identity"]["style_version_id"])["generation"]["model_id"] == "fake/painterly-deterministic"
-    assert len(styles.versions()) == 3
+    assert len(styles.versions()) == 2
 
 
-def test_two_real_pipelines_have_distinct_references_and_one_active_default(tmp_path: Path) -> None:
+def test_one_universal_pipeline_uses_the_subject_neutral_reference(tmp_path: Path) -> None:
     styles = StyleStore(WorkspaceStore(tmp_path / "library"))
     pipelines = styles.pipelines()
-    assert [pipeline["pipeline_id"] for pipeline in pipelines] == [FACE_FREE_PIPELINE_ID, PORTRAIT_REFERENCE_PIPELINE_ID]
-    assert [pipeline["active"] for pipeline in pipelines] == [True, False]
-    references = {
-        pipeline["pipeline_id"]: next(asset["checksum_sha256"] for asset in pipeline["style"]["reference_pack"]["assets"] if asset["role"] == "generation-reference")
-        for pipeline in pipelines
-    }
-    assert references == {FACE_FREE_PIPELINE_ID: FACE_FREE_REFERENCE_CHECKSUM, PORTRAIT_REFERENCE_PIPELINE_ID: PORTRAIT_REFERENCE_CHECKSUM}
-    styles.activate_pipeline(PORTRAIT_REFERENCE_PIPELINE_ID)
-    assert styles.active_pipeline_id() == PORTRAIT_REFERENCE_PIPELINE_ID
+    assert [pipeline["pipeline_id"] for pipeline in pipelines] == [FACE_FREE_PIPELINE_ID]
+    assert [pipeline["active"] for pipeline in pipelines] == [True]
+    reference = next(asset["checksum_sha256"] for asset in pipelines[0]["style"]["reference_pack"]["assets"] if asset["role"] == "generation-reference")
+    assert reference == FACE_FREE_REFERENCE_CHECKSUM
+    assert pipelines[0]["style"]["schema_version"] == 2
 
 
 def test_amiga_registered_engine_is_deterministic_and_matches_golden() -> None:
@@ -150,7 +150,7 @@ def test_amiga_registered_engine_is_deterministic_and_matches_golden() -> None:
 class ReferenceReturningAdapter(FakeGenerationAdapter):
     def generate(self, request):
         result = super().generate(request)
-        shutil.copy2(request.style_images[0], request.output_path)
+        shutil.copy2(request.style_images[0] if request.style_images else request.identity_image, request.output_path)
         return GenerationResult(**{**result.__dict__, "dimensions": [1254, 1254], "output_path": str(request.output_path)})
 
 
@@ -171,7 +171,7 @@ def test_production_is_one_integrated_operation_and_excludes_target(tmp_path: Pa
     assert result["status"] == "ready"
     assert manager.list()[0]["selected_source_ids"] == [first["id"], second["id"]]
     assert [item["status"] for item in result["items"]] == ["ready", "ready"]
-    assert result["requested_paid_calls"] == 2
+    assert result["requested_paid_calls"] == 4
     assert all(item["card_url"] and item["art_url"] for item in result["items"])
     assert all(reference["role"] != "target-example" for item in result["items"] for reference in item["reference_stack"])
     assert calls == [simulation_model()["id"]]
@@ -291,14 +291,17 @@ def test_live_provenance_and_consent_use_semantic_fake_without_provider_call(tmp
     batch = wait_for(manager, manager.create([first["id"]], style, [model], consent=True)["batch_id"])
     item = batch["items"][0]
     assert item["generation"]["execution_mode"] == "live"
-    assert item["generation_request"]["reference_order"][0]["role"] == "identity"
+    assert [stage["stage"] for stage in item["generation_stages"]] == ["normalise", "stylise"]
+    assert item["generation_stages"][0]["request"]["reference_order"][0]["role"] == "source"
+    assert item["generation_request"]["reference_order"][0]["role"] == "normalised"
     assert item["generation_request"]["reference_order"][1]["role"] == "generation-reference"
     assert item["generation_request"]["target_examples_excluded"] is True
     assert item["master_url"] and item["art_url"] and item["card_url"]
+    assert item["normalised_url"] and batch["paid_calls"] == 2
     assert batch["generation_authorization"]["consent"] is True
     candidate = _cards(manager)[0]
     assert candidate["pipeline_id"] == FACE_FREE_PIPELINE_ID
-    assert candidate["pipeline_label"] == "Face-free Style Board"
+    assert candidate["pipeline_label"] == "Amiga Style Transfer"
 
 
 def test_multiple_favorites_persist_and_follow_latest_render(tmp_path: Path) -> None:
@@ -351,6 +354,34 @@ class FailOnceSemanticAdapter(SemanticFakeGenerationAdapter):
             self.state["failed"] = True
             raise RuntimeError("semantic test provider failed once")
         return super().generate(request)
+
+
+class FailStyliseOnceAdapter(SemanticFakeGenerationAdapter):
+    def __init__(self, capabilities: AdapterCapabilities, state: dict[str, bool]) -> None:
+        super().__init__(capabilities)
+        self.state = state
+
+    def generate(self, request):
+        if request.style_images and not self.state["failed"]:
+            self.state["failed"] = True
+            raise RuntimeError("style stage failed once")
+        return super().generate(request)
+
+
+def test_retry_reuses_a_completed_normalised_stage(tmp_path: Path) -> None:
+    store = WorkspaceStore(tmp_path / "library")
+    styles = StyleStore(store)
+    item = source(store, "checkpoint")
+    state = {"failed": False}
+    manager = CardProductionManager(store, styles, lambda mode, capabilities: FailStyliseOnceAdapter(capabilities, state))
+    failed = wait_for(manager, manager.create([item["id"]], simulation_trial_style(styles), [simulation_model()], purpose="style-trial")["batch_id"])
+    assert failed["status"] == "failed" and failed["items"][0]["normalised_url"]
+    assert failed["paid_calls"] == 1
+    retried = wait_for(manager, manager.retry_failed(failed["batch_id"])["batch_id"])
+    latest = manager.latest_items(retried)[0]
+    assert retried["status"] == "ready" and retried["requested_paid_calls"] == 3
+    assert latest["generation_stages"][0]["result"]["reused"] is True
+    assert retried["paid_calls"] == 2
 
 
 def test_failed_retry_and_try_another_keep_attempt_provenance(tmp_path: Path) -> None:

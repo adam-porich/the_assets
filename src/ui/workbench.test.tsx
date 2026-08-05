@@ -105,15 +105,14 @@ describe("pipeline workbench", () => {
     expect(container.querySelector(".pending-card")).toBeFalsy();
   });
 
-  it("can run the non-active pipeline from Candidates", async () => {
+  it("runs the universal pipeline directly from Candidates", async () => {
     vi.spyOn(api, "bootstrap").mockResolvedValue(base as never);
     vi.spyOn(api, "createProduction").mockResolvedValue({ batch: { batch_id: "batch-2" } } as never);
     await act(async () => { window.location.hash = "#candidates"; root.render(<App />); });
     const open = [...container.querySelectorAll("button")].find((button) => button.textContent?.includes("Generate new"));
     await act(async () => open?.click());
-    const pipeline = [...container.querySelectorAll("button.pipeline-choice")].find((button) => button.textContent?.includes("Portrait Style Reference"));
-    await act(async () => pipeline?.dispatchEvent(new MouseEvent("click", { bubbles: true })));
-    expect(api.createProduction).toHaveBeenCalledWith(["source-1"], "portrait-style-reference", true);
+    expect(container.querySelector("button.pipeline-choice")).toBeFalsy();
+    expect(api.createProduction).toHaveBeenCalledWith(["source-1"], "face-free-style-board", true);
   });
 
   it("favorites candidates and renders saved cards in Collection", async () => {
@@ -133,19 +132,28 @@ describe("pipeline workbench", () => {
     vi.spyOn(api, "bootstrap").mockResolvedValue({ ...base, cards: [produced()] } as never);
     await act(async () => { window.location.hash = "#candidates/batch-1/item-1"; root.render(<App />); });
     expect(container.textContent).toContain("Candidate details");
-    expect(container.textContent).toContain("Generated master");
+    expect(container.textContent).toContain("Styled master");
     expect(container.textContent).toContain("Rendered art");
     expect(container.textContent).toContain("Save framing · no generation");
     expect(container.textContent).toContain("Save to Collection");
   });
 
+  it("shows the normalised intermediate for two-stage candidates", async () => {
+    vi.spyOn(api, "bootstrap").mockResolvedValue({ ...base, cards: [produced({ normalised_url: "/normalised.png", generation_stages: [{ stage: "normalise" }, { stage: "stylise" }] })] } as never);
+    await act(async () => { window.location.hash = "#candidates/batch-1/item-1"; root.render(<App />); });
+    expect(container.querySelector('img[alt="Normalised source"]')?.getAttribute("src")).toBe("/normalised.png");
+  });
+
   it("exposes editing on the selected real pipeline", async () => {
-    const draft = { ...style, identity: { ...style.identity, state: "draft" as const, style_version_id: "draft-style" }, provenance: { derived_from: style.identity.style_version_id } };
+    const draft = { ...style, schema_version: 2, identity: { ...style.identity, state: "draft" as const, style_version_id: "draft-style" }, generation: { ...style.generation, stages: { normalise: { prompt: "Preserve the source content." }, stylise: { prompt: "Apply only the visual language." } } }, provenance: { derived_from: style.identity.style_version_id } };
     vi.spyOn(api, "bootstrap").mockResolvedValue({ ...base, style: { ...base.style, draft } } as never);
     vi.spyOn(api, "updateDraft").mockResolvedValue({ style: draft } as never);
     window.location.hash = "#pipelines/face-free-style-board";
     await act(async () => root.render(<App />));
     expect(container.textContent).toContain("Generation model");
+    expect(container.textContent).toContain("Normalise prompt");
+    expect(container.textContent).toContain("Stylise prompt");
+    expect(container.textContent).not.toContain("identity to retain");
     expect(container.textContent).toContain("Amiga renderer and card assembly");
     expect(container.textContent).toContain("1 saved revision");
   });

@@ -1,25 +1,25 @@
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "identity": {
     "family_id": "amiga-ocs-portrait",
     "pipeline_id": "face-free-style-board",
     "style_version_id": "style_amiga_ocs_portrait_v3",
     "version": 3,
     "state": "locked",
-    "label": "Face-free Style Board"
+    "label": "Amiga Style Transfer"
   },
   "generation": {
     "model_id": "openai/gpt-image-1-mini",
     "execution_mode": "live",
     "quality": "medium",
-    "direction": {
-      "reference_roles": "IMPORTANT INPUT ROLES: input image 1 is the identity source and is the only source for the person's face, age, skin tone, hair, gender presentation, and identifying features. Input image 2 is a STYLE-ONLY reference for broad matte planes, palette, edges, and background treatment. Do not copy, merge, or borrow the reference subject's face, hair, age, gender, clothing, or identity. The result must depict the person in input image 1, not the person in input image 2.",
-      "identity_to_retain": "Redraw the person in input image 1 as an interpretive portrait while retaining that person's recognizable facial geometry, apparent age, hair silhouette, skin tone, gender presentation, and genuinely identifying features. Exact biometric likeness is not promised, but replacing the source person with the style reference person is a failure.",
-      "composition_to_normalize": "Ignore the source composition and the style reference composition. Create a centered frontal head-and-shoulders bust with level shoulders, direct gaze, eyes near 42 percent from the top, restrained neutral clothing, a quiet abstract background, and a consistent 28:23 safe crop.",
-      "expression_pose_to_discard": "Discard the source pose, head angle, facial emotion, gesture, props, scene, camera perspective, and photographic mood. Use a calm affect, closed or gently resting mouth, and even studio-like lighting.",
-      "rendering_language": "Make a pre-quantisation master with broad connected matte tonal planes, deliberate edges, no more than five visible value steps per material, restrained texture, and muted charcoal, umber, rust, ochre, parchment, moss, and slate blue accents."
+    "stages": {
+      "normalise": {
+        "prompt": "Create a clean neutral working image of the same primary subject as input image 1. Preserve the subject category and count, distinctive silhouette, proportions, materials, markings, colours, orientation, viewpoint, and, when the subject is a person, recognizable identity. Center and scale the subject within a safe 28:23 crop while simplifying only the background, lighting, and photographic noise. Do not add or remove people, faces, limbs, objects, text, symbols, clothing, props, or narrative details."
+      },
+      "stylise": {
+        "prompt": "Input image 1 is the sole source of content and structure. Use the following reference images only for palette, tonal planes, edges, and texture. Redraw the same subject while preserving its category, count, silhouette, proportions, viewpoint, material distinctions, markings, colours, and human identity where applicable. Never copy a subject from a reference or invent a person, face, object, text, or narrative element. Create a pre-quantisation master with broad connected matte tonal planes, deliberate edges, no more than five visible value steps per material, restrained texture, and muted charcoal, umber, rust, ochre, parchment, moss, and slate blue accents. Do not add visible pixels, dithering, scanlines, borders, card frames, or UI."
+      }
     },
-    "avoid": "Copying or resembling the style reference person's face, hair, age, gender, clothing, or identity; blending the two people; enhancing, filtering, tracing, or preserving the source photograph; strong expression, tilted or dramatic pose, gesture, props, scenery, action, dramatic lighting, wide-angle distortion, photographic texture, visible pixels, pixel grids, dithering, checker patterns, scanlines, CRT effects, text, borders, card frames, UI, and invented narrative elements.",
     "requested_aspect_policy": "28:23",
     "reference_limit": 9
   },
@@ -70,16 +70,16 @@
     "logical_card_size": [210, 300],
     "output_scale": 2,
     "layout": {"art_box": [18, 36, 192, 180], "title_box": [16, 191, 194, 213], "details_box": [16, 221, 194, 274]},
-    "text": {"title": "Portrait Workbench", "subtitle": "Amiga OCS / 32 colours", "version": "Neutral style v3", "identity": "Interpretive redraw"}
+    "text": {"title": "Asset Workbench", "subtitle": "Amiga OCS / 32 colours", "version": "Two-stage style v1", "identity": "Content-preserving redraw"}
   },
   "editor_descriptors": [
-    {"id": "generation.direction", "label": "Direction", "type": "text", "group": "Generation"},
-    {"id": "generation.avoid", "label": "Avoid", "type": "text", "group": "Generation"},
+    {"id": "generation.stages.normalise.prompt", "label": "Normalise prompt", "type": "text", "group": "Generation"},
+    {"id": "generation.stages.stylise.prompt", "label": "Stylise prompt", "type": "text", "group": "Generation"},
     {"id": "renderer.preprocess.color", "label": "Colour", "type": "range", "min": 0.0, "max": 2.0, "step": 0.01, "group": "Amiga processing"},
     {"id": "renderer.dither.strength", "label": "Dither strength", "type": "range", "min": 0.0, "max": 1.0, "step": 0.01, "group": "Amiga processing"},
     {"id": "renderer.dither.edge_threshold", "label": "Edge threshold", "type": "range", "min": 0.0, "max": 1.0, "step": 0.01, "group": "Amiga processing"},
     {"id": "composition.centering", "label": "Default centering", "type": "number", "group": "Amiga processing"}
   ],
-  "provenance": {"source": "checked-in", "pack_path": "tools/cards/assets/amiga-ocs-portrait-v1/pack.json", "contract": "neutral-portrait-img2img-v2"},
+  "provenance": {"source": "checked-in", "pack_path": "tools/cards/assets/amiga-ocs-portrait-v1/pack.json", "contract": "universal-two-stage-img2img-v1"},
   "checksums": {}
 }

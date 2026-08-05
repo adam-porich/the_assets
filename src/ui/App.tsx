@@ -39,10 +39,10 @@ export function App() {
   const pipelineCount = bootstrap.style.pipelines.length;
   const activePipeline = bootstrap.style.pipelines.find((pipeline) => pipeline.active);
   return <main className="app-shell">
-    <header className="app-header"><a className="brand-block" href="#sources"><span className="brand-symbol">✳</span><span><small>Experimental asset studio</small><strong>Portrait Workbench</strong></span></a><nav aria-label="Primary"><button className={route.view === "sources" ? "active" : ""} onClick={() => navigate("#sources")}>Sources</button><button className={route.view === "pipelines" ? "active" : ""} onClick={() => navigate("#pipelines")}>Pipelines</button><button className={route.view === "candidates" ? "active" : ""} onClick={() => navigate("#candidates")}>Candidates</button><button className={route.view === "collection" ? "active" : ""} onClick={() => navigate("#collection")}>Collection</button></nav></header>
+    <header className="app-header"><a className="brand-block" href="#sources"><span className="brand-symbol">✳</span><span><small>Experimental asset studio</small><strong>Asset Workbench</strong></span></a><nav aria-label="Primary"><button className={route.view === "sources" ? "active" : ""} onClick={() => navigate("#sources")}>Sources</button><button className={route.view === "pipelines" ? "active" : ""} onClick={() => navigate("#pipelines")}>Pipeline</button><button className={route.view === "candidates" ? "active" : ""} onClick={() => navigate("#candidates")}>Candidates</button><button className={route.view === "collection" ? "active" : ""} onClick={() => navigate("#collection")}>Collection</button></nav></header>
     <nav className="pipeline-rail" aria-label="Asset pipeline">
       <button className={route.view === "sources" ? "active" : ""} onClick={() => navigate("#sources")}><small>01 · inputs</small><strong>{bootstrap.sources.length} Sources</strong><span>{bootstrap.selected_source_ids.length} in the current set</span></button><i aria-hidden="true">→</i>
-      <button className={route.view === "pipelines" ? "active" : ""} onClick={() => navigate("#pipelines")}><small>02 · transform</small><strong>{pipelineCount} Pipelines</strong><span>{activePipeline?.label}</span></button><i aria-hidden="true">→</i>
+      <button className={route.view === "pipelines" ? "active" : ""} onClick={() => navigate("#pipelines")}><small>02 · transform</small><strong>Pipeline</strong><span>{activePipeline?.label}</span></button><i aria-hidden="true">→</i>
       <button className={route.view === "candidates" ? "active" : ""} onClick={() => navigate("#candidates")}><small>03 · generate</small><strong>{bootstrap.cards.length} Candidates</strong><span>open the next card</span></button><i aria-hidden="true">→</i>
       <button className={route.view === "collection" ? "active" : ""} onClick={() => navigate("#collection")}><small>04 · keep</small><strong>{bootstrap.favorites.length} Saved</strong><span>your favorite cards</span></button>
     </nav>
@@ -51,6 +51,6 @@ export function App() {
     {route.view === "pipelines" && <PipelinesView {...shared} pipelineId={route.id} />}
     {route.view === "candidates" && <CandidatesView {...shared} batchId={route.id} cardId={route.itemId} />}
     {route.view === "collection" && <CollectionView {...shared} />}
-    <footer className="app-footer"><span>{bootstrap.sources.length} sources</span><span>→</span><span>{pipelineCount} pipelines</span><span>→</span><span>{bootstrap.cards.length} candidates</span><span>→</span><span>{bootstrap.favorites.length} saved</span></footer>
+    <footer className="app-footer"><span>{bootstrap.sources.length} sources</span><span>→</span><span>{pipelineCount} pipeline</span><span>→</span><span>{bootstrap.cards.length} candidates</span><span>→</span><span>{bootstrap.favorites.length} saved</span></footer>
   </main>;
 }
