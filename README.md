@@ -47,13 +47,16 @@ cohort before it is saved.
 
 ### Candidates
 
-Candidates are shown as a source-by-pipeline matrix. Rows keep identity
-constant; columns make the producing pipeline explicit. Every ready production
-attempt is retained. Draft calibration trials stay in the pipeline editor and
-simulation output is not presented as a candidate. Open a candidate to inspect
-its source, generated master, rendered art, final card, and provenance.
-**Generate again** adds an attempt immediately; framing changes rerender the
-existing master without another model call.
+Each source has a card pack showing its three newest production candidates.
+The Generate tile opens the two real pipeline choices and creates the next card
+for that source; when it is ready, it enters the pack and the oldest visible
+card rolls out. Older ready attempts remain retained, while draft calibration
+trials stay in the pipeline editor and simulation output is not presented as a
+candidate. Source identity and pack counts are available from the compact
+Source hover above Generate, leaving the tray width for larger cards. Open a
+candidate to inspect its source, generated master, rendered art, final card, and
+provenance. **Generate again** adds an attempt immediately; framing changes
+rerender the existing master without another model call.
 
 ### Collection
 

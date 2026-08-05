@@ -56,13 +56,20 @@ describe("pipeline workbench", () => {
     expect(api.createProduction).toHaveBeenCalledWith(["source-1"], "face-free-style-board", true);
   });
 
-  it("groups candidates by real pipeline without strategy or baseline language", async () => {
+  it("keeps only the newest three mixed-pipeline cards in each source pack", async () => {
     const other = produced({ item_id: "item-2", batch_id: "batch-2", pipeline_id: "portrait-style-reference", pipeline_label: "Portrait Style Reference", pipeline_description: "Uses the original portrait reference.", style_version_id: "style-portrait", style_checksum_sha256: "portrait-checksum", pipeline_version: 1, card_url: "/portrait-card.png" });
-    vi.spyOn(api, "bootstrap").mockResolvedValue({ ...base, cards: [produced(), other] } as never);
+    const third = produced({ item_id: "item-3", batch_id: "batch-3", card_url: "/third-card.png" });
+    const old = produced({ item_id: "item-old", batch_id: "batch-old", card_url: "/old-card.png" });
+    vi.spyOn(api, "bootstrap").mockResolvedValue({ ...base, cards: [produced(), other, third, old] } as never);
     await act(async () => { window.location.hash = "#candidates"; root.render(<App />); });
-    expect(container.textContent).toContain("Generate, compare, and keep the good ones");
+    expect(container.textContent).toContain("Next. Next. Ooh, a good one.");
     expect(container.querySelector('img[alt="Ada Face-free Style Board candidate 1"]')).toBeTruthy();
-    expect(container.querySelector('img[alt="Ada Portrait Style Reference candidate 1"]')).toBeTruthy();
+    expect(container.querySelector('img[alt="Ada Portrait Style Reference candidate 2"]')).toBeTruthy();
+    expect(container.querySelectorAll(".candidate-pack .generation-card")).toHaveLength(3);
+    expect(container.querySelector('img[src="/old-card.png"]')).toBeFalsy();
+    expect(container.querySelector(".pack-source")).toBeFalsy();
+    expect(container.querySelector('.source-peek[aria-label^="Source: Ada"]')).toBeTruthy();
+    expect(container.textContent).toContain("1 older stored");
     expect(container.textContent?.toLowerCase()).not.toContain("baseline");
     expect(container.textContent?.toLowerCase()).not.toContain("strategy");
   });
@@ -71,10 +78,10 @@ describe("pipeline workbench", () => {
     vi.spyOn(api, "bootstrap").mockResolvedValue(base as never);
     vi.spyOn(api, "createProduction").mockResolvedValue({ batch: { batch_id: "batch-2" } } as never);
     await act(async () => { window.location.hash = "#candidates"; root.render(<App />); });
-    const select = container.querySelector('select[aria-label="Pipeline to run"]') as HTMLSelectElement;
-    await act(async () => { select.value = "portrait-style-reference"; select.dispatchEvent(new Event("change", { bubbles: true })); });
-    const run = [...container.querySelectorAll("button")].find((button) => button.textContent?.includes("Generate 1 candidate"));
-    await act(async () => run?.click());
+    const open = [...container.querySelectorAll("button")].find((button) => button.textContent?.includes("Generate new"));
+    await act(async () => open?.click());
+    const pipeline = [...container.querySelectorAll("button.pipeline-choice")].find((button) => button.textContent?.includes("Portrait Style Reference"));
+    await act(async () => pipeline?.dispatchEvent(new MouseEvent("click", { bubbles: true })));
     expect(api.createProduction).toHaveBeenCalledWith(["source-1"], "portrait-style-reference", true);
   });
 

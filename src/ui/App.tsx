@@ -43,7 +43,7 @@ export function App() {
     <nav className="pipeline-rail" aria-label="Asset pipeline">
       <button className={route.view === "sources" ? "active" : ""} onClick={() => navigate("#sources")}><small>01 · inputs</small><strong>{bootstrap.sources.length} Sources</strong><span>{bootstrap.selected_source_ids.length} in the current set</span></button><i aria-hidden="true">→</i>
       <button className={route.view === "pipelines" ? "active" : ""} onClick={() => navigate("#pipelines")}><small>02 · transform</small><strong>{pipelineCount} Pipelines</strong><span>{activePipeline?.label}</span></button><i aria-hidden="true">→</i>
-      <button className={route.view === "candidates" ? "active" : ""} onClick={() => navigate("#candidates")}><small>03 · generate</small><strong>{bootstrap.cards.length} Candidates</strong><span>compare pipeline results</span></button><i aria-hidden="true">→</i>
+      <button className={route.view === "candidates" ? "active" : ""} onClick={() => navigate("#candidates")}><small>03 · generate</small><strong>{bootstrap.cards.length} Candidates</strong><span>open the next card</span></button><i aria-hidden="true">→</i>
       <button className={route.view === "collection" ? "active" : ""} onClick={() => navigate("#collection")}><small>04 · keep</small><strong>{bootstrap.favorites.length} Saved</strong><span>your favorite cards</span></button>
     </nav>
     {message && <div className={`global-message ${message.kind}`} role={message.kind === "error" ? "alert" : "status"}>{message.text}<button aria-label="Dismiss message" onClick={() => setMessage(undefined)}>×</button></div>}

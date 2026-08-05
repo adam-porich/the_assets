@@ -120,8 +120,10 @@ identity to assembled card.
 The calibration cohort is capped at three workspace sources and persists across
 trials. A trial is reviewable only when every cohort item reaches final-card
 `ready`. Trials remain in the pipeline editor and never appear as production
-candidates. The Candidates matrix uses one column per real pipeline; pipeline
-checksums and attempt numbers remain on each candidate. Simulation trials
+candidates. Candidate packs keep the three newest cards for each source in view;
+each card retains its pipeline checksum and attempt number. The Generate tile
+offers either real pipeline for the source, and a compact hover above it exposes
+the source identity without reducing the card tray width. Simulation trials
 validate mechanics but cannot activate a production pipeline. Live activation rechecks
 that the draft checksum and referenced asset checksums still match the trial,
 then locks a new immutable version and moves the active pointer. It never
@@ -137,6 +139,6 @@ until its driver is registered and proven.
 The explicit `cleanup-workspace` migration removes simulation pipeline versions
 and their production assets after seeding the two real pipelines. Bootstrap
 does not perform broad deletion. Ready live production attempts are exposed in
-the source-by-pipeline candidate comparison when their source belongs to the
-current cohort; favorites remain visible in Collection regardless of the
-current source selection.
+a per-source pack when their source belongs to the current cohort. Older
+attempts remain durable but roll out of the visible pack; favorites remain
+visible in Collection regardless of the current source selection.
