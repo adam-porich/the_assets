@@ -55,8 +55,10 @@ trials stay in the pipeline editor and simulation output is not presented as a
 candidate. Source identity and pack counts are available from the compact
 Source hover above Generate, leaving the tray width for larger cards. Open a
 candidate to inspect its source, generated master, rendered art, final card, and
-provenance. **Generate again** adds an attempt immediately; framing changes
-rerender the existing master without another model call.
+provenance. While generation runs, a card-shaped loading slot holds the incoming
+card's place at the front of its source pack. **Generate again** adds an attempt
+immediately; framing changes rerender the existing master without another model
+call.
 
 ### Collection
 

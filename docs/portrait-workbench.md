@@ -123,7 +123,9 @@ trials. A trial is reviewable only when every cohort item reaches final-card
 candidates. Candidate packs keep the three newest cards for each source in view;
 each card retains its pipeline checksum and attempt number. The Generate tile
 offers either real pipeline for the source, and a compact hover above it exposes
-the source identity without reducing the card tray width. Simulation trials
+the source identity without reducing the card tray width. An active production
+run appears as a card-shaped loading slot at the front of the relevant source
+pack instead of a global progress banner. Simulation trials
 validate mechanics but cannot activate a production pipeline. Live activation rechecks
 that the draft checksum and referenced asset checksums still match the trial,
 then locks a new immutable version and moves the active pointer. It never

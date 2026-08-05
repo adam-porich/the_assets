@@ -140,16 +140,14 @@ summary { cursor: pointer; color: #cdb98e; }
 .trial-result img { width: 120px; image-rendering: pixelated; }
 
 /* Candidate packs */
-.running-banner { display: flex; align-items: center; gap: 13px; padding: 13px 16px; margin-bottom: 15px; color: #e2d4c2; }
-.run-cost { color: #9d9084; white-space: nowrap; }
-.running-banner div { display: grid; gap: 2px; }
-.running-banner small { color: #a99c90; }
 .candidate-packs { display: grid; gap: 18px; }
 .candidate-pack { display: grid; grid-template-columns: minmax(0, 1fr) 190px; min-height: 505px; overflow: hidden; }
 .pack-cards { display: flex; gap: 14px; min-width: 0; overflow-x: auto; padding: 14px; background: #191512; scrollbar-color: #765a3b #211b17; }
 .generation-card { position: relative; flex: 0 0 clamp(270px, 28vw, 300px); min-width: 0; padding: 0; align-self: start; text-align: left; color: #d8cdbf; border: 1px solid #493a2f; background: #15110f; }
-.generation-card:hover, .generation-card.selected { border-color: #bc7b35; background: #2b211a; }
+.generation-card:not(.pending-card):hover, .generation-card.selected { border-color: #bc7b35; background: #2b211a; }
 .generation-card.selected { box-shadow: 0 0 0 2px #bc7b35; }
+.pending-card { display: grid; place-items: center; aspect-ratio: 420 / 600; border-style: dashed; border-color: #76552f; background: radial-gradient(circle at center, #30241c 0, #1a1512 58%); }
+.pending-card .spinner { width: 42px; height: 42px; border-width: 3px; }
 .candidate-open { display: block; width: 100%; padding: 0; border: 0; background: transparent; color: inherit; text-align: left; }
 .generation-card img { display: block; width: 100%; aspect-ratio: 420 / 600; object-fit: contain; background: #100d0b; image-rendering: pixelated; }
 .candidate-open > span { display: grid; gap: 3px; padding: 10px; }

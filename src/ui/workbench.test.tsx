@@ -74,6 +74,14 @@ describe("pipeline workbench", () => {
     expect(container.textContent?.toLowerCase()).not.toContain("strategy");
   });
 
+  it("shows an incoming card in its source pack while generation is active", async () => {
+    const activeBatch = { batch_id: "batch-active", purpose: "card-production", status: "running", created_at: "2026-08-04T00:00:00Z", updated_at: "2026-08-04T00:00:01Z", style_version_id: style.identity.style_version_id, style_checksum_sha256: style.checksums.style_sha256, selected_source_ids: ["source-1"], requested_paid_calls: 1, paid_calls: 1, progress: { selected_sources: 1, ready_cards: 0, approved_cards: 0, failed_sources: 0, paid_calls: 1, total_attempts: 1 } };
+    vi.spyOn(api, "bootstrap").mockResolvedValue({ ...base, batches: [activeBatch], cards: [produced()] } as never);
+    await act(async () => { window.location.hash = "#candidates"; root.render(<App />); });
+    expect(container.querySelector('.pending-card[role="status"][aria-label="Generating a new card for Ada"] .spinner')).toBeTruthy();
+    expect(container.textContent).not.toContain("Producing new generations");
+  });
+
   it("can run the non-active pipeline from Candidates", async () => {
     vi.spyOn(api, "bootstrap").mockResolvedValue(base as never);
     vi.spyOn(api, "createProduction").mockResolvedValue({ batch: { batch_id: "batch-2" } } as never);
