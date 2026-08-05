@@ -311,7 +311,7 @@ class CardProductionManager:
         for path in (self.store.root / "production").glob("*/batch.json"):
             record = self.store.read_json(path, {})
             if isinstance(record, dict):
-                item = {key: record.get(key) for key in ("batch_id", "purpose", "status", "style_version_id", "style_checksum_sha256", "created_at", "updated_at", "cost_usd", "paid_calls", "requested_paid_calls")}
+                item = {key: record.get(key) for key in ("batch_id", "purpose", "status", "style_version_id", "style_checksum_sha256", "selected_source_ids", "created_at", "updated_at", "cost_usd", "paid_calls", "requested_paid_calls")}
                 item["progress"] = self.progress(record); records.append(item)
         return sorted(records, key=lambda item: str(item.get("created_at") or ""), reverse=True)
 

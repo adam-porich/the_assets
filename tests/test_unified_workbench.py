@@ -169,6 +169,7 @@ def test_production_is_one_integrated_operation_and_excludes_target(tmp_path: Pa
     batch = manager.create([first["id"], second["id"]], style, [simulation_model()], purpose="style-trial")
     result = wait_for(manager, batch["batch_id"])
     assert result["status"] == "ready"
+    assert manager.list()[0]["selected_source_ids"] == [first["id"], second["id"]]
     assert [item["status"] for item in result["items"]] == ["ready", "ready"]
     assert result["requested_paid_calls"] == 2
     assert all(item["card_url"] and item["art_url"] for item in result["items"])
