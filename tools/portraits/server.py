@@ -115,7 +115,7 @@ def _cards(manager: CardProductionManager) -> list[dict[str, Any]]:
             continue
         pipeline_id = pipeline_id_for_style(detail.get("style_snapshot", {}))
         for item in detail.get("items", []):
-            if item.get("status") == "ready":
+            if item.get("status") == "ready" and (item.get("accepted") or not detail.get("requires_acceptance")):
                 identity = detail.get("style_snapshot", {}).get("identity", {})
                 cards.append({
                     **item,
@@ -253,7 +253,7 @@ class WorkbenchHandler(BaseHTTPRequestHandler):
             if path == "/api/production":
                 if self.normaliser.is_active: raise ValueError("one image generation is already active; wait for it to finish")
                 payload = self._json(); pipeline_id = str(payload.get("pipeline_id") or self.styles.active_pipeline_id()); style = self.styles.raw_pipeline(pipeline_id)
-                batch = self.manager.create([str(item) for item in payload.get("source_ids") or []], style, _models_for_store(self.store, self.styles), purpose="card-production", consent=bool(payload.get("consent")))
+                batch = self.manager.create([str(item) for item in payload.get("source_ids") or []], style, _models_for_store(self.store, self.styles), purpose="card-production", consent=bool(payload.get("consent")), prompt_override=str(payload.get("prompt_override") or "") or None)
                 self.send_json({"batch": batch}, HTTPStatus.ACCEPTED); return
             if path == "/api/styles/draft":
                 payload = self._json(); self.send_json({"style": self.styles.create_or_resume_draft(str(payload.get("pipeline_id") or self.styles.active_pipeline_id()))}); return
@@ -262,12 +262,13 @@ class WorkbenchHandler(BaseHTTPRequestHandler):
                 self.send_json({"style": self.styles.add_draft_reference(filename.rsplit(".", 1)[0], filename, content, content_type)}); return
             if path == "/api/styles/draft/lock":
                 self.send_json({"style": self.styles.lock_draft()}); return
-            match = re.fullmatch(r"/api/production/([^/]+)/(retry|try-another|render|approve|bundle)", path)
+            match = re.fullmatch(r"/api/production/([^/]+)/(retry|try-another|render|approve|bundle|accept)", path)
             if match:
                 batch_id, action = match.groups(); payload = self._json()
                 if action == "retry": result = {"batch": self.manager.retry_failed(batch_id, consent=bool(payload.get("consent")))}
                 elif action == "try-another": result = {"batch": self.manager.try_another(batch_id, str(payload.get("source_id") or ""), consent=bool(payload.get("consent")))}
                 elif action == "render": result = {"batch": self.manager.rerender(batch_id, str(payload.get("item_id") or ""), dict(payload.get("framing") or {}))}
+                elif action == "accept": result = {"batch": self.manager.accept_candidate(batch_id, str(payload.get("item_id") or ""))}
                 elif action == "approve": result = {"approval": self.manager.approve(batch_id, str(payload.get("item_id") or ""))}
                 else: result = self.manager.bundle(batch_id)
                 self.send_json(result); return

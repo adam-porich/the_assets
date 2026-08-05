@@ -81,6 +81,13 @@ textarea { min-height: 100px; resize: vertical; line-height: 1.45; }
 .dialog-controls > label { display: grid; gap: 7px; color: #c8baaa; font-size: 13px; }
 .dialog-controls > div { display: flex; align-items: center; justify-content: flex-end; gap: 10px; }
 .dialog-controls small { margin-right: auto; color: #9d9185; }
+.candidate-preview { display: grid; grid-template-columns: 1fr 28px 1fr 28px minmax(180px, .72fr); align-items: center; gap: 10px; }
+.candidate-preview figure { min-width: 0; margin: 0; }
+.candidate-preview img, .candidate-preview .preview-placeholder { display: grid; width: 100%; aspect-ratio: 1; place-items: center; object-fit: contain; background: #15110f; border: 1px solid #4b3c31; }
+.candidate-preview .candidate-preview-card img, .candidate-preview .candidate-preview-card .preview-placeholder { aspect-ratio: 420 / 600; }
+.candidate-preview > span { color: #b67b3b; text-align: center; }
+.candidate-dialog-actions { display: flex; align-items: center; justify-content: flex-end; gap: 10px; margin-top: 16px; }
+.candidate-dialog-actions small { margin-right: auto; color: #9d9185; }
 .pipeline-launcher { margin-top: 30px; padding: 20px; display: grid; grid-template-columns: minmax(0, 2fr) minmax(260px, 1fr); gap: 24px; align-items: center; }
 .launcher-flow { display: grid; grid-template-columns: 1fr auto minmax(220px, 1.6fr) auto 1fr; gap: 13px; align-items: center; }
 .launcher-flow > i { color: #9a7041; font-style: normal; }
@@ -235,6 +242,9 @@ summary { cursor: pointer; color: #cdb98e; }
   .normalisation-preview > span { transform: rotate(90deg); }
   .dialog-controls { grid-template-columns: 1fr; }
   .dialog-controls > div { align-items: stretch; flex-direction: column; }
+  .candidate-preview { grid-template-columns: 1fr; }
+  .candidate-preview > span { transform: rotate(90deg); }
+  .candidate-dialog-actions { align-items: stretch; flex-direction: column; }
   .search-row { flex-direction: column; }
   .asset-stages { display: grid; grid-template-columns: repeat(5, minmax(120px, 1fr)); overflow-x: auto; }
   .asset-stages > span { display: none; }

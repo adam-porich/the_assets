@@ -37,9 +37,11 @@ to three accepted Inputs and cost one provider call per Input.
 
 ### Candidates
 
-Each Input has a pack showing its three newest cards. `Generate new` asks for a
-pipeline and makes one style-generation call. A loading card holds the incoming
-result's place; older candidates remain stored when they scroll out. Open a
+Each Input has a pack showing its three newest accepted cards. `Generate new`
+opens a preparation dialog where you choose the pipeline, adjust its prompt,
+generate a preview, and rerun until the result is worth accepting. Only `OK ·
+Add to pack` promotes that preview into the pack. Older accepted candidates
+remain stored when they scroll out. Open a
 candidate to inspect the Input, styled master, rendered art, final card, and
 provenance. Framing changes do not call the image model.
 
@@ -72,7 +74,8 @@ portrait-library/favorites.json
 ```
 
 Only one image-generation operation runs at a time. Live normalization,
-production, trials, retries, and `Generate another` require explicit consent.
+candidate previews, trials, retries, and `Generate another` require explicit
+consent.
 
 ## Verification
 

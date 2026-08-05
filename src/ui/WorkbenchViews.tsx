@@ -179,27 +179,47 @@ function generationOrigin(card: ProducedCard) {
 
 function ResultProvenance({ card }: { card: ProducedCard }) {
   const refs = card.reference_stack.filter((reference) => reference.role === "generation-reference");
-  return <details><summary>Run details</summary><div className="details-content"><p>Pipeline <code>{card.style_version_id}</code> · configuration <code>{shortChecksum(card.style_checksum_sha256)}</code></p><p>Generation: <strong>{String(card.generation?.execution_mode || "unknown")}</strong> · {String(card.generation?.model || "model unavailable")}</p><p>Ordered references: {refs.length ? refs.map((reference, index) => <span key={String(reference.reference_id || index)}> {index ? "→ " : ""}{String(reference.label || reference.reference_id)}</span>) : "—"}</p><p>Render revision {card.render_revision} · card checksum <code>{card.card_checksum_sha256 || "—"}</code></p></div></details>;
+  return <details><summary>Run details</summary><div className="details-content"><p>Pipeline <code>{card.style_version_id}</code> · configuration <code>{shortChecksum(card.style_checksum_sha256)}</code></p><p>Generation: <strong>{String(card.generation?.execution_mode || "unknown")}</strong> · {String(card.generation?.model || "model unavailable")}</p>{card.prompt_override && <p>Candidate prompt override: {card.prompt_override}</p>}<p>Ordered references: {refs.length ? refs.map((reference, index) => <span key={String(reference.reference_id || index)}> {index ? "→ " : ""}{String(reference.label || reference.reference_id)}</span>) : "—"}</p><p>Render revision {card.render_revision} · card checksum <code>{card.card_checksum_sha256 || "—"}</code></p></div></details>;
 }
 
 export function CandidatesView({ bootstrap, navigate, refresh, notify, batchId, cardId }: Shared & { batchId?: string; cardId?: string }) {
   const pipelines = bootstrap.style.pipelines;
   const sources = selectedSources(bootstrap).sort((left, right) => String(right.created_at || "").localeCompare(String(left.created_at || "")));
   const [busy, setBusy] = useState("");
+  const [generationSource, setGenerationSource] = useState<InputAsset>();
+  const [generationPipelineId, setGenerationPipelineId] = useState(bootstrap.style.active_pipeline_id);
+  const [generationPrompt, setGenerationPrompt] = useState(bootstrap.style.active.generation.prompt || "");
+  const [previewBatch, setPreviewBatch] = useState<ProductionBatch>();
   const selectedCard = bootstrap.cards.find((card) => card.item_id === cardId && (!batchId || card.batch_id === batchId));
   const [framing, setFraming] = useState<Framing>(selectedCard?.framing || { zoom: 1, offset_x: 0, offset_y: 0 });
   const activeBatch = bootstrap.batches.find((batch) => isActive(batch.status));
   useEffect(() => { if (selectedCard) setFraming(selectedCard.framing || { zoom: 1, offset_x: 0, offset_y: 0 }); }, [selectedCard?.item_id]);
+  useEffect(() => {
+    if (!previewBatch || !isActive(previewBatch.status)) return;
+    const timer = window.setInterval(() => void api.getProduction(previewBatch.batch_id).then(({ batch }) => setPreviewBatch(batch)).catch((error) => notify((error as Error).message, "error")), 800);
+    return () => window.clearInterval(timer);
+  }, [previewBatch?.batch_id, previewBatch?.status]);
 
-  async function generate(sourceIds: string[], selectedId = bootstrap.style.active_pipeline_id) {
-    if (!sourceIds.length || !selectedId) return;
-    setBusy(`generate-${sourceIds[0]}`);
-    const pipeline = pipelines.find((item) => item.pipeline_id === selectedId);
-    try { await api.createProduction(sourceIds, selectedId, pipeline?.style.generation.execution_mode === "live"); notify("New two-stage candidate started"); await refresh(); } catch (error) { notify((error as Error).message, "error"); } finally { setBusy(""); }
+  function openGeneration(source: InputAsset, pipelineId = bootstrap.style.active_pipeline_id, promptOverride?: string | null) {
+    const pipeline = pipelines.find((item) => item.pipeline_id === pipelineId) || pipelines[0];
+    setGenerationSource(source); setGenerationPipelineId(pipeline?.pipeline_id || ""); setGenerationPrompt(promptOverride || pipeline?.style.generation.prompt || ""); setPreviewBatch(undefined);
+  }
+
+  async function generate() {
+    if (!generationSource || !generationPipelineId) return;
+    setBusy(`generate-${generationSource.id}`);
+    const pipeline = pipelines.find((item) => item.pipeline_id === generationPipelineId);
+    try { const response = await api.createProduction([generationSource.id], generationPipelineId, pipeline?.style.generation.execution_mode === "live", generationPrompt); setPreviewBatch(response.batch); notify("Candidate preview started"); await refresh(); } catch (error) { notify((error as Error).message, "error"); } finally { setBusy(""); }
   }
   async function tryAnother(card: ProducedCard) {
-    setBusy(card.item_id);
-    try { await api.tryAnother(card.batch_id, card.source_id, card.generation?.execution_mode === "live"); notify("Another result queued"); await refresh(); } catch (error) { notify((error as Error).message, "error"); } finally { setBusy(""); }
+    const source = sources.find((item) => item.id === card.source_id);
+    if (source) openGeneration(source, card.pipeline_id, card.prompt_override);
+  }
+  const previewItem = previewBatch?.items?.slice(-1)[0];
+  async function acceptPreview() {
+    if (!previewBatch || previewItem?.status !== "ready") return;
+    setBusy("accept-preview");
+    try { await api.acceptCandidate(previewBatch.batch_id, previewItem.item_id); await refresh(); setGenerationSource(undefined); setPreviewBatch(undefined); notify("Candidate accepted into the pack"); } catch (error) { notify((error as Error).message, "error"); } finally { setBusy(""); }
   }
   async function render(card: ProducedCard) {
     setBusy(`render-${card.item_id}`);
@@ -221,10 +241,11 @@ export function CandidatesView({ bootstrap, navigate, refresh, notify, batchId, 
         <div className="pack-cards">{isGenerating && <div className="generation-card pending-card" role="status" aria-label={`Generating a new card for ${source.label}`}><span className="spinner" /></div>}{cards.length ? cards.map((card, index) => <div className={`generation-card ${selectedCard?.item_id === card.item_id ? "selected" : ""}`} key={`${card.batch_id}:${card.item_id}`}><button className="candidate-open" onClick={() => navigate(`#candidates/${card.batch_id}/${card.item_id}`)}><img src={card.card_url} alt={`${source.label} ${card.pipeline_label} candidate ${index + 1}`} /><span><strong>{index === 0 ? "Newest card" : `Previous ${index}`}</strong><small>{card.pipeline_label}</small><small>{generationOrigin(card)}</small></span></button><button className={`favorite-button ${card.favorite ? "saved" : ""}`} aria-label={card.favorite ? "Remove from Collection" : "Save to Collection"} disabled={Boolean(busy)} onClick={() => void toggleFavorite(card)}>{card.favorite ? "★" : "☆"}</button></div>) : !isGenerating && <div className="pack-empty"><span>◇</span><strong>No cards yet</strong><small>Open your first one.</small></div>}</div>
         <aside className="pack-generate">
           <button className="source-peek" aria-label={`Input: ${source.label}. ${sourceCount}`}><span>Input</span><i aria-hidden="true">ⓘ</i><span className="source-popover" aria-hidden="true">{source.image_url && <img src={source.image_url} alt="" />}<span><small>prepared Input</small><strong>{source.label}</strong><em>{sourceCount}</em></span></span></button>
-          <div className="pack-action"><button className="generate-card" disabled={Boolean(activeBatch) || Boolean(busy)} onClick={() => void generate([source.id])}><span>＋</span><strong>Generate new</strong><small>style · 1 call</small></button></div>
+          <div className="pack-action"><button className="generate-card" disabled={Boolean(activeBatch) || Boolean(busy)} onClick={() => openGeneration(source)}><span>＋</span><strong>Generate new</strong><small>preview · tweak · accept</small></button></div>
         </aside>
       </section>;
     })}</div>}
+    {generationSource && <div className="dialog-backdrop" role="presentation"><section className="surface input-dialog candidate-dialog" role="dialog" aria-modal="true" aria-labelledby="candidate-dialog-title"><div className="panel-heading"><div><p className="eyebrow">Generate candidate</p><h3 id="candidate-dialog-title">{generationSource.label}</h3></div><button className="button secondary" disabled={isActive(previewBatch?.status || "")} onClick={() => { setGenerationSource(undefined); setPreviewBatch(undefined); }}>Cancel</button></div><div className="candidate-preview"><figure>{generationSource.image_url && <img src={generationSource.image_url} alt="Prepared Input" />}<figcaption>Input</figcaption></figure><span>→</span><figure>{previewItem?.master_url ? <img src={previewItem.master_url} alt="Styled preview" /> : <div className="preview-placeholder">{isActive(previewBatch?.status || "") ? <span className="spinner" /> : "Styled preview"}</div>}<figcaption>Styled master</figcaption></figure><span>→</span><figure className="candidate-preview-card">{previewItem?.card_url ? <img className="pixelated" src={previewItem.card_url} alt="Candidate preview" /> : <div className="preview-placeholder">Card</div>}<figcaption>Candidate card</figcaption></figure></div>{previewItem?.error && <p className="validation-note" role="alert">{previewItem.error}</p>}<label className="prompt-field">Pipeline<select value={generationPipelineId} disabled={Boolean(previewBatch)} onChange={(event) => { const id = event.target.value; setGenerationPipelineId(id); setGenerationPrompt(pipelines.find((item) => item.pipeline_id === id)?.style.generation.prompt || ""); }}>{pipelines.map((pipeline) => <option key={pipeline.pipeline_id} value={pipeline.pipeline_id}>{pipeline.label}</option>)}</select></label><label className="prompt-field">Style prompt<textarea value={generationPrompt} onChange={(event) => setGenerationPrompt(event.target.value)} /></label><div className="candidate-dialog-actions"><small>{pipelines.find((item) => item.pipeline_id === generationPipelineId)?.style.generation.quality || "low"} quality · {modelCost(bootstrap.models.find((model) => model.id === pipelines.find((item) => item.pipeline_id === generationPipelineId)?.style.generation.model_id))} per preview</small><button className="button secondary" disabled={!generationPrompt.trim() || isActive(previewBatch?.status || "") || Boolean(busy) || Boolean(activeBatch && activeBatch.batch_id !== previewBatch?.batch_id)} onClick={() => void generate()}>{isActive(previewBatch?.status || "") ? "Generating…" : previewItem?.status === "ready" ? "Rerun with this prompt" : "Generate preview"}</button><button className="button primary" disabled={previewItem?.status !== "ready" || Boolean(busy)} onClick={() => void acceptPreview()}>{busy === "accept-preview" ? "Accepting…" : "OK · Add to pack"}</button></div></section></div>}
     {selectedCard && <section className="surface result-inspector"><div className="panel-heading"><div><p className="eyebrow">{selectedCard.pipeline_label} · {selectedCard.source_label}</p><h3>Candidate details</h3><p>Inspect the style and render stages, adjust framing, or save this candidate to Collection.</p></div><button className="button secondary" onClick={() => navigate("#candidates")}>Close</button></div><div className="asset-stages"><figure><img src={selectedCard.source_url} alt="Prepared Input" /><figcaption>Input</figcaption></figure><span>→</span><figure><img src={selectedCard.master_url} alt="Styled master" /><figcaption>Styled master</figcaption></figure><span>→</span><figure><img className="pixelated" src={selectedCard.art_url} alt="Amiga art" /><figcaption>Rendered art</figcaption></figure><span>→</span><figure className="final-stage"><img className="pixelated" src={selectedCard.card_url} alt="Final card" /><figcaption>Candidate card</figcaption></figure></div><div className="framing-controls"><label>Zoom<input type="range" min="1" max="3" step="0.01" value={framing.zoom} onChange={(event) => setFraming({ ...framing, zoom: Number(event.target.value) })} /></label><label>Horizontal<input type="range" min="-1" max="1" step="0.01" value={framing.offset_x} onChange={(event) => setFraming({ ...framing, offset_x: Number(event.target.value) })} /></label><label>Vertical<input type="range" min="-1" max="1" step="0.01" value={framing.offset_y} onChange={(event) => setFraming({ ...framing, offset_y: Number(event.target.value) })} /></label></div><div className="inspector-actions"><button className="button primary" disabled={Boolean(busy)} onClick={() => void toggleFavorite(selectedCard)}>{selectedCard.favorite ? "★ Saved to Collection" : "☆ Save to Collection"}</button><button className="button secondary" disabled={Boolean(busy)} onClick={() => void tryAnother(selectedCard)}>Generate another result</button><button className="button secondary" disabled={Boolean(busy)} onClick={() => void render(selectedCard)}>{busy === `render-${selectedCard.item_id}` ? "Rerendering…" : "Save framing · no generation"}</button></div><ResultProvenance card={selectedCard} /></section>}
   </section>;
 }

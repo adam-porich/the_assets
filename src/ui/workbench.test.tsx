@@ -105,14 +105,31 @@ describe("pipeline workbench", () => {
     expect(container.querySelector(".pending-card")).toBeFalsy();
   });
 
-  it("runs the universal pipeline directly from Candidates", async () => {
+  it("previews a prompted candidate before accepting it", async () => {
     vi.spyOn(api, "bootstrap").mockResolvedValue(base as never);
     vi.spyOn(api, "createProduction").mockResolvedValue({ batch: { batch_id: "batch-2" } } as never);
     await act(async () => { window.location.hash = "#candidates"; root.render(<App />); });
     const open = [...container.querySelectorAll("button")].find((button) => button.textContent?.includes("Generate new"));
     await act(async () => open?.click());
-    expect(container.querySelector("button.pipeline-choice")).toBeFalsy();
-    expect(api.createProduction).toHaveBeenCalledWith(["source-1"], "face-free-style-board", true);
+    expect(container.querySelector('[aria-labelledby="candidate-dialog-title"]')).toBeTruthy();
+    const preview = [...container.querySelectorAll("button")].find((button) => button.textContent?.includes("Generate preview"));
+    await act(async () => preview?.click());
+    expect(api.createProduction).toHaveBeenCalledWith(["source-1"], "face-free-style-board", true, "Apply only the visual language.");
+  });
+
+  it("adds only an accepted candidate preview to the pack", async () => {
+    vi.spyOn(api, "bootstrap").mockResolvedValue(base as never);
+    vi.spyOn(api, "createProduction").mockResolvedValue({ batch: { batch_id: "preview-batch", status: "ready", items: [{ item_id: "preview-item", status: "ready", master_url: "/preview-master.png", card_url: "/preview-card.png" }] } } as never);
+    vi.spyOn(api, "acceptCandidate").mockResolvedValue({ batch: {} } as never);
+    await act(async () => { window.location.hash = "#candidates"; root.render(<App />); });
+    const open = [...container.querySelectorAll("button")].find((button) => button.textContent?.includes("Generate new"));
+    await act(async () => open?.click());
+    const preview = [...container.querySelectorAll("button")].find((button) => button.textContent?.includes("Generate preview"));
+    await act(async () => preview?.click());
+    expect(container.querySelector('img[alt="Candidate preview"]')).toBeTruthy();
+    const accept = [...container.querySelectorAll("button")].find((button) => button.textContent?.includes("Add to pack"));
+    await act(async () => accept?.click());
+    expect(api.acceptCandidate).toHaveBeenCalledWith("preview-batch", "preview-item");
   });
 
   it("favorites candidates and renders saved cards in Collection", async () => {

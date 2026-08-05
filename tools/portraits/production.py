@@ -125,7 +125,7 @@ class CardProductionManager:
         mapping = validate_request({"model": generation["model_id"], "quality": generation["quality"], "execution_mode": generation["execution_mode"]}, len(generation_refs), capabilities)
         return model, capabilities, mapping, generation_refs
 
-    def create(self, source_ids: list[str], style: dict[str, Any], models: list[dict[str, Any]], *, purpose: str = "card-production", consent: bool = False) -> dict[str, Any]:
+    def create(self, source_ids: list[str], style: dict[str, Any], models: list[dict[str, Any]], *, purpose: str = "card-production", consent: bool = False, prompt_override: str | None = None) -> dict[str, Any]:
         if purpose not in {"card-production", "style-trial"}:
             raise ValueError("production purpose must be card-production or style-trial")
         style = validate_style(copy.deepcopy(style), require_locked=purpose == "card-production")
@@ -159,7 +159,7 @@ class CardProductionManager:
             items = []
             for source in source_snapshots:
                 lineage_id = new_id("lineage")
-                items.append(self._new_item(source, 1, lineage_id, reference_snapshots))
+                items.append(self._new_item(source, 1, lineage_id, reference_snapshots, prompt_override=prompt_override))
             record = {
                 "batch_id": batch_id, "purpose": purpose, "created_at": created, "updated_at": created,
                 "status": "queued", "style_snapshot": style, "style_version_id": style["identity"]["style_version_id"],
@@ -169,13 +169,14 @@ class CardProductionManager:
                 "generation_authorization": {"required": capabilities.execution_mode == "live", "consent": bool(consent), "granted_at": now_iso() if consent else None, "purpose": purpose},
                 "requested_paid_calls": len(source_ids) * (2 if int(style.get("schema_version", 1)) == 2 else 1), "paid_calls": 0, "usage": {}, "cost_usd": 0.0,
                 "items": items, "calibration_source_ids": source_ids if purpose == "style-trial" else None,
+                "requires_acceptance": purpose == "card-production",
             }
             self._write(record)
             self._active_batch = batch_id
             threading.Thread(target=self._work, args=(batch_id,), daemon=True, name=f"card-production-{batch_id}").start()
             return self.payload(record)
 
-    def _new_item(self, source: dict[str, Any], attempt_number: int, lineage_id: str, references: list[dict[str, Any]]) -> dict[str, Any]:
+    def _new_item(self, source: dict[str, Any], attempt_number: int, lineage_id: str, references: list[dict[str, Any]], *, prompt_override: str | None = None) -> dict[str, Any]:
         return {
             "item_id": new_id("item"), "source_id": source["id"], "source_label": source.get("label") or source["id"],
             "attempt_number": attempt_number, "lineage_id": lineage_id, "status": "queued", "phase": "queued", "error": None,
@@ -186,6 +187,7 @@ class CardProductionManager:
             "framing": None, "render_revision": 0, "render_revisions": [], "master_path": None, "master_checksum_sha256": None,
             "logical_art_path": None, "art_path": None, "card_path": None, "card_checksum_sha256": None,
             "generation": {}, "generation_request": {}, "generation_stages": [], "normalised_path": None, "normalised_checksum_sha256": None, "render_metadata": {}, "usage": {}, "cost_usd": None,
+            "prompt_override": prompt_override.strip() if prompt_override and prompt_override.strip() else None, "accepted": False,
         }
 
     def _work(self, batch_id: str) -> None:
@@ -236,7 +238,7 @@ class CardProductionManager:
                     else:
                         request = GenerationRequest(
                             identity_image=source_path, style_images=reference_paths,
-                            instruction=str(generation["prompt"]) if int(record["style_snapshot"].get("schema_version", 1)) == 3 else generation_instruction(generation["direction"]),
+                            instruction=str(item.get("prompt_override") or generation["prompt"]) if int(record["style_snapshot"].get("schema_version", 1)) == 3 else generation_instruction(generation["direction"]),
                             negative_prompt=str(generation.get("avoid") or ""), model=str(generation["model_id"]), quality=str(generation["quality"]),
                             seed=stable_seed(str(item["item_id"])), effective_aspect_ratio=str(record["backend_mapping"]["effective_aspect_ratio"]),
                             output_path=self.store.absolute_path(master_relative),
@@ -378,6 +380,20 @@ class CardProductionManager:
             record.setdefault("generation_authorization", {"required": record.get("model_capabilities", {}).get("execution_mode") == "live"})["last_action"] = {"action": "try-another", "consent": bool(consent), "granted_at": now_iso() if consent else None}
             self._write(record)
             threading.Thread(target=self._work, args=(batch_id,), daemon=True, name=f"card-attempt-{batch_id}").start()
+            return self.payload(record)
+
+    def accept_candidate(self, batch_id: str, item_id: str) -> dict[str, Any]:
+        with self._lock:
+            record = self._read(batch_id)
+            item = next((candidate for candidate in record.get("items", []) if str(candidate.get("item_id")) == item_id), None)
+            if not item:
+                raise ValueError("candidate attempt does not exist")
+            if record.get("purpose") != "card-production" or item.get("status") != "ready":
+                raise ValueError("only a ready production preview can be accepted")
+            item["accepted"] = True
+            item["accepted_at"] = now_iso()
+            record["updated_at"] = now_iso()
+            self._write(record)
             return self.payload(record)
 
     def rerender(self, batch_id: str, item_id: str, framing: dict[str, float] | None) -> dict[str, Any]:

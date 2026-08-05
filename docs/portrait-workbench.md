@@ -26,8 +26,13 @@ Schema-v3 pipelines contain one style prompt, shared model settings, ordered
 and card assembly. Normalization is not a pipeline stage. A target example is a
 review-only renderer proof and is structurally excluded from model requests.
 
-Each candidate or trial sends the accepted Input first and style references
-after it, making exactly one provider call. The resulting master is framed,
+Candidate generation uses the same preview/tweak/accept pattern as Input
+normalization. The dialog seeds the selected pipeline's style prompt, records a
+per-attempt override without changing the saved pipeline, and permits reruns.
+Ready previews remain outside candidate packs until explicitly accepted.
+
+Each preview or trial sends the accepted Input first and style references after
+it, making exactly one provider call. The resulting master is framed,
 mapped to the fixed 32-colour OCS palette, rendered at 168×138 logical pixels,
 and assembled into the 210×300 logical card before exact 2× enlargement.
 Retries and `Generate another` append immutable attempts; framing changes only

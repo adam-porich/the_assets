@@ -311,16 +311,19 @@ def test_live_provenance_and_consent_use_semantic_fake_without_provider_call(tmp
     manager = CardProductionManager(store, styles, lambda mode, capabilities: SemanticFakeGenerationAdapter(capabilities))
     with pytest.raises(ValueError, match="explicit consent"):
         manager.create([first["id"]], style, [model])
-    batch = wait_for(manager, manager.create([first["id"]], style, [model], consent=True)["batch_id"])
+    batch = wait_for(manager, manager.create([first["id"]], style, [model], consent=True, prompt_override="Keep the book square to camera.")["batch_id"])
     item = batch["items"][0]
     assert item["generation"]["execution_mode"] == "live"
     assert item["generation_stages"] == []
     assert item["generation_request"]["reference_order"][0]["role"] == "identity"
     assert item["generation_request"]["reference_order"][1]["role"] == "generation-reference"
     assert item["generation_request"]["target_examples_excluded"] is True
+    assert item["generation_request"]["instruction"] == "Keep the book square to camera."
     assert item["master_url"] and item["art_url"] and item["card_url"]
     assert not item["normalised_url"] and batch["paid_calls"] == 1
     assert batch["generation_authorization"]["consent"] is True
+    assert _cards(manager) == []
+    manager.accept_candidate(batch["batch_id"], item["item_id"])
     candidate = _cards(manager)[0]
     assert candidate["pipeline_id"] == FACE_FREE_PIPELINE_ID
     assert candidate["pipeline_label"] == "Amiga Style Transfer"
@@ -339,6 +342,8 @@ def test_multiple_favorites_persist_and_follow_latest_render(tmp_path: Path) -> 
     first = batch["items"][0]
     another = wait_for(manager, manager.try_another(batch["batch_id"], item["id"], consent=True)["batch_id"])
     second = another["items"][-1]
+    manager.accept_candidate(batch["batch_id"], first["item_id"])
+    manager.accept_candidate(batch["batch_id"], second["item_id"])
     manager.favourite(batch["batch_id"], first["item_id"])
     manager.favourite(batch["batch_id"], second["item_id"])
     assert len(manager.favourites()) == 2
