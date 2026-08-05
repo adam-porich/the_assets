@@ -57,6 +57,28 @@ def _framing_transform(image: Image.Image, window: tuple[int, int], framing: dic
     return cropped, transform
 
 
+def _automatic_framing_transform(image: Image.Image, window: tuple[int, int]) -> tuple[Image.Image, dict[str, Any]]:
+    """Find the foreground against the corner background, retain it, then pad to the art ratio."""
+    detection = ImageOps.contain(image, (256, 256), Image.Resampling.BILINEAR)
+    corners = [detection.getpixel(point) for point in ((0, 0), (detection.width - 1, 0), (0, detection.height - 1), (detection.width - 1, detection.height - 1))]
+    background = tuple(round(sum(colour[channel] for colour in corners) / len(corners)) for channel in range(3))
+    mask = Image.new("L", detection.size)
+    mask.putdata([255 if sum((colour[channel] - background[channel]) ** 2 for channel in range(3)) ** 0.5 >= 32 else 0 for colour in detection.getdata()])
+    detected = mask.getbbox()
+    if detected:
+        scale_x, scale_y = image.width / detection.width, image.height / detection.height
+        left, top, right, bottom = (detected[0] * scale_x, detected[1] * scale_y, detected[2] * scale_x, detected[3] * scale_y)
+        margin = max(8, round(max(right - left, bottom - top) * 0.07))
+        box = (max(0, round(left - margin)), max(0, round(top - margin)), min(image.width, round(right + margin)), min(image.height, round(bottom + margin)))
+    else:
+        box = (0, 0, image.width, image.height)
+    cropped = image.crop(box)
+    fitted = ImageOps.contain(cropped, window, Image.Resampling.LANCZOS)
+    canvas = Image.new("RGB", window, background)
+    canvas.paste(fitted, ((window[0] - fitted.width) // 2, (window[1] - fitted.height) // 2))
+    return canvas, {"mode": "subject-aware", "zoom": 1.0, "offset_x": 0.0, "offset_y": 0.0, "source_size": list(image.size), "window": list(window), "crop_box": list(box), "centering": [0.5, 0.5], "empty_pixels": fitted.size != window}
+
+
 class AmigaRenderer:
     driver_id = "amiga-ocs"
     label = "Amiga OCS"
@@ -69,9 +91,11 @@ class AmigaRenderer:
         default_framing = composition["default_framing"]
         is_default = all(abs(float(resolved_framing.get(key, 0)) - float(default_framing.get(key, 0))) < 1e-9 for key in ("zoom", "offset_x", "offset_y"))
         source = ImageOps.exif_transpose(master).convert("RGB")
-        if is_default:
+        if framing and framing.get("mode") == "legacy":
             transformed = source
-            transform = {"zoom": 1.0, "offset_x": 0.0, "offset_y": 0.0, "source_size": list(source.size), "window": list(renderer["logical_art_size"]), "crop_box": [0, 0, source.width, source.height], "centering": list(composition["centering"]), "empty_pixels": False}
+            transform = {"mode": "legacy", "zoom": 1.0, "offset_x": 0.0, "offset_y": 0.0, "source_size": list(source.size), "window": list(renderer["logical_art_size"]), "crop_box": [0, 0, source.width, source.height], "centering": list(composition["centering"]), "empty_pixels": False}
+        elif is_default:
+            transformed, transform = _automatic_framing_transform(source, tuple(renderer["logical_art_size"]))
         else:
             transformed, transform = _framing_transform(source, tuple(renderer["logical_art_size"]), resolved_framing, tuple(composition["centering"]))
         logical, art, metadata = render_amiga_art(transformed, centering=tuple(composition["centering"]), style=selected)

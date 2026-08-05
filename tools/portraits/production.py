@@ -125,7 +125,7 @@ class CardProductionManager:
         mapping = validate_request({"model": generation["model_id"], "quality": generation["quality"], "execution_mode": generation["execution_mode"]}, len(generation_refs), capabilities)
         return model, capabilities, mapping, generation_refs
 
-    def create(self, source_ids: list[str], style: dict[str, Any], models: list[dict[str, Any]], *, purpose: str = "card-production", consent: bool = False, prompt_override: str | None = None) -> dict[str, Any]:
+    def create(self, source_ids: list[str], style: dict[str, Any], models: list[dict[str, Any]], *, purpose: str = "card-production", consent: bool = False, prompt_override: str | None = None, content_direction: str | None = None) -> dict[str, Any]:
         if purpose not in {"card-production", "style-trial"}:
             raise ValueError("production purpose must be card-production or style-trial")
         style = validate_style(copy.deepcopy(style), require_locked=purpose == "card-production")
@@ -148,7 +148,10 @@ class CardProductionManager:
                 source_path = self.store.absolute_path(str((source.get("accepted_normalisation") or {}).get("relative_path") or ""))
                 destination = batch_dir / "inputs" / "sources" / f"{source_id}{source_path.suffix.lower() or '.png'}"
                 self._copy(source_path, destination)
-                source_snapshots.append({**copy.deepcopy(source), "input_path": destination.relative_to(self.store.root).as_posix(), "input_checksum_sha256": checksum(destination)})
+                original_source = self.store.absolute_path(str(source.get("original_path") or ""))
+                original_destination = batch_dir / "inputs" / "originals" / f"{source_id}{original_source.suffix.lower() or '.png'}"
+                self._copy(original_source, original_destination)
+                source_snapshots.append({**copy.deepcopy(source), "input_path": destination.relative_to(self.store.root).as_posix(), "input_checksum_sha256": checksum(destination), "original_input_path": original_destination.relative_to(self.store.root).as_posix(), "original_input_checksum_sha256": checksum(original_destination)})
             reference_snapshots: list[dict[str, Any]] = []
             for reference in generation_refs:
                 path = self.store.absolute_path(str(reference.get("relative_path") or ""))
@@ -159,7 +162,7 @@ class CardProductionManager:
             items = []
             for source in source_snapshots:
                 lineage_id = new_id("lineage")
-                items.append(self._new_item(source, 1, lineage_id, reference_snapshots, prompt_override=prompt_override))
+                items.append(self._new_item(source, 1, lineage_id, reference_snapshots, prompt_override=prompt_override, content_direction=content_direction))
             record = {
                 "batch_id": batch_id, "purpose": purpose, "created_at": created, "updated_at": created,
                 "status": "queued", "style_snapshot": style, "style_version_id": style["identity"]["style_version_id"],
@@ -176,7 +179,7 @@ class CardProductionManager:
             threading.Thread(target=self._work, args=(batch_id,), daemon=True, name=f"card-production-{batch_id}").start()
             return self.payload(record)
 
-    def _new_item(self, source: dict[str, Any], attempt_number: int, lineage_id: str, references: list[dict[str, Any]], *, prompt_override: str | None = None) -> dict[str, Any]:
+    def _new_item(self, source: dict[str, Any], attempt_number: int, lineage_id: str, references: list[dict[str, Any]], *, prompt_override: str | None = None, content_direction: str | None = None) -> dict[str, Any]:
         return {
             "item_id": new_id("item"), "source_id": source["id"], "source_label": source.get("label") or source["id"],
             "attempt_number": attempt_number, "lineage_id": lineage_id, "status": "queued", "phase": "queued", "error": None,
@@ -187,7 +190,8 @@ class CardProductionManager:
             "framing": None, "render_revision": 0, "render_revisions": [], "master_path": None, "master_checksum_sha256": None,
             "logical_art_path": None, "art_path": None, "card_path": None, "card_checksum_sha256": None,
             "generation": {}, "generation_request": {}, "generation_stages": [], "normalised_path": None, "normalised_checksum_sha256": None, "render_metadata": {}, "usage": {}, "cost_usd": None,
-            "prompt_override": prompt_override.strip() if prompt_override and prompt_override.strip() else None, "accepted": False,
+            "prompt_override": prompt_override.strip() if prompt_override and prompt_override.strip() else None,
+            "content_direction": content_direction.strip() if content_direction and content_direction.strip() else None, "accepted": False,
         }
 
     def _work(self, batch_id: str) -> None:
@@ -236,15 +240,18 @@ class CardProductionManager:
                         final = item["generation_stages"][-1]["result"]
                         item.update({"generation_request": item["generation_stages"][-1]["request"], "master_path": master_relative.as_posix(), "master_checksum_sha256": checksum(self.store.absolute_path(master_relative)), "generation": {**final, "elapsed_seconds": elapsed, "stages": 2, "cost_usd": sum(costs) if costs else None}, "usage": usage, "cost_usd": sum(costs) if costs else None})
                     else:
+                        base_instruction = str(item.get("prompt_override") or generation["prompt"])
+                        direction = str(item.get("content_direction") or "").strip()
+                        instruction = f"{base_instruction}\n\nAdditional content direction from the user: {direction}" if direction else base_instruction
                         request = GenerationRequest(
                             identity_image=source_path, style_images=reference_paths,
-                            instruction=str(item.get("prompt_override") or generation["prompt"]) if int(record["style_snapshot"].get("schema_version", 1)) == 3 else generation_instruction(generation["direction"]),
+                            instruction=instruction if int(record["style_snapshot"].get("schema_version", 1)) == 3 else generation_instruction(generation["direction"]),
                             negative_prompt=str(generation.get("avoid") or ""), model=str(generation["model_id"]), quality=str(generation["quality"]),
                             seed=stable_seed(str(item["item_id"])), effective_aspect_ratio=str(record["backend_mapping"]["effective_aspect_ratio"]),
                             output_path=self.store.absolute_path(master_relative),
                             reference_roles=tuple(["generation-reference"] * len(generation_refs)),
                         )
-                        item["generation_request"] = {"instruction": request.instruction, "model": request.model, "quality": request.quality, "seed": request.seed, "target_examples_excluded": True, "reference_order": [{"order": 0, "role": "identity", "source_id": item["source_id"]}, *[{"order": index, "role": "generation-reference", "reference_id": reference["id"]} for index, reference in enumerate(generation_refs, 1)]]}
+                        item["generation_request"] = {"instruction": request.instruction, "content_direction": item.get("content_direction"), "model": request.model, "quality": request.quality, "seed": request.seed, "target_examples_excluded": True, "reference_order": [{"order": 0, "role": "identity", "source_id": item["source_id"]}, *[{"order": index, "role": "generation-reference", "reference_id": reference["id"]} for index, reference in enumerate(generation_refs, 1)]]}
                         result = adapter.generate(request)
                         item.update({"master_path": master_relative.as_posix(), "master_checksum_sha256": checksum(self.store.absolute_path(master_relative)), "generation": {"backend": result.backend, "model": result.model, "execution_mode": capabilities.execution_mode, "seed": result.seed, "elapsed_seconds": result.elapsed_seconds, "dimensions": result.dimensions, "effective_aspect_ratio": result.effective_aspect_ratio, "usage": result.usage, "cost_usd": result.cost_usd}, "usage": result.usage, "cost_usd": result.cost_usd})
                     item.update({"status": "processing", "phase": "rendering"}); self._write(record)
@@ -308,6 +315,7 @@ class CardProductionManager:
         current_approvals = self._approval_data().get("current", {})
         result["progress"]["approved_cards"] = sum(1 for source_id in record.get("selected_source_ids", []) if f"{source_id}:{record.get('style_version_id')}" in current_approvals)
         for item in result.get("items", []):
+            source_snapshot = next((source for source in result.get("source_snapshots", []) if str(source.get("id")) == str(item.get("source_id"))), {})
             favourite = favourites.get((str(record.get("batch_id")), str(item.get("item_id"))))
             item["favorite"] = bool(favourite)
             item["favorited_at"] = favourite.get("favorited_at") if favourite else None
@@ -317,6 +325,7 @@ class CardProductionManager:
             for stage in item.get("generation_stages", []):
                 stage["output_url"] = self.store.asset_url(stage.get("output_path"))
             item["source_url"] = self.store.asset_url(item.get("source_input_path"))
+            item["source_original_url"] = self.store.asset_url(source_snapshot.get("original_input_path") or source_snapshot.get("original_path"))
             item["reference_urls"] = [self.store.asset_url(reference.get("input_path")) for reference in item.get("reference_stack", []) if reference.get("role") == "generation-reference"]
             for reference in item.get("reference_stack", []):
                 reference["url"] = self.store.asset_url(reference.get("input_path"))

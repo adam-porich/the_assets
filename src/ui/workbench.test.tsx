@@ -52,7 +52,8 @@ describe("pipeline workbench", () => {
     await act(async () => container.querySelector(".source-select")?.dispatchEvent(new MouseEvent("click", { bubbles: true })));
     expect(container.querySelector('[role="dialog"]')).toBeTruthy();
     expect(container.querySelector('img[alt="Original"]')).toBeTruthy();
-    expect(container.textContent).toContain("Normalize preview");
+    expect(container.textContent).toContain("Preserve · crop and pad only");
+    expect(container.textContent).toContain("Prepare preview");
   });
 
   it("keeps only the newest three mixed-pipeline cards in each source pack", async () => {
@@ -114,7 +115,8 @@ describe("pipeline workbench", () => {
     expect(container.querySelector('[aria-labelledby="candidate-dialog-title"]')).toBeTruthy();
     const preview = [...container.querySelectorAll("button")].find((button) => button.textContent?.includes("Generate preview"));
     await act(async () => preview?.click());
-    expect(api.createProduction).toHaveBeenCalledWith(["source-1"], "face-free-style-board", true, "Apply only the visual language.");
+    expect(container.textContent).toContain("Content direction");
+    expect(api.createProduction).toHaveBeenCalledWith(["source-1"], "face-free-style-board", true, "");
   });
 
   it("adds only an accepted candidate preview to the pack", async () => {

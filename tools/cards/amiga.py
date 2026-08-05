@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 import math
+from collections import Counter
 from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
@@ -90,19 +91,28 @@ def _ocs_colour(colour: tuple[int, int, int]) -> tuple[int, int, int]:
 
 
 def adaptive_hybrid_palette(image: Image.Image, house: tuple[tuple[int, int, int], ...]) -> tuple[tuple[int, int, int], ...]:
-    """Keep card/UI anchors stable and derive the remaining OCS registers per image."""
-    reduced = image.convert("RGB").quantize(colors=64, method=Image.Quantize.MEDIANCUT).convert("RGB")
-    ranked = [colour for _, colour in sorted(reduced.getcolors(maxcolors=reduced.width * reduced.height) or [], reverse=True)]
+    """Keep UI anchors and greedily choose distinct, foreground-weighted OCS colours."""
+    sample = ImageOps.contain(image.convert("RGB"), (128, 128), Image.Resampling.BILINEAR)
+    corners = [sample.getpixel(point) for point in ((0, 0), (sample.width - 1, 0), (0, sample.height - 1), (sample.width - 1, sample.height - 1))]
+    background = tuple(round(sum(colour[channel] for colour in corners) / len(corners)) for channel in range(3))
+    reduced = sample.quantize(colors=64, method=Image.Quantize.MEDIANCUT).convert("RGB")
+    pixels = list(reduced.getdata())
+    weighted: Counter[tuple[int, int, int]] = Counter()
+    for colour in pixels:
+        distance_from_background = sum((colour[channel] - background[channel]) ** 2 for channel in range(3)) ** 0.5
+        weighted[_ocs_colour(colour)] += 1.0 if distance_from_background >= 34 else 0.12
     resolved = list(house)
     available = [index for index in range(32) if index not in HOUSE_PALETTE_INDICES]
-    candidates: list[tuple[int, int, int]] = []
     protected = {house[index] for index in HOUSE_PALETTE_INDICES}
-    for colour in ranked:
-        snapped = _ocs_colour(colour)
-        if snapped not in protected and snapped not in candidates:
-            candidates.append(snapped)
-    candidates.extend(colour for colour in house if colour not in protected and colour not in candidates)
-    for index, colour in zip(available, candidates):
+    candidates = {colour: count for colour, count in weighted.items() if colour not in protected}
+    selected = list(protected)
+    chosen: list[tuple[int, int, int]] = []
+    while candidates and len(chosen) < len(available):
+        selected_labs = tuple(_oklab(colour) for colour in selected)
+        colour = max(candidates, key=lambda candidate: math.sqrt(candidates[candidate]) * (0.012 + min(_distance(_oklab(candidate), existing) for existing in selected_labs)))
+        chosen.append(colour); selected.append(colour); candidates.pop(colour)
+    chosen.extend(colour for colour in house if colour not in protected and colour not in chosen)
+    for index, colour in zip(available, chosen):
         resolved[index] = colour
     return tuple(resolved)
 
@@ -204,6 +214,7 @@ def render_amiga_art(
     metadata = {
         "style_id": selected.get("identity", {}).get("family_id", selected.get("id")),
         "style_version": selected.get("identity", {}).get("version", selected.get("version")),
+        "renderer_driver_version": int(renderer.get("driver_version", 1)),
         "logical_art_size": list(logical.size),
         "output_art_size": list(art.size),
         "output_scale": scale,

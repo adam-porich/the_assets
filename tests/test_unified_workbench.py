@@ -93,6 +93,22 @@ def test_input_normalisation_requires_preview_then_accepts_it(tmp_path: Path) ->
     assert accepted["image_url"] and accepted["accepted_normalisation"]["prompt"] == "Preserve the exact object."
 
 
+def test_preserve_input_mode_is_free_and_keeps_source_pixels_without_an_adapter(tmp_path: Path) -> None:
+    store = WorkspaceStore(tmp_path / "library")
+    pending = store.add_image_record("input", "Book", "book.png", (ASSETS / "generation-reference-01.png").read_bytes(), "image/png")
+    manager = InputNormalisationManager(store, lambda *_: (_ for _ in ()).throw(AssertionError("adapter must not run")))
+    started = manager.start(pending["id"], "", "low", live_model(), consent=False, mode="preserve")
+    attempt_id = started["normalisation_attempts"][-1]["id"]
+    for _ in range(200):
+        current = manager.get(pending["id"])
+        if current["normalisation_attempts"][-1]["status"] not in {"queued", "running"}: break
+        time.sleep(0.02)
+    attempt = current["normalisation_attempts"][-1]
+    assert attempt["status"] == "ready" and attempt["mode"] == "preserve"
+    assert attempt["cost_usd"] == 0 and attempt["backend"] == "deterministic-preserve"
+    assert manager.accept(pending["id"], attempt_id)["accepted_normalisation"]["mode"] == "preserve"
+
+
 def test_style_schema_checksum_store_and_asset_snapshots(tmp_path: Path) -> None:
     store = WorkspaceStore(tmp_path / "library")
     styles = StyleStore(store)
@@ -157,8 +173,9 @@ def test_amiga_registered_engine_is_deterministic_and_matches_golden() -> None:
     style = load_checked_in_style()
     style["renderer"]["palette_mode"] = "fixed-house"
     with Image.open(ASSETS / "generation-reference-01.png") as master:
-        first = registry.render(style, master, "stage reference")
-        second = registry.render(style, master, "stage reference")
+        historical_framing = {"mode": "legacy", "zoom": 1, "offset_x": 0, "offset_y": 0}
+        first = registry.render(style, master, "stage reference", historical_framing)
+        second = registry.render(style, master, "stage reference", historical_framing)
     with Image.open(ASSETS / "target-example-01.png") as target:
         assert first.art.size == (336, 276)
         assert first.card.size == (420, 600)
@@ -188,6 +205,14 @@ def test_adaptive_hybrid_palette_keeps_ocs_limits_and_is_deterministic() -> None
     assert len(set(first.card.getdata())) <= 32
     assert first.art.tobytes() == second.art.tobytes()
     assert first.card.tobytes() == second.card.tobytes()
+
+
+def test_adaptive_palette_retains_small_foreground_accents() -> None:
+    image = Image.new("RGB", (100, 100), (238, 221, 187))
+    for x in range(42, 58):
+        for y in range(42, 58): image.putpixel((x, y), (10, 120, 220))
+    resolved = adaptive_hybrid_palette(image, amiga_palette(load_checked_in_style()))
+    assert any(blue > red * 1.5 and blue > green for red, green, blue in resolved)
 
 
 class ReferenceReturningAdapter(FakeGenerationAdapter):
@@ -333,14 +358,16 @@ def test_live_provenance_and_consent_use_semantic_fake_without_provider_call(tmp
     manager = CardProductionManager(store, styles, lambda mode, capabilities: SemanticFakeGenerationAdapter(capabilities))
     with pytest.raises(ValueError, match="explicit consent"):
         manager.create([first["id"]], style, [model])
-    batch = wait_for(manager, manager.create([first["id"]], style, [model], consent=True, prompt_override="Keep the book square to camera.")["batch_id"])
+    batch = wait_for(manager, manager.create([first["id"]], style, [model], consent=True, prompt_override="Keep the book square to camera.", content_direction="Add one cracked corner.")["batch_id"])
     item = batch["items"][0]
     assert item["generation"]["execution_mode"] == "live"
     assert item["generation_stages"] == []
     assert item["generation_request"]["reference_order"][0]["role"] == "identity"
     assert item["generation_request"]["reference_order"][1]["role"] == "generation-reference"
     assert item["generation_request"]["target_examples_excluded"] is True
-    assert item["generation_request"]["instruction"] == "Keep the book square to camera."
+    assert item["generation_request"]["instruction"] == "Keep the book square to camera.\n\nAdditional content direction from the user: Add one cracked corner."
+    assert item["content_direction"] == "Add one cracked corner."
+    assert item["render_metadata"]["framing"]["resolved"]["mode"] == "subject-aware"
     assert item["master_url"] and item["art_url"] and item["card_url"]
     assert not item["normalised_url"] and batch["paid_calls"] == 1
     assert batch["generation_authorization"]["consent"] is True

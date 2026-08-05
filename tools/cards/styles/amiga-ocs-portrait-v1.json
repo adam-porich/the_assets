@@ -46,6 +46,7 @@
   },
   "renderer": {
     "driver_id": "amiga-ocs",
+    "driver_version": 2,
     "logical_art_size": [168, 138],
     "output_scale": 2,
     "palette_space": "Amiga OCS 12-bit RGB",

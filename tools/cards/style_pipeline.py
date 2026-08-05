@@ -239,7 +239,7 @@ class StyleStore:
             active = self.raw_version(str(active_id))
             checked_in = load_checked_in_style()
             active_reference_checksums = {asset.get("checksum_sha256") for asset in active.get("reference_pack", {}).get("assets", [])}
-            if active.get("schema_version") == 3 and active.get("identity", {}).get("pipeline_id") == FACE_FREE_PIPELINE_ID and FACE_FREE_REFERENCE_CHECKSUM in active_reference_checksums and active["generation"].get("model_id") not in SIMULATION_MODEL_IDS and active["generation"].get("execution_mode") != "simulation":
+            if active.get("schema_version") == 3 and active.get("identity", {}).get("pipeline_id") == FACE_FREE_PIPELINE_ID and FACE_FREE_REFERENCE_CHECKSUM in active_reference_checksums and int(active.get("renderer", {}).get("driver_version", 1)) >= 2 and active["generation"].get("model_id") not in SIMULATION_MODEL_IDS and active["generation"].get("execution_mode") != "simulation":
                 return self.payload(active)
             expected_checksum = style_checksum(checked_in)
             matching_version = next((entry for entry in index.get("versions", []) if entry.get("checksum_sha256") == expected_checksum and str(entry.get("style_version_id")) != str(active_id)), None)

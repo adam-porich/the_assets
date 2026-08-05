@@ -22,9 +22,10 @@ image generation. Runtime data is stored in the ignored `portrait-library/`.
 ### Inputs
 
 Upload an image or choose a Pexels result to open the preparation dialog. The
-dialog shows the original beside a normalized preview and lets you adjust one
-normalization prompt and quality. `Normalize preview` is the paid action; `OK`
-accepts the displayed result without another call. Only accepted Inputs are
+dialog shows the original beside a prepared preview. The default `Preserve`
+mode only scales and pads the original pixels and is free; `Reconstruct` enables
+the paid generative cleanup prompt and quality. `OK` accepts the displayed
+result without another call. Only accepted Inputs are
 available to Pipeline and Candidates. Clicking an existing Input reopens it for
 inspection or replacement.
 
@@ -38,7 +39,8 @@ to three accepted Inputs and cost one provider call per Input.
 ### Candidates
 
 Each Input has a pack showing its three newest accepted cards. `Generate new`
-opens a preparation dialog where you choose the pipeline, adjust its prompt,
+opens a preparation dialog where you choose the pipeline, add an optional
+content direction while its style prompt stays locked,
 generate a preview, and rerun until the result is worth accepting. Only `OK ·
 Add to pack` promotes that preview into the pack. Older accepted candidates
 remain stored when they scroll out. Open a
