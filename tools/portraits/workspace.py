@@ -14,12 +14,11 @@ from typing import Any, Callable, Iterator
 from PIL import Image
 
 
-WORKSPACE_VERSION = 1
+WORKSPACE_VERSION = 2
 WORKSPACE_FILENAME = "workspace.json"
 DEFAULT_WORKSPACE = {
   "version": WORKSPACE_VERSION,
-  "sources": [],
-  "benchmark_source_ids": [],
+  "inputs": [],
   "references": [],
 }
 BUNDLED_REFERENCE_DIR = Path(__file__).parent / "assets" / "estate-card-v1"
@@ -66,7 +65,7 @@ class WorkspaceStore:
 
     def ensure(self) -> None:
         with self._lock:
-            for directory in ("sources", "references", "styles", "production", "approvals", "downloads"):
+            for directory in ("inputs", "staging", "references", "styles", "production", "approvals", "downloads"):
                 (self.root / directory).mkdir(parents=True, exist_ok=True)
             if not self.workspace_path.exists():
                 self._atomic_json(self.workspace_path, _clone_default())
@@ -76,17 +75,12 @@ class WorkspaceStore:
             raise WorkspaceError(f"{WORKSPACE_FILENAME} must use workspace version {WORKSPACE_VERSION}")
         normalized = _clone_default()
         normalized.update(data)
-        for key in ("sources", "benchmark_source_ids", "references"):
+        for key in ("inputs", "references"):
             if not isinstance(normalized.get(key), list):
                 raise WorkspaceError(f"{key} must be a list")
-        source_values = [str(item.get("id")) for item in normalized["sources"]]
-        if len(source_values) != len(set(source_values)):
-            raise WorkspaceError("sources must have unique IDs")
-        source_ids = set(source_values)
-        if len(normalized["benchmark_source_ids"]) != len(set(map(str, normalized["benchmark_source_ids"]))):
-            raise WorkspaceError("the saved source selection contains duplicate IDs")
-        if any(str(item) not in source_ids for item in normalized["benchmark_source_ids"]):
-            raise WorkspaceError("the saved source selection contains an unknown source")
+        input_values = [str(item.get("id")) for item in normalized["inputs"]]
+        if len(input_values) != len(set(input_values)):
+            raise WorkspaceError("inputs must have unique IDs")
         reference_values = [str(item.get("id")) for item in normalized["references"]]
         if len(reference_values) != len(set(reference_values)):
             raise WorkspaceError("references must have unique IDs")
@@ -168,8 +162,9 @@ class WorkspaceStore:
         except Exception as exc:
             raise WorkspaceError(f"Uploaded file is not a readable image: {exc}") from exc
 
-    def source_payload(self, source: dict[str, Any]) -> dict[str, Any]:
-        return {**source, "image_url": self.asset_url(source.get("relative_path"))}
+    def input_payload(self, item: dict[str, Any]) -> dict[str, Any]:
+        accepted = item.get("accepted_normalisation") or {}
+        return {**item, "original_url": self.asset_url(item.get("original_path")), "image_url": self.asset_url(accepted.get("relative_path"))}
 
     def reference_payload(self, reference: dict[str, Any]) -> dict[str, Any]:
         return {**reference, "image_url": self.asset_url(reference.get("relative_path"))}
@@ -178,8 +173,7 @@ class WorkspaceStore:
         data = self.read()
         return {
             "version": data["version"],
-            "sources": [self.source_payload(item) for item in data["sources"]],
-            "benchmark_source_ids": list(data["benchmark_source_ids"]),
+            "inputs": [self.input_payload(item) for item in data["inputs"] if item.get("accepted_normalisation")],
             "references": [self.reference_payload(item) for item in data["references"]],
             "links": {"production": "api/production", "styles": "api/styles/bootstrap"},
         }
@@ -221,8 +215,8 @@ class WorkspaceStore:
             return [reference_id for reference_id, _, _ in BUNDLED_REFERENCES]
 
     def add_image_record(self, kind: str, label: str, original_name: str, content: bytes, content_type: str | None = None) -> dict[str, Any]:
-        if kind not in {"source", "reference"}:
-            raise WorkspaceError("image kind must be source or reference")
+        if kind not in {"input", "reference"}:
+            raise WorkspaceError("image kind must be input or reference")
         if not content:
             raise WorkspaceError("image upload is empty")
         if len(content) > 20 * 1024 * 1024:
@@ -233,7 +227,7 @@ class WorkspaceStore:
         suffix = Path(original_name or "upload.png").suffix.lower()
         if suffix not in {".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp", ".tif", ".tiff"}:
             suffix = ".png"
-        directory = "sources" if kind == "source" else "references"
+        directory = "staging" if kind == "input" else "references"
         relative = Path(directory) / f"{item_id}{suffix}"
         path = self.absolute_path(relative)
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -246,8 +240,8 @@ class WorkspaceStore:
         digest = checksum(path)
         existing = next(
             (
-                item for item in self.read()["sources" if kind == "source" else "references"]
-                if item.get("checksum_sha256") == digest
+                item for item in self.read()["inputs" if kind == "input" else "references"]
+                if item.get("original_checksum_sha256", item.get("checksum_sha256")) == digest
             ),
             None,
         )
@@ -257,16 +251,16 @@ class WorkspaceStore:
         record: dict[str, Any] = {
             "id": item_id,
             "label": label.strip() or Path(original_name or item_id).stem,
-            "relative_path": relative.as_posix(),
+            **({"original_path": relative.as_posix(), "status": "pending"} if kind == "input" else {"relative_path": relative.as_posix()}),
             "dimensions": dimensions,
             "created_at": now_iso(),
             "original_filename": Path(original_name or item_id).name,
-            "checksum_sha256": digest,
+            **({"original_checksum_sha256": digest, "normalisation_attempts": [], "accepted_normalisation": None} if kind == "input" else {"checksum_sha256": digest}),
         }
-        if kind == "source":
+        if kind == "input":
             record["provenance"] = {"kind": "upload", "content_type": content_type or mimetypes.guess_type(original_name)[0], "format": image_format}
         def add_record(data: dict[str, Any]) -> None:
-            collection = data["sources" if kind == "source" else "references"]
+            collection = data["inputs" if kind == "input" else "references"]
             if kind == "reference":
                 record["position"] = len(collection)
             collection.append(record)

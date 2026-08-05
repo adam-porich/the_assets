@@ -33,6 +33,7 @@ from tools.portraits.generation import (
     validate_request,
 )
 from tools.portraits.production import CardProductionManager
+from tools.portraits.normalisation import InputNormalisationManager
 from tools.portraits.server import _cards
 from tools.portraits.workspace import WorkspaceError, WorkspaceStore
 
@@ -51,7 +52,10 @@ def source(store: WorkspaceStore, name: str = "portrait") -> dict:
             image = opened.convert("RGB")
             pixel = image.getpixel((0, 0)); image.putpixel((0, 0), (pixel[0], pixel[1], (pixel[2] + sum(ord(char) for char in name)) % 256))
             buffer = BytesIO(); image.save(buffer, format="PNG"); content = buffer.getvalue()
-    return store.add_image_record("source", name, f"{name}.png", content, "image/png")
+    record = store.add_image_record("input", name, f"{name}.png", content, "image/png")
+    accepted = {"id": f"accepted-{record['id']}", "status": "ready", "relative_path": record["original_path"], "checksum_sha256": record["original_checksum_sha256"], "prompt": "test normalisation", "quality": "low", "model_id": simulation_model()["id"]}
+    store.mutate(lambda data: next(item for item in data["inputs"] if item["id"] == record["id"]).update({"status": "ready", "accepted_normalisation": accepted}))
+    return {**record, "status": "ready", "accepted_normalisation": accepted}
 
 
 def wait_for(manager: CardProductionManager, batch_id: str) -> dict:
@@ -70,14 +74,33 @@ def simulation_trial_style(styles: StyleStore) -> dict:
     return validate_style(style)
 
 
+def test_input_normalisation_requires_preview_then_accepts_it(tmp_path: Path) -> None:
+    store = WorkspaceStore(tmp_path / "library")
+    content = (ASSETS / "generation-reference-01.png").read_bytes()
+    pending = store.add_image_record("input", "Book", "book.png", content, "image/png")
+    manager = InputNormalisationManager(store, lambda mode, capabilities: FakeGenerationAdapter(capabilities))
+    started = manager.start(pending["id"], "Preserve the exact object.", "low", simulation_model(), consent=False)
+    attempt_id = started["normalisation_attempts"][-1]["id"]
+    for _ in range(200):
+        current = manager.get(pending["id"])
+        if current["normalisation_attempts"][-1]["status"] not in {"queued", "running"}:
+            break
+        time.sleep(0.02)
+    assert current["status"] == "pending"
+    assert current["normalisation_attempts"][-1]["status"] == "ready"
+    accepted = manager.accept(pending["id"], attempt_id)
+    assert accepted["status"] == "ready"
+    assert accepted["image_url"] and accepted["accepted_normalisation"]["prompt"] == "Preserve the exact object."
+
+
 def test_style_schema_checksum_store_and_asset_snapshots(tmp_path: Path) -> None:
     store = WorkspaceStore(tmp_path / "library")
     styles = StyleStore(store)
     active = styles.active()
-    assert active["schema_version"] == 2
-    prompts = " ".join(stage["prompt"] for stage in active["generation"]["stages"].values()).lower()
-    assert "head-and-shoulders" not in prompts and "redraw the person" not in prompts
-    assert "subject category" in prompts and "sole source of content" in prompts
+    assert active["schema_version"] == 3
+    prompt = active["generation"]["prompt"].lower()
+    assert "head-and-shoulders" not in prompt and "redraw the person" not in prompt
+    assert "sole source of content" in prompt
     assert active["identity"]["style_version_id"]
     assert active["identity"]["state"] == "locked"
     assert style_checksum(active) == active["checksums"]["style_sha256"]
@@ -127,7 +150,7 @@ def test_one_universal_pipeline_uses_the_subject_neutral_reference(tmp_path: Pat
     assert [pipeline["active"] for pipeline in pipelines] == [True]
     reference = next(asset["checksum_sha256"] for asset in pipelines[0]["style"]["reference_pack"]["assets"] if asset["role"] == "generation-reference")
     assert reference == FACE_FREE_REFERENCE_CHECKSUM
-    assert pipelines[0]["style"]["schema_version"] == 2
+    assert pipelines[0]["style"]["schema_version"] == 3
 
 
 def test_amiga_registered_engine_is_deterministic_and_matches_golden() -> None:
@@ -171,7 +194,7 @@ def test_production_is_one_integrated_operation_and_excludes_target(tmp_path: Pa
     assert result["status"] == "ready"
     assert manager.list()[0]["selected_source_ids"] == [first["id"], second["id"]]
     assert [item["status"] for item in result["items"]] == ["ready", "ready"]
-    assert result["requested_paid_calls"] == 4
+    assert result["requested_paid_calls"] == 2
     assert all(item["card_url"] and item["art_url"] for item in result["items"])
     assert all(reference["role"] != "target-example" for item in result["items"] for reference in item["reference_stack"])
     assert calls == [simulation_model()["id"]]
@@ -291,13 +314,12 @@ def test_live_provenance_and_consent_use_semantic_fake_without_provider_call(tmp
     batch = wait_for(manager, manager.create([first["id"]], style, [model], consent=True)["batch_id"])
     item = batch["items"][0]
     assert item["generation"]["execution_mode"] == "live"
-    assert [stage["stage"] for stage in item["generation_stages"]] == ["normalise", "stylise"]
-    assert item["generation_stages"][0]["request"]["reference_order"][0]["role"] == "source"
-    assert item["generation_request"]["reference_order"][0]["role"] == "normalised"
+    assert item["generation_stages"] == []
+    assert item["generation_request"]["reference_order"][0]["role"] == "identity"
     assert item["generation_request"]["reference_order"][1]["role"] == "generation-reference"
     assert item["generation_request"]["target_examples_excluded"] is True
     assert item["master_url"] and item["art_url"] and item["card_url"]
-    assert item["normalised_url"] and batch["paid_calls"] == 2
+    assert not item["normalised_url"] and batch["paid_calls"] == 1
     assert batch["generation_authorization"]["consent"] is True
     candidate = _cards(manager)[0]
     assert candidate["pipeline_id"] == FACE_FREE_PIPELINE_ID
@@ -368,20 +390,20 @@ class FailStyliseOnceAdapter(SemanticFakeGenerationAdapter):
         return super().generate(request)
 
 
-def test_retry_reuses_a_completed_normalised_stage(tmp_path: Path) -> None:
+def test_retry_reuses_the_accepted_input_and_costs_one_new_call(tmp_path: Path) -> None:
     store = WorkspaceStore(tmp_path / "library")
     styles = StyleStore(store)
     item = source(store, "checkpoint")
     state = {"failed": False}
     manager = CardProductionManager(store, styles, lambda mode, capabilities: FailStyliseOnceAdapter(capabilities, state))
     failed = wait_for(manager, manager.create([item["id"]], simulation_trial_style(styles), [simulation_model()], purpose="style-trial")["batch_id"])
-    assert failed["status"] == "failed" and failed["items"][0]["normalised_url"]
-    assert failed["paid_calls"] == 1
+    assert failed["status"] == "failed" and not failed["items"][0]["normalised_url"]
+    assert failed["paid_calls"] == 0
     retried = wait_for(manager, manager.retry_failed(failed["batch_id"])["batch_id"])
     latest = manager.latest_items(retried)[0]
-    assert retried["status"] == "ready" and retried["requested_paid_calls"] == 3
-    assert latest["generation_stages"][0]["result"]["reused"] is True
-    assert retried["paid_calls"] == 2
+    assert retried["status"] == "ready" and retried["requested_paid_calls"] == 2
+    assert latest["generation_stages"] == []
+    assert retried["paid_calls"] == 1
 
 
 def test_failed_retry_and_try_another_keep_attempt_provenance(tmp_path: Path) -> None:

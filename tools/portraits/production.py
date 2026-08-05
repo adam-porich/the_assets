@@ -53,6 +53,10 @@ class CardProductionManager:
         self._active_batch: str | None = None
         self.mark_interrupted()
 
+    @property
+    def is_active(self) -> bool:
+        return self._active_batch is not None
+
     def _path(self, batch_id: str) -> Path:
         if not batch_id or "/" in batch_id or "\\" in batch_id or ".." in batch_id:
             raise WorkspaceError("unsafe production batch ID")
@@ -129,10 +133,10 @@ class CardProductionManager:
             if self._active_batch:
                 raise ValueError("one paid generation batch is already active; wait for it to finish")
             workspace = self.store.read()
-            sources = {str(item["id"]): item for item in workspace.get("sources", [])}
+            sources = {str(item["id"]): item for item in workspace.get("inputs", []) if item.get("accepted_normalisation")}
             source_ids = [str(item) for item in source_ids]
             if any(source_id not in sources for source_id in source_ids):
-                raise ValueError("selected source IDs contain a missing source")
+                raise ValueError("selected input IDs contain a missing or unprepared Input")
             model, capabilities, mapping, generation_refs = self._validate_start(style, source_ids, models, purpose)
             if capabilities.execution_mode == "live" and not consent:
                 raise ValueError("explicit consent is required before starting paid image generation")
@@ -141,7 +145,7 @@ class CardProductionManager:
             source_snapshots: list[dict[str, Any]] = []
             for source_id in source_ids:
                 source = sources[source_id]
-                source_path = self.store.absolute_path(str(source.get("relative_path") or ""))
+                source_path = self.store.absolute_path(str((source.get("accepted_normalisation") or {}).get("relative_path") or ""))
                 destination = batch_dir / "inputs" / "sources" / f"{source_id}{source_path.suffix.lower() or '.png'}"
                 self._copy(source_path, destination)
                 source_snapshots.append({**copy.deepcopy(source), "input_path": destination.relative_to(self.store.root).as_posix(), "input_checksum_sha256": checksum(destination)})
@@ -232,13 +236,13 @@ class CardProductionManager:
                     else:
                         request = GenerationRequest(
                             identity_image=source_path, style_images=reference_paths,
-                            instruction=generation_instruction(generation["direction"]),
+                            instruction=str(generation["prompt"]) if int(record["style_snapshot"].get("schema_version", 1)) == 3 else generation_instruction(generation["direction"]),
                             negative_prompt=str(generation.get("avoid") or ""), model=str(generation["model_id"]), quality=str(generation["quality"]),
                             seed=stable_seed(str(item["item_id"])), effective_aspect_ratio=str(record["backend_mapping"]["effective_aspect_ratio"]),
                             output_path=self.store.absolute_path(master_relative),
                             reference_roles=tuple(["generation-reference"] * len(generation_refs)),
                         )
-                        item["generation_request"] = {"instruction": request.instruction, "model": request.model, "quality": request.quality, "seed": request.seed, "reference_order": [{"order": 0, "role": "identity", "source_id": item["source_id"]}, *[{"order": index, "role": "generation-reference", "reference_id": reference["id"]} for index, reference in enumerate(generation_refs, 1)]]}
+                        item["generation_request"] = {"instruction": request.instruction, "model": request.model, "quality": request.quality, "seed": request.seed, "target_examples_excluded": True, "reference_order": [{"order": 0, "role": "identity", "source_id": item["source_id"]}, *[{"order": index, "role": "generation-reference", "reference_id": reference["id"]} for index, reference in enumerate(generation_refs, 1)]]}
                         result = adapter.generate(request)
                         item.update({"master_path": master_relative.as_posix(), "master_checksum_sha256": checksum(self.store.absolute_path(master_relative)), "generation": {"backend": result.backend, "model": result.model, "execution_mode": capabilities.execution_mode, "seed": result.seed, "elapsed_seconds": result.elapsed_seconds, "dimensions": result.dimensions, "effective_aspect_ratio": result.effective_aspect_ratio, "usage": result.usage, "cost_usd": result.cost_usd}, "usage": result.usage, "cost_usd": result.cost_usd})
                     item.update({"status": "processing", "phase": "rendering"}); self._write(record)

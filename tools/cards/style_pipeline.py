@@ -22,7 +22,7 @@ PIPELINE_LABELS = {
     PORTRAIT_REFERENCE_PIPELINE_ID: "Portrait Style Reference",
 }
 PIPELINE_DESCRIPTIONS = {
-    FACE_FREE_PIPELINE_ID: "Normalises any subject, then applies the face-free Amiga style board.",
+    FACE_FREE_PIPELINE_ID: "Applies the face-free Amiga style board to a prepared Input.",
     PORTRAIT_REFERENCE_PIPELINE_ID: "Uses the original portrait reference from historical Pipelines 01/02.",
 }
 FACE_FREE_REFERENCE_CHECKSUM = "ad0a1277a27a61dee615652f6fd81fa163a6dd44d5db378d9ed745faae39085c"
@@ -73,8 +73,8 @@ def style_checksum(style: dict[str, Any]) -> str:
 
 def validate_style(style: dict[str, Any], *, require_locked: bool = False) -> dict[str, Any]:
     schema_version = int(style.get("schema_version", 0)) if isinstance(style, dict) else 0
-    if schema_version not in {1, 2}:
-        raise ValueError("style pipeline schema_version 1 or 2 is required")
+    if schema_version not in {1, 2, 3}:
+        raise ValueError("style pipeline schema_version 1, 2, or 3 is required")
     identity = style.get("identity")
     if not isinstance(identity, dict):
         raise ValueError("style identity is required")
@@ -107,10 +107,12 @@ def validate_style(style: dict[str, Any], *, require_locked: bool = False) -> di
         direction = generation.get("direction")
         if not isinstance(direction, dict) or not any(str(value).strip() for value in direction.values()):
             raise ValueError("generation.direction must contain text")
-    else:
+    elif schema_version == 2:
         stages = generation.get("stages")
         if not isinstance(stages, dict) or any(not str((stages.get(name) or {}).get("prompt") or "").strip() for name in ("normalise", "stylise")):
             raise ValueError("generation.stages must contain normalise and stylise prompts")
+    elif not str(generation.get("prompt") or "").strip():
+        raise ValueError("generation.prompt is required")
     references = style.get("reference_pack", {}).get("assets")
     if not isinstance(references, list) or not references:
         raise ValueError("style reference_pack.assets is required")
@@ -233,7 +235,7 @@ class StyleStore:
         if active_id and self._style_path(str(active_id)).is_file():
             active = self.raw_version(str(active_id))
             checked_in = load_checked_in_style()
-            if active.get("schema_version") == 2 and active.get("identity", {}).get("pipeline_id") == FACE_FREE_PIPELINE_ID and active["generation"].get("model_id") not in SIMULATION_MODEL_IDS and active["generation"].get("execution_mode") != "simulation":
+            if active.get("schema_version") == 3 and active.get("identity", {}).get("pipeline_id") == FACE_FREE_PIPELINE_ID and active["generation"].get("model_id") not in SIMULATION_MODEL_IDS and active["generation"].get("execution_mode") != "simulation":
                 return self.payload(active)
             expected_checksum = style_checksum(checked_in)
             matching_version = next((entry for entry in index.get("versions", []) if entry.get("checksum_sha256") == expected_checksum and str(entry.get("style_version_id")) != str(active_id)), None)

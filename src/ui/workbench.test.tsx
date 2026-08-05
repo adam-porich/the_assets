@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { App, readRoute } from "./App";
 import { api } from "./api";
 
-const style = { identity: { family_id: "amiga-ocs-portrait", pipeline_id: "face-free-style-board", style_version_id: "style-face-free", version: 2, state: "locked", label: "Face-free Style Board" }, generation: { model_id: "live-model", execution_mode: "live", quality: "low", direction: { identity_to_retain: "Portrait" }, avoid: "", requested_aspect_policy: "28:23", reference_limit: 9 }, reference_pack: { id: "pack", version: 1, assets: [{ id: "gen", label: "Face-free board", role: "generation-reference" as const, checksum_sha256: "gen", image_url: "/gen.png" }, { id: "target", label: "Target", role: "target-example" as const, checksum_sha256: "target", image_url: "/target.png" }] }, composition: { logical_art_size: [168, 138] as [number, number], default_framing: { zoom: 1, offset_x: 0, offset_y: 0 }, centering: [0.5, 0.44] as [number, number], requested_art_ratio: "28:23" }, renderer: { driver_id: "amiga-ocs", logical_art_size: [168, 138] as [number, number], output_scale: 2, palette_space: "Amiga", palette: ["#111111"], preprocess: {}, dither: { matrix: "bayer-4x4", strength: .62, edge_threshold: .09 } }, card_assembly: { driver_id: "amiga-ocs", logical_card_size: [210, 300] as [number, number], output_scale: 2, layout: {}, text: {} }, editor_descriptors: [], checksums: { style_sha256: "style-checksum" } };
+const style = { schema_version: 3, identity: { family_id: "amiga-ocs-portrait", pipeline_id: "face-free-style-board", style_version_id: "style-face-free", version: 3, state: "locked", label: "Face-free Style Board" }, generation: { model_id: "live-model", execution_mode: "live", quality: "low", prompt: "Apply only the visual language.", requested_aspect_policy: "28:23", reference_limit: 9 }, reference_pack: { id: "pack", version: 1, assets: [{ id: "gen", label: "Face-free board", role: "generation-reference" as const, checksum_sha256: "gen", image_url: "/gen.png" }, { id: "target", label: "Target", role: "target-example" as const, checksum_sha256: "target", image_url: "/target.png" }] }, composition: { logical_art_size: [168, 138] as [number, number], default_framing: { zoom: 1, offset_x: 0, offset_y: 0 }, centering: [0.5, 0.44] as [number, number], requested_art_ratio: "28:23" }, renderer: { driver_id: "amiga-ocs", logical_art_size: [168, 138] as [number, number], output_scale: 2, palette_space: "Amiga", palette: ["#111111"], preprocess: {}, dither: { matrix: "bayer-4x4", strength: .62, edge_threshold: .09 } }, card_assembly: { driver_id: "amiga-ocs", logical_card_size: [210, 300] as [number, number], output_scale: 2, layout: {}, text: {} }, editor_descriptors: [], checksums: { style_sha256: "style-checksum" } };
 const portraitStyle = { ...style, identity: { ...style.identity, pipeline_id: "portrait-style-reference", style_version_id: "style-portrait", version: 1, label: "Portrait Style Reference" }, reference_pack: { ...style.reference_pack, assets: [{ ...style.reference_pack.assets[0], id: "old-gen", label: "Original portrait style reference", checksum_sha256: "old-gen" }, style.reference_pack.assets[1]] }, checksums: { style_sha256: "portrait-checksum" } };
 const revisions = (id: string, checksum: string) => [{ style_version_id: id, checksum_sha256: checksum, created_at: "2026-08-01T00:00:00Z" }];
 const pipelines = [
@@ -13,7 +13,8 @@ const pipelines = [
 ];
 const versions = pipelines.map((pipeline) => ({ pipeline_id: pipeline.pipeline_id, style_version_id: pipeline.current_version_id, label: pipeline.label, version: pipeline.style.identity.version, checksum_sha256: pipeline.style.checksums.style_sha256, active: pipeline.active, created_at: "2026-08-01T00:00:00Z", execution_mode: "live" as const, model_id: "live-model", quality: "low", reference_count: 1, renderer_id: "amiga-ocs" }));
 const model = { id: "live-model", name: "Live image model", execution_mode: "live" as const, available: true, credentials_configured: true, max_input_references: 9, qualities: ["low"], aspect_ratios: ["5:4"], pricing: [{ cost_usd: 0.04 }] };
-const base = { workspace: { sources: [{ id: "source-1", label: "Ada", image_url: "/ada.png" }], benchmark_source_ids: ["source-1"] }, sources: [{ id: "source-1", label: "Ada", image_url: "/ada.png" }], selected_source_ids: ["source-1"], style: { active: style, active_pipeline_id: "face-free-style-board", pipelines, draft: null, versions, driver: { id: "amiga-ocs", label: "Amiga OCS", output: "420×600 final cards" } }, batches: [], cards: [], favorites: [], models: [model], integrations: { pexels: { configured: false }, openrouter: { configured: true } }, starter: { photo_ids: [] } };
+const input = { id: "source-1", label: "Ada", status: "ready" as const, image_url: "/ada.png", original_url: "/ada-original.png", accepted_normalisation: { id: "norm-1", status: "ready" as const, prompt: "Keep Ada", quality: "low" as const, model_id: "live-model", preview_url: "/ada.png" } };
+const base = { workspace: { inputs: [input] }, inputs: [input], style: { active: style, active_pipeline_id: "face-free-style-board", pipelines, draft: null, versions, driver: { id: "amiga-ocs", label: "Amiga OCS", output: "420×600 final cards" } }, batches: [], cards: [], favorites: [], models: [model], integrations: { pexels: { configured: false }, openrouter: { configured: true } }, starter: { photo_ids: [] }, normalisation: { default_prompt: "Preserve the exact subject.", default_quality: "low" as const, active: false } };
 
 function produced(overrides: Record<string, unknown> = {}) {
   return { item_id: "item-1", source_id: "source-1", source_label: "Ada", attempt_number: 1, lineage_id: "lineage", status: "ready" as const, source_url: "/ada.png", master_url: "/master.png", art_url: "/art.png", card_url: "/card.png", card_checksum_sha256: "card-checksum", render_revision: 1, render_revisions: [], framing: { zoom: 1, offset_x: 0, offset_y: 0 }, generation: { execution_mode: "live", model: "live-model" }, reference_stack: [], batch_id: "batch-1", batch_created_at: "2026-08-02T00:00:00Z", purpose: "card-production" as const, style_version_id: style.identity.style_version_id, style_checksum_sha256: "style-checksum", pipeline_id: "face-free-style-board", pipeline_label: "Face-free Style Board", pipeline_description: "Uses the face-free board.", pipeline_version: 2, favorite: false, favorited_at: null, ...overrides };
@@ -37,23 +38,21 @@ describe("pipeline workbench", () => {
     expect(readRoute()).toEqual({ view: "collection", id: undefined, itemId: undefined });
   });
 
-  it("surfaces the four-stage source-to-collection flow", async () => {
+  it("keeps only the simple top-level navigation", async () => {
     vi.spyOn(api, "bootstrap").mockResolvedValue(base as never);
     await act(async () => root.render(<App />));
-    expect(container.textContent).toContain("01 · inputs");
-    expect(container.textContent).toContain("02 · transform");
-    expect(container.textContent).toContain("03 · generate");
-    expect(container.textContent).toContain("04 · keep");
-    expect(container.textContent).toContain("Face-free Style Board");
+    expect(container.querySelectorAll('.app-header nav button')).toHaveLength(4);
+    expect(container.textContent).toContain("Inputs");
+    expect(container.querySelector(".pipeline-rail")).toBeFalsy();
   });
 
-  it("starts the active default pipeline from Sources", async () => {
+  it("opens an accepted Input in the preparation dialog", async () => {
     vi.spyOn(api, "bootstrap").mockResolvedValue(base as never);
-    vi.spyOn(api, "createProduction").mockResolvedValue({ batch: { batch_id: "batch-1" } } as never);
     await act(async () => root.render(<App />));
-    const run = [...container.querySelectorAll("button")].find((button) => button.textContent?.trim() === "Run 1 source");
-    await act(async () => run?.click());
-    expect(api.createProduction).toHaveBeenCalledWith(["source-1"], "face-free-style-board", true);
+    await act(async () => container.querySelector(".source-select")?.dispatchEvent(new MouseEvent("click", { bubbles: true })));
+    expect(container.querySelector('[role="dialog"]')).toBeTruthy();
+    expect(container.querySelector('img[alt="Original"]')).toBeTruthy();
+    expect(container.textContent).toContain("Normalize preview");
   });
 
   it("keeps only the newest three mixed-pipeline cards in each source pack", async () => {
@@ -68,25 +67,26 @@ describe("pipeline workbench", () => {
     expect(container.querySelectorAll(".candidate-pack .generation-card")).toHaveLength(3);
     expect(container.querySelector('img[src="/old-card.png"]')).toBeFalsy();
     expect(container.querySelector(".pack-source")).toBeFalsy();
-    expect(container.querySelector('.source-peek[aria-label^="Source: Ada"]')).toBeTruthy();
+    expect(container.querySelector('.source-peek[aria-label^="Input: Ada"]')).toBeTruthy();
     expect(container.textContent).toContain("1 older stored");
     expect(container.textContent?.toLowerCase()).not.toContain("baseline");
     expect(container.textContent?.toLowerCase()).not.toContain("strategy");
   });
 
-  it("puts the newest selected source pack first", async () => {
-    const older = { ...base.sources[0], created_at: "2026-08-01T00:00:00Z" };
-    const newest = { id: "source-2", label: "Book", image_url: "/book.png", created_at: "2026-08-05T00:00:00Z" };
-    vi.spyOn(api, "bootstrap").mockResolvedValue({ ...base, workspace: { ...base.workspace, sources: [older, newest] }, sources: [older, newest], selected_source_ids: [older.id, newest.id] } as never);
+  it("puts the newest accepted Input pack first", async () => {
+    const older = { ...base.inputs[0], created_at: "2026-08-01T00:00:00Z" };
+    const newest = { ...input, id: "source-2", label: "Book", image_url: "/book.png", created_at: "2026-08-05T00:00:00Z" };
+    vi.spyOn(api, "bootstrap").mockResolvedValue({ ...base, workspace: { inputs: [older, newest] }, inputs: [older, newest] } as never);
     await act(async () => { window.location.hash = "#candidates"; root.render(<App />); });
-    expect(container.querySelector(".candidate-pack .source-peek")?.getAttribute("aria-label")).toContain("Source: Book");
+    expect(container.querySelector(".candidate-pack .source-peek")?.getAttribute("aria-label")).toContain("Input: Book");
   });
 
-  it("pins imported search results into Candidates", async () => {
-    const request = vi.spyOn(globalThis, "fetch").mockResolvedValue({ ok: true, json: async () => ({ imported: 1 }) } as Response);
-    await api.importSources([{ id: "result-1", label: "Book", pexels_photo_id: 42, selected_image_url: "/book.png" }]);
+  it("imports a search result as a pending Input", async () => {
+    const request = vi.spyOn(globalThis, "fetch").mockResolvedValue({ ok: true, json: async () => ({ input: { id: "input-1" } }) } as Response);
+    await api.importInput({ id: "result-1", label: "Book", pexels_photo_id: 42, selected_image_url: "/book.png" });
     const body = JSON.parse(String(request.mock.calls[0][1]?.body));
-    expect(body.include_in_selection).toBe(true);
+    expect(body.candidate.pexels_photo_id).toBe(42);
+    expect(request.mock.calls[0][0]).toContain("/inputs/import");
   });
 
   it("shows an incoming card in its source pack while generation is active", async () => {
@@ -138,21 +138,22 @@ describe("pipeline workbench", () => {
     expect(container.textContent).toContain("Save to Collection");
   });
 
-  it("shows the normalised intermediate for two-stage candidates", async () => {
-    vi.spyOn(api, "bootstrap").mockResolvedValue({ ...base, cards: [produced({ normalised_url: "/normalised.png", generation_stages: [{ stage: "normalise" }, { stage: "stylise" }] })] } as never);
+  it("starts candidate inspection from the accepted Input", async () => {
+    vi.spyOn(api, "bootstrap").mockResolvedValue({ ...base, cards: [produced()] } as never);
     await act(async () => { window.location.hash = "#candidates/batch-1/item-1"; root.render(<App />); });
-    expect(container.querySelector('img[alt="Normalised source"]')?.getAttribute("src")).toBe("/normalised.png");
+    expect(container.querySelector('img[alt="Prepared Input"]')?.getAttribute("src")).toBe("/ada.png");
+    expect(container.querySelector('img[alt="Normalised source"]')).toBeFalsy();
   });
 
   it("exposes editing on the selected real pipeline", async () => {
-    const draft = { ...style, schema_version: 2, identity: { ...style.identity, state: "draft" as const, style_version_id: "draft-style" }, generation: { ...style.generation, stages: { normalise: { prompt: "Preserve the source content." }, stylise: { prompt: "Apply only the visual language." } } }, provenance: { derived_from: style.identity.style_version_id } };
+    const draft = { ...style, schema_version: 3, identity: { ...style.identity, state: "draft" as const, style_version_id: "draft-style" }, generation: { ...style.generation, prompt: "Apply only the visual language." }, provenance: { derived_from: style.identity.style_version_id } };
     vi.spyOn(api, "bootstrap").mockResolvedValue({ ...base, style: { ...base.style, draft } } as never);
     vi.spyOn(api, "updateDraft").mockResolvedValue({ style: draft } as never);
     window.location.hash = "#pipelines/face-free-style-board";
     await act(async () => root.render(<App />));
     expect(container.textContent).toContain("Generation model");
-    expect(container.textContent).toContain("Normalise prompt");
-    expect(container.textContent).toContain("Stylise prompt");
+    expect(container.textContent).toContain("Style prompt");
+    expect(container.textContent).not.toContain("Normalise prompt");
     expect(container.textContent).not.toContain("identity to retain");
     expect(container.textContent).toContain("Amiga renderer and card assembly");
     expect(container.textContent).toContain("1 saved revision");

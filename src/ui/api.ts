@@ -1,4 +1,4 @@
-import type { Bootstrap, Framing, PipelineStyle, ProductionBatch, SearchResult, Source, StyleBootstrap } from "./types";
+import type { Bootstrap, Framing, InputAsset, PipelineStyle, ProductionBatch, SearchResult, StyleBootstrap } from "./types";
 
 const apiRoot = `${import.meta.env.BASE_URL.replace(/\/$/, "")}/api`;
 
@@ -13,12 +13,13 @@ const json = (method: string, body: unknown): RequestInit => ({ method, headers:
 export const api = {
   bootstrap: () => request<Bootstrap>("/workspace"),
   styleBootstrap: () => request<{ style: StyleBootstrap }>("/styles/bootstrap"),
-  searchSources: (query: string, count = 12, page = 1) => request<{ results: SearchResult[]; page: number; has_more: boolean }>("/sources/search", json("POST", { query, count, page })),
-  importSources: (candidates: SearchResult[]) => request<{ workspace: Bootstrap["workspace"]; imported: number; deduplicated: number; failed: number }>("/sources/import-bulk", json("POST", { candidates, include_in_selection: true })),
-  loadStarterSources: () => request<{ workspace: Bootstrap["workspace"] }>("/sources/starter", json("POST", {})),
-  uploadSource: (file: File, label: string) => { const form = new FormData(); form.append("label", label); form.append("file", file); return request<{ workspace: Bootstrap["workspace"]; record: Source }>("/sources/upload", { method: "POST", body: form }); },
-  updateSelection: (source_ids: string[]) => request<{ workspace: Bootstrap["workspace"]; selected_source_ids: string[] }>("/sources/selection", json("POST", { source_ids })),
-  deleteSource: (id: string) => request<{ workspace: Bootstrap["workspace"] }>(`/sources/${id}`, json("DELETE", { confirm: true })),
+  searchInputs: (query: string, count = 12, page = 1) => request<{ results: SearchResult[]; page: number; has_more: boolean }>("/inputs/search", json("POST", { query, count, page })),
+  importInput: (candidate: SearchResult) => request<{ workspace: Bootstrap["workspace"]; input: InputAsset }>("/inputs/import", json("POST", { candidate })),
+  uploadInput: (file: File, label: string) => { const form = new FormData(); form.append("label", label); form.append("file", file); return request<{ workspace: Bootstrap["workspace"]; input: InputAsset }>("/inputs/upload", { method: "POST", body: form }); },
+  getInput: (id: string) => request<{ input: InputAsset }>(`/inputs/${id}`),
+  normaliseInput: (id: string, prompt: string, quality: string, consent = false) => request<{ input: InputAsset }>(`/inputs/${id}/normalisations`, json("POST", { prompt, quality, consent })),
+  acceptInput: (id: string, attempt_id: string) => request<{ workspace: Bootstrap["workspace"]; input: InputAsset }>(`/inputs/${id}/accept`, json("POST", { attempt_id })),
+  deleteInput: (id: string) => request<{ workspace: Bootstrap["workspace"] }>(`/inputs/${id}`, json("DELETE", { confirm: true })),
   createProduction: (source_ids: string[], pipeline_id: string, consent = false) => request<{ batch: ProductionBatch }>("/production", json("POST", { source_ids, pipeline_id, consent })),
   listProduction: () => request<{ batches: Bootstrap["batches"] }>("/production"),
   getProduction: (id: string) => request<{ batch: ProductionBatch }>(`/production/${id}`),

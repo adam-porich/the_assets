@@ -1,16 +1,10 @@
 # Asset Workbench
 
-Asset Workbench turns selected source images into finished, pixel-native cards
-through one explicit path:
+Asset Workbench turns prepared image Inputs into pixel-native cards:
 
 ```text
-Sources → Pipeline → Candidates → Collection
+Inputs → Pipeline → Candidates → Collection
 ```
-
-The universal pipeline owns two plain prompts, ordered style references,
-framing, fixed-palette rendering, and card assembly as one versioned contract.
-Every source is first normalised without a style reference, then stylised using
-the saved neutral style board.
 
 ## Start it
 
@@ -20,112 +14,65 @@ npm install
 npm run dev
 ```
 
-The API creates an ignored `portrait-library/` workspace and materializes the
-checked-in live Amiga neutral-portrait style and its reference assets without
-making a generation call. Set `PEXELS_API_KEY` to enable Pexels search and
-starter imports, and configure `OPENROUTER_API_KEY` before live generation.
-The capability catalogue is resolved from OpenRouter image endpoints; a local
-simulation remains available only for free pipeline preview trials.
+Set `PEXELS_API_KEY` to enable image search and `OPENROUTER_API_KEY` for live
+image generation. Runtime data is stored in the ignored `portrait-library/`.
 
-## Browser surfaces
+## Workflow
 
-### Sources
+### Inputs
 
-Upload, search, inspect provenance, and select an ordered set of source images.
-The page keeps that identity set stable while pipelines change. It shows the
-active pipeline, exact call count, model, and available unit cost before a run.
-Generation starts immediately from the explicit run action.
+Upload an image or choose a Pexels result to open the preparation dialog. The
+dialog shows the original beside a normalized preview and lets you adjust one
+normalization prompt and quality. `Normalize preview` is the paid action; `OK`
+accepts the displayed result without another call. Only accepted Inputs are
+available to Pipeline and Candidates. Clicking an existing Input reopens it for
+inspection or replacement.
 
-### Pipelines
+### Pipeline
 
-The workbench has one live **Amiga Style Transfer** pipeline. Its first prompt
-normalises any subject while preserving its content; its second prompt applies
-the subject-neutral Face-free Style Board. Model and renderer settings remain
-available under Advanced. A working revision can run a three-source calibration
-cohort before it is saved.
+Pipelines now contain one style prompt. They combine a prepared Input with
+ordered style-only references, then pass the generated master through the
+deterministic Amiga renderer and card assembler. Pipeline trials can compare up
+to three accepted Inputs and cost one provider call per Input.
 
 ### Candidates
 
-New uploads and Pexels additions are pinned into Candidates automatically, with
-the newest source pack shown first so it is ready to generate immediately.
-Each source has a card pack showing its three newest production candidates.
-The Generate tile starts the two-stage pipeline and creates the next card for
-that source; when it is ready, it enters the pack and the oldest visible
-card rolls out. Older ready attempts remain retained, while draft calibration
-trials stay in the pipeline editor and simulation output is not presented as a
-candidate. Source identity and pack counts are available from the compact
-Source hover above Generate, leaving the tray width for larger cards. Open a
-candidate to inspect its source, normalised image, styled master, rendered art, final card, and
-provenance. While generation runs, a card-shaped loading slot holds the incoming
-card's place at the front of its source pack. **Generate again** adds an attempt
-immediately; framing changes rerender the existing master without another model
-call.
+Each Input has a pack showing its three newest cards. `Generate new` asks for a
+pipeline and makes one style-generation call. A loading card holds the incoming
+result's place; older candidates remain stored when they scroll out. Open a
+candidate to inspect the Input, styled master, rendered art, final card, and
+provenance. Framing changes do not call the image model.
 
 ### Collection
 
-Favorite any number of candidates to save them in Collection. Collection keeps
-references to the durable production assets, so it does not duplicate image
-files. Removing a favorite does not delete its candidate. If a favorite is
-reframed, Collection follows the candidate's latest render revision.
+Favorite any number of candidates into Collection. Removing a favorite does
+not delete its candidate, and rerendered framing is reflected automatically.
 
 ## Routes
 
-The refreshable hashes are `#sources`, `#pipelines`,
+The refreshable hashes are `#inputs`, `#pipelines`,
 `#pipelines/<pipeline-id>`, `#candidates`,
-`#candidates/<batch-id>/<item-id>`, and `#collection`. Old `#cards` hashes
-redirect to Candidates.
+`#candidates/<batch-id>/<item-id>`, and `#collection`. Legacy `#sources` and
+`#cards` hashes redirect to their current surfaces.
 
-## Pipeline and provenance
+## Provenance and storage
 
-The production order is:
-
-```text
-identity source + ordered generation references
-  → img2img master
-  → resolved framing
-  → master preparation
-  → OCS palette mapping with edge-aware 4×4 Bayer dithering
-  → 168×138 logical art
-  → exact 2× enlargement to 336×276 art
-  → pixel-native 210×300 logical card
-  → exact 2× enlargement to 420×600 card
-```
-
-The canonical master and final card are inspectable provenance artifacts.
-Every locked pipeline, batch, attempt, and render revision records the source
-snapshot, resolved instruction and negative instruction, ordered reference
-mapping, model/provider capabilities, execution mode, usage/cost, framing
-transform, and output checksums. Target examples are visible as renderer proof
-assets, but are structurally excluded from provider payloads.
-
-Live runs, comparison cohorts, retries, and **Generate again** are explicit button
-actions and do not add a second confirmation modal. The UI keeps model, call
-count, and known/unknown cost adjacent to the run action, and the API records
-authorization for live calls. Simulation output is labelled as a preview and
-cannot be used to save and activate a production pipeline.
-
-Workspace data is stored below `portrait-library/`:
+Accepted Inputs retain the original image, normalized image, prompts, model,
+quality, usage, costs, checksums, and timestamps. Production batches snapshot
+the accepted normalized bytes plus their pipeline and reference configuration.
+Target examples are renderer proofs and are never sent to providers.
 
 ```text
-styles/versions/<style-version>/style.json
-production/<batch>/batch.json
-production/<batch>/inputs/...
-production/<batch>/masters/...
-production/<batch>/renders/...
-favorites.json
-downloads/...
+portrait-library/inputs/<input-id>/...
+portrait-library/styles/versions/<style-version>/...
+portrait-library/production/<batch>/inputs/...
+portrait-library/production/<batch>/masters/...
+portrait-library/production/<batch>/renders/...
+portrait-library/favorites.json
 ```
 
-To reset local development, stop the server and delete only this repository's
-ignored `portrait-library/` directory, then restart the server. No reset is
-performed by normal workflow actions.
-
-The targeted migration used to remove superseded simulation pipelines and
-their batches is idempotent:
-
-```bash
-uv run python -m tools.portraits cleanup-workspace --input portrait-library
-```
+Only one image-generation operation runs at a time. Live normalization,
+production, trials, retries, and `Generate another` require explicit consent.
 
 ## Verification
 
@@ -136,16 +83,4 @@ npm run build
 git diff --check
 ```
 
-The historical Amiga renderer proof uses the registered production renderer
-and keeps the face-bearing stage reference out of live provider requests:
-
-```bash
-uv run python -m tools.cards.amiga_proof \
-  --input "stage-reference=tools/cards/assets/amiga-ocs-portrait-v1/generation-reference-01.png" \
-  --output-dir /tmp/amiga-proof
-```
-
-Future renderer families can register another driver implementing the typed
-renderer/assembler interface and its validated style sections. The current
-release registers only `amiga-ocs`; alternate raster families remain examples
-for that extension boundary, not user-facing options.
+The detailed contract is in [docs/portrait-workbench.md](docs/portrait-workbench.md).

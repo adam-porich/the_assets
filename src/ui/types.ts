@@ -1,15 +1,18 @@
-export type Source = {
-  id: string; label: string; dimensions?: [number, number]; image_url?: string;
-  relative_path?: string; checksum_sha256?: string; created_at?: string; provenance?: Record<string, unknown>;
+export type InputAsset = {
+  id: string; label: string; status: "pending" | "ready"; dimensions?: [number, number]; image_url?: string; original_url?: string;
+  original_path?: string; original_checksum_sha256?: string; created_at?: string; provenance?: Record<string, unknown>;
+  accepted_normalisation?: NormalisationAttempt | null; normalisation_attempts?: NormalisationAttempt[];
 };
 
-export type SearchResult = Source & { pexels_photo_id?: number; selected_image_url?: string; preview_url?: string; photographer?: string };
+export type NormalisationAttempt = { id: string; status: "queued" | "running" | "ready" | "failed"; prompt: string; quality: "low" | "medium" | "high"; model_id: string; preview_url?: string; checksum_sha256?: string; cost_usd?: number | null; elapsed_seconds?: number; error?: string | null };
+
+export type SearchResult = Partial<InputAsset> & { id: string; label: string; pexels_photo_id?: number; selected_image_url?: string; preview_url?: string; photographer?: string };
 
 export type StyleAsset = { id: string; asset_key?: string; label: string; role: "generation-reference" | "target-example"; checksum_sha256: string; image_url?: string; relative_path?: string };
 export type PipelineStyle = {
   schema_version: number;
   identity: { family_id: string; pipeline_id?: string; style_version_id: string; version: number; state: "draft" | "locked"; label: string };
-  generation: { model_id: string; execution_mode: "simulation" | "live"; quality: "low" | "medium" | "high"; stages?: { normalise: { prompt: string }; stylise: { prompt: string } }; direction?: Record<string, string>; avoid?: string; requested_aspect_policy: string; reference_limit: number };
+  generation: { model_id: string; execution_mode: "simulation" | "live"; quality: "low" | "medium" | "high"; prompt?: string; stages?: { normalise: { prompt: string }; stylise: { prompt: string } }; direction?: Record<string, string>; avoid?: string; requested_aspect_policy: string; reference_limit: number };
   reference_pack: { id: string; version: number; assets: StyleAsset[] };
   composition: { logical_art_size: [number, number]; default_framing: { zoom: number; offset_x: number; offset_y: number }; centering: [number, number]; requested_art_ratio: string };
   renderer: { driver_id: string; logical_art_size: [number, number]; output_scale: number; palette_space: string; palette: string[]; preprocess: Record<string, number>; dither: { matrix: string; strength: number; edge_threshold: number } };
@@ -48,4 +51,4 @@ export type ProducedCard = ProductionItem & {
   style_version_id: string; style_checksum_sha256: string; pipeline_id: string; pipeline_label: string; pipeline_description: string; pipeline_version?: number | null;
 };
 
-export type Bootstrap = { workspace: { sources: Source[]; benchmark_source_ids: string[] }; sources: Source[]; selected_source_ids: string[]; style: StyleBootstrap; batches: ProductionSummary[]; cards: ProducedCard[]; favorites: ProducedCard[]; models: Model[]; integrations: { pexels: { configured: boolean }; openrouter: { configured: boolean } }; starter: { photo_ids: number[] } };
+export type Bootstrap = { workspace: { inputs: InputAsset[] }; inputs: InputAsset[]; style: StyleBootstrap; batches: ProductionSummary[]; cards: ProducedCard[]; favorites: ProducedCard[]; models: Model[]; integrations: { pexels: { configured: boolean }; openrouter: { configured: boolean } }; starter: { photo_ids: number[] }; normalisation: { default_prompt: string; default_quality: "low" | "medium" | "high"; active: boolean } };

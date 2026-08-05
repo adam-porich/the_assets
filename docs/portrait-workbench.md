@@ -1,142 +1,50 @@
-# Source, pipeline, candidate, and collection workbench contract
+# Input, pipeline, candidate, and collection workbench contract
 
-The supported product surfaces are `Sources`, `Pipeline`, `Candidates`, and
-`Collection`. The everyday loop keeps a source cohort stable, runs the universal
-pipeline, compares its candidates, and favorites useful cards into Collection.
+The supported surfaces are `Inputs`, `Pipeline`, `Candidates`, and `Collection`.
+An original image is not available downstream until its normalization preview
+has been explicitly accepted as an Input.
 
-## Style pipeline
+## Input ingest
 
-`tools/cards/styles/amiga-ocs-portrait-v1.json` is the checked-in definition
-for the live neutral portrait style version. It contains these sections:
+Uploads and Pexels results begin as temporary pending records. The preparation
+dialog shows the original beside a generated preview and exposes one prompt and
+quality setting. Preview generation is asynchronous, records consent, model,
+usage, cost, prompt, seed, checksums, and timing, and never applies a style
+reference. `OK` promotes the completed preview without another provider call.
+Cancelling a new record deletes its staging files; reopening an accepted Input
+allows a replacement preview while preserving the currently accepted revision.
 
-- `identity`: stable family ID, opaque version ID, numeric display version,
-  label, and draft/locked state;
-- `generation`: shared model settings plus one Normalise prompt and one Stylise
-  prompt, requested aspect policy, and reference limit;
-- `reference_pack`: ordered assets with the closed role set
-  `generation-reference` and `target-example`;
-- `composition`: logical art size, normalized centering, and default framing;
-- `renderer`: driver ID, preprocess, palette, palette space, dither matrix and
-  thresholds;
-- `card_assembly`: driver ID, logical card size, output scale, and layout/text;
-- `editor_descriptors`: fields exposed by the Pipelines editor;
-- `provenance` and `checksums`: source information and canonical style/asset
-  checksums.
+Accepted records live below `inputs/<input-id>/`. The workspace exposes only
+accepted Inputs to later surfaces. Candidate and trial batches snapshot the
+accepted normalized bytes and checksum, so replacing an Input never changes an
+existing result.
 
-Stage one sends only the source and the Normalise prompt. Stage two sends the
-saved normalised image first, followed by style-only references and the Stylise
-prompt. The deterministic renderer then produces pixel effects and card
-assembly. Each card therefore requests two provider calls.
+## Style pipeline and production
 
-Validation rejects invalid dimensions, out-of-range framing/centering, bad
-palette colors, duplicate IDs, unknown roles, missing generation references,
-unsupported driver IDs, invalid model settings, and unsafe paths. The canonical
-checksum excludes mutable storage paths and state, then hashes the normalized
-configuration and every referenced asset checksum.
+Schema-v3 pipelines contain one style prompt, shared model settings, ordered
+`generation-reference` assets, composition, the deterministic Amiga renderer,
+and card assembly. Normalization is not a pipeline stage. A target example is a
+review-only renderer proof and is structurally excluded from model requests.
 
-`StyleStore` materializes the initial definition and a second portrait-reference
-pipeline under `styles/versions/<style-version-id>/references/`. A draft is
-stored separately. Locked files are never edited. Locking creates a new opaque
-revision inside its pipeline. The active pointer chooses the Sources default;
-it does not prevent the other saved pipeline from running. Existing batches
-keep their original snapshots.
+Each candidate or trial sends the accepted Input first and style references
+after it, making exactly one provider call. The resulting master is framed,
+mapped to the fixed 32-colour OCS palette, rendered at 168×138 logical pixels,
+and assembled into the 210×300 logical card before exact 2× enlargement.
+Retries and `Generate another` append immutable attempts; framing changes only
+rerender the saved master and make no provider call.
 
-## Renderer boundary
+The Pipeline editor exposes the single style prompt, generation model, quality,
+references, renderer settings, and a selectable comparison cohort of up to
+three accepted Inputs. Locked revisions and their checksums remain immutable.
 
-`tools/cards/registry.py` is keyed by renderer driver ID. A driver accepts a
-validated style snapshot, master image, label, and optional framing override,
-and returns logical art, enlarged art, a complete card, and render metadata.
-Only `amiga-ocs` is registered.
+## Storage and safety
 
-The Amiga driver uses the proven deterministic implementation in
-`tools/cards/amiga.py`: 168×138 logical art, 336×276 art, a shared 32-color
-OCS-compatible palette, edge-aware ordered 4×4 Bayer dithering, pixel-native
-210×300 logical cards, and exact 2× enlargement. Framing is resolved before
-preparation and quantisation. The active generation reference is the face-free
-`generation-reference-02.png` style board, so it contributes palette, matte
-planes, edges, and background treatment without introducing a second subject.
-The older face-bearing `generation-reference-01.png` remains only as a
-historical renderer-proof input; rendered through this path it is
-pixel-identical to `target-example-01.png`.
+Only one image-generation operation may run at a time across input preparation,
+production, and trials. Every live action requires explicit consent at its API
+boundary. Runtime data is stored in ignored `portrait-library/`; pipeline
+definitions and style references survive catalog resets. The 2026-08-05 reset
+was moved to `_archive/catalog-reset-20260805-2340` inside that workspace for
+local recovery.
 
-The target example is a review asset only. The production reference stack is
-always identity first, followed by saved generation references. A target role
-cannot enter a generation adapter request.
-
-## Production batches
-
-`CardProductionManager` stores both normal batches and pipeline comparison trials.
-Normal batches use `purpose: "card-production"` and the selected locked live pipeline;
-trials use `purpose: "style-trial"` and a draft snapshot. A batch snapshots
-source membership/order, source bytes, style configuration, reference bytes,
-model capabilities, provider mapping, and the expected call count before the
-worker starts.
-
-Each source begins with one immutable attempt and a stable lineage. Attempt
-stages are `queued`, `generating`, `processing`, `ready`, `failed`, and
-`interrupted`. A generated master is never ready until its render bundle and
-checksums have been atomically saved. `Try another` appends one attempt for one
-source. Retry appends attempts only for failed/interrupted sources. Successes
-are never overwritten. The workspace bootstrap exposes every ready attempt;
-historical generations are not reduced to one latest item per source.
-
-The generating phase is the neutral redraw; processing is deterministic Amiga
-rendering and card assembly. Every attempt snapshots the exact resolved
-request, including source-first/reference-after ordering and an explicit
-`target_examples_excluded` marker. Live paid actions keep an authorization
-record at the API boundary. In the browser the call count and unit cost sit
-beside the explicit run action, which starts without a second modal.
-
-Usage and provider response cost are the accounting source of truth. Unknown
-cost remains unknown; simulation reports zero. No paid action starts without an
-explicit request, and one active generation batch is allowed at a time.
-
-## Framing and retained compatibility data
-
-The default framing is stored on every attempt. A framing save reads the
-immutable master, resolves a bounded cover transform, and writes a new render
-revision without calling the generation adapter. Previous revisions remain on
-disk. The supported UI treats every ready render as a result and does not gate
-it with approval or bundling.
-
-Favorites are stored independently from production under `favorites.json` and
-keyed by batch and item ID. Any number of candidates may be favorited. A
-favorite resolves the candidate's latest render revision, and removing it does
-not delete production data. Historical approval records remain non-product
-compatibility data and are not migrated into Collection.
-
-## Pipelines
-
-The overview shows one top-level **Amiga Style Transfer** pipeline with result
-samples, its two prompts, generation reference, target example, palette, driver
-output, and checksum. Historical portrait-reference revisions remain readable
-for provenance but are no longer runnable. The diagram exposes both generation
-stages through assembled card.
-
-The calibration cohort is capped at three workspace sources and persists across
-trials. A trial is reviewable only when every cohort item reaches final-card
-`ready`. Trials remain in the pipeline editor and never appear as production
-candidates. Candidate packs keep the three newest cards for each source in view;
-each card retains its pipeline checksum and attempt number. The Generate tile
-starts the universal pipeline, and a compact hover above it exposes
-the source identity without reducing the card tray width. An active production
-run appears as a card-shaped loading slot at the front of the relevant source
-pack instead of a global progress banner. Simulation trials
-validate mechanics but cannot activate a production pipeline. Live activation rechecks
-that the draft checksum and referenced asset checksums still match the trial,
-then locks a new immutable version and moves the active pointer. It never
-regenerates existing cards.
-
-To add a future family, implement the typed registry driver, define and validate
-its renderer/card sections, provide descriptors and proof assets, and exercise
-the shared batch/trial contracts. No new family is user-selectable
-until its driver is registered and proven.
-
-## Historical data
-
-The explicit `cleanup-workspace` migration removes obsolete simulation output.
-The schema-v2 migration activates the universal pipeline while retaining locked
-legacy styles and their production assets for provenance. Ready live production attempts are exposed in
-a per-source pack when their source belongs to the current cohort. Older
-attempts remain durable but roll out of the visible pack; favorites remain
-visible in Collection regardless of the current source selection.
+Favorites reference durable candidate attempts and follow their latest render
+revision. Removing a favorite does not remove its production assets.

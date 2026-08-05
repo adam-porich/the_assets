@@ -17,7 +17,8 @@ import requests
 from tools.cards.style_pipeline import PIPELINE_DESCRIPTIONS, PIPELINE_LABELS, StyleStore, pipeline_id_for_style
 
 from .generation import DEFAULT_LIVE_MODEL_ID, fetch_model_catalogue, simulation_model, unavailable_live_model
-from .pexels import STARTER_PHOTO_IDS, get_pexels_photo, has_pexels_api_key, is_plausible_portrait, search_pexels
+from .normalisation import DEFAULT_NORMALISATION_PROMPT, InputNormalisationManager
+from .pexels import STARTER_PHOTO_IDS, get_pexels_photo, has_pexels_api_key, search_pexels
 from .production import CardProductionManager
 from .workspace import WorkspaceError, WorkspaceStore, new_id
 
@@ -78,23 +79,19 @@ def _import_source(store: WorkspaceStore, candidate: dict[str, Any], include_in_
     photo_id = candidate.get("pexels_photo_id")
     if photo_id is None:
         raise ValueError("Pexels result is missing its photo ID")
-    existing = next((source for source in store.read().get("sources", []) if str((source.get("provenance") or {}).get("photo_id")) == str(photo_id)), None)
+    existing = next((source for source in store.read().get("inputs", []) if str((source.get("provenance") or {}).get("photo_id")) == str(photo_id)), None)
     if existing:
-        if include_in_selection:
-            store.mutate(lambda data: data["benchmark_source_ids"].append(existing["id"]) if existing["id"] not in data["benchmark_source_ids"] else None)
-        return {"photo_id": photo_id, "status": "deduplicated", "source_id": existing["id"]}
+        return {"photo_id": photo_id, "status": "deduplicated", "input_id": existing["id"]}
     url = str(candidate.get("selected_image_url") or candidate.get("original_image_url") or "")
     if not url:
         raise ValueError("Pexels result has no downloadable image")
     response = requests.get(url, timeout=60); response.raise_for_status()
-    record = store.add_image_record("source", str(candidate.get("photographer") or f"Pexels {photo_id}"), f"pexels-{photo_id or new_id('source')}.jpg", response.content, response.headers.get("Content-Type"))
+    record = store.add_image_record("input", str(candidate.get("photographer") or f"Pexels {photo_id}"), f"pexels-{photo_id or new_id('input')}.jpg", response.content, response.headers.get("Content-Type"))
     def annotate(data: dict[str, Any]) -> None:
-        source = _find_item(data, "sources", str(record["id"]))
+        source = _find_item(data, "inputs", str(record["id"]))
         source["provenance"] = {"kind": "pexels", "photo_id": photo_id, "photographer": candidate.get("photographer"), "photographer_url": candidate.get("photographer_url"), "photo_page_url": candidate.get("photo_page_url"), "license_page": candidate.get("license_page"), "query": candidate.get("query"), "original_image_url": candidate.get("original_image_url")}
-        if include_in_selection and source["id"] not in data["benchmark_source_ids"]:
-            data["benchmark_source_ids"].append(source["id"])
     store.mutate(annotate)
-    return {"photo_id": photo_id, "status": "imported", "source_id": record["id"]}
+    return {"photo_id": photo_id, "status": "imported", "input_id": record["id"]}
 
 
 def bulk_import_sources(store: WorkspaceStore, candidates: list[dict[str, Any]], include_in_selection: bool = True) -> dict[str, Any]:
@@ -135,7 +132,7 @@ def _cards(manager: CardProductionManager) -> list[dict[str, Any]]:
     return sorted(cards, key=lambda item: (str(item.get("batch_created_at") or ""), int(item.get("attempt_number") or 0)), reverse=True)
 
 
-def _bootstrap(store: WorkspaceStore, styles: StyleStore, manager: CardProductionManager) -> dict[str, Any]:
+def _bootstrap(store: WorkspaceStore, styles: StyleStore, manager: CardProductionManager, normaliser: InputNormalisationManager) -> dict[str, Any]:
     styles.ensure_initial()
     workspace = store.payload()
     style = styles.bootstrap()
@@ -143,8 +140,7 @@ def _bootstrap(store: WorkspaceStore, styles: StyleStore, manager: CardProductio
     return {
         "ok": True,
         "workspace": workspace,
-        "sources": workspace["sources"],
-        "selected_source_ids": list(workspace.get("benchmark_source_ids", [])),
+        "inputs": workspace["inputs"],
         "style": style,
         "batches": manager.list(),
         "cards": cards,
@@ -152,6 +148,7 @@ def _bootstrap(store: WorkspaceStore, styles: StyleStore, manager: CardProductio
         "models": _models_for_store(store, styles),
         "integrations": {"pexels": {"configured": has_pexels_api_key()}, "openrouter": {"configured": bool(os.environ.get("OPENROUTER_API_KEY"))}},
         "starter": {"photo_ids": list(STARTER_PHOTO_IDS)},
+        "normalisation": {"default_prompt": DEFAULT_NORMALISATION_PROMPT, "default_quality": "low", "active": normaliser.is_active},
     }
 
 
@@ -159,6 +156,7 @@ class WorkbenchHandler(BaseHTTPRequestHandler):
     store: WorkspaceStore = WorkspaceStore()
     styles: StyleStore
     manager: CardProductionManager
+    normaliser: InputNormalisationManager
 
     def send_json(self, payload: Any, status: HTTPStatus = HTTPStatus.OK) -> None:
         data = json.dumps(payload, sort_keys=True).encode("utf-8")
@@ -180,7 +178,7 @@ class WorkbenchHandler(BaseHTTPRequestHandler):
         path = urlparse(self.path).path.rstrip("/")
         try:
             if path in {"", "/api/workspace"}:
-                self.send_json(_bootstrap(self.store, self.styles, self.manager)); return
+                self.send_json(_bootstrap(self.store, self.styles, self.manager, self.normaliser)); return
             if path == "/api/models":
                 self.send_json({"models": _models_for_store(self.store, self.styles)}); return
             if path == "/api/styles/bootstrap":
@@ -189,6 +187,9 @@ class WorkbenchHandler(BaseHTTPRequestHandler):
                 cards = _cards(self.manager); self.send_json({"favorites": [card for card in cards if card.get("favorite")]}); return
             if path == "/api/production":
                 self.send_json({"batches": self.manager.list()}); return
+            match = re.fullmatch(r"/api/inputs/([^/]+)", path)
+            if match:
+                self.send_json({"input": self.normaliser.get(match.group(1))}); return
             match = re.fullmatch(r"/api/production/([^/]+)", path)
             if match:
                 self.send_json({"batch": self.manager.get(match.group(1))}); return
@@ -212,16 +213,17 @@ class WorkbenchHandler(BaseHTTPRequestHandler):
     def do_POST(self) -> None:
         path = urlparse(self.path).path.rstrip("/")
         try:
-            if path == "/api/sources/search":
+            if path in {"/api/inputs/search", "/api/sources/search"}:
                 payload = self._json(); query = str(payload.get("query") or "").strip()
                 if not query: raise ValueError("search query is required")
                 count, page = min(40, max(1, int(payload.get("count", 12)))), max(1, int(payload.get("page", 1)))
-                results = [{**candidate, "preview_url": candidate.get("selected_image_url"), "provenance": {"kind": "pexels", "photographer": candidate.get("photographer"), "photo_page_url": candidate.get("photo_page_url"), "license_page": candidate.get("license_page")}} for candidate in search_pexels(query, count, "portrait", page=page, per_page=count) if is_plausible_portrait(candidate)]
+                results = [{**candidate, "preview_url": candidate.get("selected_image_url"), "provenance": {"kind": "pexels", "photographer": candidate.get("photographer"), "photo_page_url": candidate.get("photo_page_url"), "license_page": candidate.get("license_page")}} for candidate in search_pexels(query, count, None, page=page, per_page=count)]
                 self.send_json({"results": results, "page": page, "has_more": len(results) == count}); return
-            if path == "/api/sources/import":
+            if path in {"/api/inputs/import", "/api/sources/import"}:
                 payload = self._json(); result = bulk_import_sources(self.store, [dict(payload.get("candidate") or {})], bool(payload.get("include_in_selection", True)))
                 if result["failed"]: raise ValueError(result["results"][0]["error"])
-                self.send_json({"workspace": self.store.payload(), **result}); return
+                input_id = str(result["results"][0].get("input_id") or "")
+                self.send_json({"workspace": self.store.payload(), **result, "input": self.normaliser.get(input_id)}); return
             if path == "/api/sources/import-bulk":
                 payload = self._json(); candidates = payload.get("candidates") or []
                 if not isinstance(candidates, list) or not candidates: raise ValueError("select at least one search result to import")
@@ -233,16 +235,23 @@ class WorkbenchHandler(BaseHTTPRequestHandler):
                     except Exception as exc: failures.append({"photo_id": photo_id, "status": "failed", "error": str(exc)})
                 result = bulk_import_sources(self.store, candidates, True); result["results"].extend(failures); result["failed"] += len(failures)
                 self.send_json({"workspace": self.store.payload(), **result}); return
-            if path == "/api/sources/upload":
+            if path in {"/api/inputs/upload", "/api/sources/upload"}:
                 fields, filename, content, content_type = _parse_upload(self.rfile.read(int(self.headers.get("Content-Length", "0"))), self.headers.get("Content-Type", ""))
-                record = self.store.add_image_record("source", fields.get("label", ""), filename, content, content_type)
-                self.store.mutate(lambda data: data["benchmark_source_ids"].append(record["id"]) if record["id"] not in data["benchmark_source_ids"] else None)
-                self.send_json({"workspace": self.store.payload(), "record": record}); return
-            if path == "/api/sources/selection":
-                payload = self._json(); requested = [str(item) for item in payload.get("source_ids", [])]; known = {str(item["id"]) for item in self.store.read().get("sources", [])}
-                if len(requested) != len(set(requested)) or any(item not in known for item in requested): raise ValueError("source selection contains an unknown or duplicate image")
-                self.store.mutate(lambda data: data.update({"benchmark_source_ids": requested})); self.send_json({"workspace": self.store.payload(), "selected_source_ids": requested}); return
+                record = self.store.add_image_record("input", fields.get("label", ""), filename, content, content_type)
+                self.send_json({"workspace": self.store.payload(), "input": self.normaliser.get(str(record["id"]))}); return
+            match = re.fullmatch(r"/api/inputs/([^/]+)/normalisations", path)
+            if match:
+                if self.manager.is_active: raise ValueError("one image generation is already active; wait for it to finish")
+                payload = self._json(); style = self.styles.active(); models = _models_for_store(self.store, self.styles)
+                model = next((entry for entry in models if entry.get("id") == style["generation"]["model_id"] and entry.get("execution_mode") == style["generation"]["execution_mode"]), None)
+                if not model: raise ValueError("the configured normalisation model is unavailable")
+                item = self.normaliser.start(match.group(1), str(payload.get("prompt") or ""), str(payload.get("quality") or "low"), model, consent=bool(payload.get("consent")))
+                self.send_json({"input": item}, HTTPStatus.ACCEPTED); return
+            match = re.fullmatch(r"/api/inputs/([^/]+)/accept", path)
+            if match:
+                payload = self._json(); self.send_json({"input": self.normaliser.accept(match.group(1), str(payload.get("attempt_id") or "")), "workspace": self.store.payload()}); return
             if path == "/api/production":
+                if self.normaliser.is_active: raise ValueError("one image generation is already active; wait for it to finish")
                 payload = self._json(); pipeline_id = str(payload.get("pipeline_id") or self.styles.active_pipeline_id()); style = self.styles.raw_pipeline(pipeline_id)
                 batch = self.manager.create([str(item) for item in payload.get("source_ids") or []], style, _models_for_store(self.store, self.styles), purpose="card-production", consent=bool(payload.get("consent")))
                 self.send_json({"batch": batch}, HTTPStatus.ACCEPTED); return
@@ -271,7 +280,7 @@ class WorkbenchHandler(BaseHTTPRequestHandler):
             if path == "/api/styles/trials":
                 payload = self._json(); draft = self.styles.draft()
                 if not draft: raise ValueError("create a draft style before starting a trial")
-                source_ids = [str(item) for item in payload.get("source_ids") or self.store.read().get("benchmark_source_ids", [])][:3]
+                source_ids = [str(item) for item in payload.get("source_ids") or []][:3]
                 if not source_ids: raise ValueError("pin at least one calibration source")
                 trial = self.manager.create(source_ids, self.styles.raw_draft() or {}, _models_for_store(self.store, self.styles), purpose="style-trial", consent=bool(payload.get("consent")))
                 self.send_json({"batch": trial}, HTTPStatus.ACCEPTED); return
@@ -310,15 +319,11 @@ class WorkbenchHandler(BaseHTTPRequestHandler):
             favorite_match = re.fullmatch(r"/api/favorites/([^/]+)/([^/]+)", path)
             if favorite_match:
                 batch_id, item_id = favorite_match.groups(); self.manager.unfavourite(batch_id, item_id); self.send_json({"removed": True}); return
-            match = re.fullmatch(r"/api/sources/([^/]+)", path)
+            match = re.fullmatch(r"/api/inputs/([^/]+)", path)
             if not match: self.send_error(HTTPStatus.NOT_FOUND); return
-            source_id = match.group(1); payload = self._json()
-            def remove(data: dict[str, Any]) -> dict[str, Any]:
-                source = _find_item(data, "sources", source_id)
-                if not payload.get("confirm"): raise ValueError("deletion needs explicit confirmation")
-                if source_id in data.get("benchmark_source_ids", []): raise ValueError("remove this image from the selected sources before deleting it")
-                data["sources"] = [item for item in data["sources"] if item.get("id") != source_id]; return source
-            deleted = self.store.mutate(remove); self.store.absolute_path(deleted["relative_path"]).unlink(missing_ok=True); self.send_json({"workspace": self.store.payload()})
+            payload = self._json()
+            if not payload.get("confirm"): raise ValueError("deletion needs explicit confirmation")
+            self.normaliser.delete(match.group(1)); self.send_json({"workspace": self.store.payload()})
         except (ValueError, WorkspaceError) as exc:
             self.error(str(exc), HTTPStatus.CONFLICT if "before deleting" in str(exc) else HTTPStatus.BAD_REQUEST)
         except Exception as exc:
@@ -336,6 +341,7 @@ class WorkbenchHandler(BaseHTTPRequestHandler):
 
 def run_workbench_server(host: str = "127.0.0.1", port: int = 8765, library_dir: Path = Path("portrait-library")) -> None:
     store = WorkspaceStore(library_dir); styles = StyleStore(store); styles.ensure_initial(); manager = CardProductionManager(store, styles)
-    handler = type("ConfiguredWorkbenchHandler", (WorkbenchHandler,), {"store": store, "styles": styles, "manager": manager})
+    normaliser = InputNormalisationManager(store)
+    handler = type("ConfiguredWorkbenchHandler", (WorkbenchHandler,), {"store": store, "styles": styles, "manager": manager, "normaliser": normaliser})
     server = ThreadingHTTPServer((host, port), handler)
     print(f"Portrait Workbench API: http://{host}:{port}"); server.serve_forever()
