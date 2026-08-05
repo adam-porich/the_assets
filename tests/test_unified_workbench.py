@@ -10,6 +10,7 @@ import pytest
 from PIL import Image, ImageChops
 
 from tools.cards.amiga import adaptive_hybrid_palette, amiga_palette, palette_is_ocs_12_bit
+from tools.cards.backgrounds import choose_chroma_key, composite_foreground, extract_foreground
 from tools.cards.registry import registry
 from tools.cards.style_pipeline import (
     FACE_FREE_PIPELINE_ID,
@@ -59,7 +60,7 @@ def source(store: WorkspaceStore, name: str = "portrait") -> dict:
 
 
 def wait_for(manager: CardProductionManager, batch_id: str) -> dict:
-    for _ in range(200):
+    for _ in range(600):
         record = manager.get(batch_id)
         if record["status"] not in {"queued", "running", "processing"}:
             return record
@@ -91,22 +92,6 @@ def test_input_normalisation_requires_preview_then_accepts_it(tmp_path: Path) ->
     accepted = manager.accept(pending["id"], attempt_id)
     assert accepted["status"] == "ready"
     assert accepted["image_url"] and accepted["accepted_normalisation"]["prompt"] == "Preserve the exact object."
-
-
-def test_preserve_input_mode_is_free_and_keeps_source_pixels_without_an_adapter(tmp_path: Path) -> None:
-    store = WorkspaceStore(tmp_path / "library")
-    pending = store.add_image_record("input", "Book", "book.png", (ASSETS / "generation-reference-01.png").read_bytes(), "image/png")
-    manager = InputNormalisationManager(store, lambda *_: (_ for _ in ()).throw(AssertionError("adapter must not run")))
-    started = manager.start(pending["id"], "", "low", live_model(), consent=False, mode="preserve")
-    attempt_id = started["normalisation_attempts"][-1]["id"]
-    for _ in range(200):
-        current = manager.get(pending["id"])
-        if current["normalisation_attempts"][-1]["status"] not in {"queued", "running"}: break
-        time.sleep(0.02)
-    attempt = current["normalisation_attempts"][-1]
-    assert attempt["status"] == "ready" and attempt["mode"] == "preserve"
-    assert attempt["cost_usd"] == 0 and attempt["backend"] == "deterministic-preserve"
-    assert manager.accept(pending["id"], attempt_id)["accepted_normalisation"]["mode"] == "preserve"
 
 
 def test_style_schema_checksum_store_and_asset_snapshots(tmp_path: Path) -> None:
@@ -215,6 +200,22 @@ def test_adaptive_palette_retains_small_foreground_accents() -> None:
     assert any(blue > red * 1.5 and blue > green for red, green, blue in resolved)
 
 
+def test_foreground_matte_and_backgrounds_are_independent() -> None:
+    source = Image.new("RGB", (120, 120), (0, 255, 0))
+    for x in range(35, 85):
+        for y in range(20, 120): source.putpixel((x, y), (170, 65, 35))
+    name, key = choose_chroma_key(source)
+    assert name == "magenta"
+    foreground, matte = extract_foreground(source, (0, 255, 0))
+    assert matte["mode"] == "chroma-matte" and foreground.getpixel((0, 0))[3] == 0
+    style = load_checked_in_style()
+    warm, warm_meta = composite_foreground(foreground, style, "warm-parchment")
+    cool, cool_meta = composite_foreground(foreground, style, "cool-slate")
+    assert warm.size == cool.size == tuple(style["backgrounds"]["composite_size"])
+    assert warm.tobytes() != cool.tobytes()
+    assert warm_meta["subject_bbox"] == cool_meta["subject_bbox"]
+
+
 class ReferenceReturningAdapter(FakeGenerationAdapter):
     def generate(self, request):
         result = super().generate(request)
@@ -269,12 +270,13 @@ def test_framing_rerenders_without_generation_and_approval_is_revisioned(tmp_pat
     production_item = batch["items"][0]
     manager.approve(batch["batch_id"], production_item["item_id"])
     old_checksum = production_item["card_checksum_sha256"]
-    rerendered = manager.rerender(batch["batch_id"], production_item["item_id"], {"zoom": 1.25, "offset_x": 0.1, "offset_y": 0}, "fixed-house")
+    rerendered = manager.rerender(batch["batch_id"], production_item["item_id"], {"zoom": 1.25, "offset_x": 0.1, "offset_y": 0}, "fixed-house", "cool-slate")
     assert calls == 1
     assert rerendered["items"][0]["render_revision"] == 2
     assert rerendered["items"][0]["card_checksum_sha256"] != old_checksum
     assert len(rerendered["items"][0]["render_revisions"]) == 2
     assert rerendered["items"][0]["palette_mode"] == "fixed-house"
+    assert rerendered["items"][0]["background_id"] == "cool-slate"
     assert rerendered["style_snapshot"]["renderer"]["palette_mode"] == "adaptive-hybrid"
     assert rerendered["progress"]["approved_cards"] == 0
     manager.approve(batch["batch_id"], production_item["item_id"])
@@ -365,8 +367,10 @@ def test_live_provenance_and_consent_use_semantic_fake_without_provider_call(tmp
     assert item["generation_request"]["reference_order"][0]["role"] == "identity"
     assert item["generation_request"]["reference_order"][1]["role"] == "generation-reference"
     assert item["generation_request"]["target_examples_excluded"] is True
-    assert item["generation_request"]["instruction"] == "Keep the book square to camera.\n\nAdditional content direction from the user: Add one cracked corner."
+    assert item["generation_request"]["instruction"].startswith("Keep the book square to camera.\n\nAdditional content direction from the user: Add one cracked corner.")
+    assert "Foreground isolation contract" in item["generation_request"]["instruction"]
     assert item["content_direction"] == "Add one cracked corner."
+    assert item["foreground_url"] and item["master_url"] and item["background_id"] == "warm-parchment"
     assert item["render_metadata"]["framing"]["resolved"]["mode"] == "subject-aware"
     assert item["master_url"] and item["art_url"] and item["card_url"]
     assert not item["normalised_url"] and batch["paid_calls"] == 1

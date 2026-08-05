@@ -11,6 +11,7 @@ from typing import Any, Callable
 
 from PIL import Image
 
+from tools.cards.backgrounds import choose_chroma_key, composite_foreground, extract_foreground
 from tools.cards.registry import RenderBundle, registry
 from tools.cards.style_pipeline import StyleStore, style_checksum, validate_style
 
@@ -125,7 +126,7 @@ class CardProductionManager:
         mapping = validate_request({"model": generation["model_id"], "quality": generation["quality"], "execution_mode": generation["execution_mode"]}, len(generation_refs), capabilities)
         return model, capabilities, mapping, generation_refs
 
-    def create(self, source_ids: list[str], style: dict[str, Any], models: list[dict[str, Any]], *, purpose: str = "card-production", consent: bool = False, prompt_override: str | None = None, content_direction: str | None = None) -> dict[str, Any]:
+    def create(self, source_ids: list[str], style: dict[str, Any], models: list[dict[str, Any]], *, purpose: str = "card-production", consent: bool = False, prompt_override: str | None = None, content_direction: str | None = None, background_id: str | None = None) -> dict[str, Any]:
         if purpose not in {"card-production", "style-trial"}:
             raise ValueError("production purpose must be card-production or style-trial")
         style = validate_style(copy.deepcopy(style), require_locked=purpose == "card-production")
@@ -162,7 +163,7 @@ class CardProductionManager:
             items = []
             for source in source_snapshots:
                 lineage_id = new_id("lineage")
-                items.append(self._new_item(source, 1, lineage_id, reference_snapshots, prompt_override=prompt_override, content_direction=content_direction))
+                items.append(self._new_item(source, 1, lineage_id, reference_snapshots, prompt_override=prompt_override, content_direction=content_direction, background_id=background_id or style.get("backgrounds", {}).get("default_id")))
             record = {
                 "batch_id": batch_id, "purpose": purpose, "created_at": created, "updated_at": created,
                 "status": "queued", "style_snapshot": style, "style_version_id": style["identity"]["style_version_id"],
@@ -179,7 +180,7 @@ class CardProductionManager:
             threading.Thread(target=self._work, args=(batch_id,), daemon=True, name=f"card-production-{batch_id}").start()
             return self.payload(record)
 
-    def _new_item(self, source: dict[str, Any], attempt_number: int, lineage_id: str, references: list[dict[str, Any]], *, prompt_override: str | None = None, content_direction: str | None = None) -> dict[str, Any]:
+    def _new_item(self, source: dict[str, Any], attempt_number: int, lineage_id: str, references: list[dict[str, Any]], *, prompt_override: str | None = None, content_direction: str | None = None, background_id: str | None = None) -> dict[str, Any]:
         return {
             "item_id": new_id("item"), "source_id": source["id"], "source_label": source.get("label") or source["id"],
             "attempt_number": attempt_number, "lineage_id": lineage_id, "status": "queued", "phase": "queued", "error": None,
@@ -187,7 +188,7 @@ class CardProductionManager:
             "reference_stack": [{"role": "identity", "source_id": source["id"], "input_path": source["input_path"], "checksum_sha256": source["input_checksum_sha256"]}, *[
                 {"role": "generation-reference", "reference_id": reference["id"], "label": reference.get("label") or reference["id"], "input_path": reference["input_path"], "checksum_sha256": reference["input_checksum_sha256"]} for reference in references
             ]],
-            "framing": None, "render_revision": 0, "render_revisions": [], "master_path": None, "master_checksum_sha256": None,
+            "framing": None, "background_id": background_id, "background_metadata": {}, "matte_metadata": {}, "render_revision": 0, "render_revisions": [], "raw_foreground_path": None, "foreground_path": None, "master_path": None, "master_checksum_sha256": None,
             "logical_art_path": None, "art_path": None, "card_path": None, "card_checksum_sha256": None,
             "generation": {}, "generation_request": {}, "generation_stages": [], "normalised_path": None, "normalised_checksum_sha256": None, "render_metadata": {}, "usage": {}, "cost_usd": None,
             "prompt_override": prompt_override.strip() if prompt_override and prompt_override.strip() else None,
@@ -243,17 +244,35 @@ class CardProductionManager:
                         base_instruction = str(item.get("prompt_override") or generation["prompt"])
                         direction = str(item.get("content_direction") or "").strip()
                         instruction = f"{base_instruction}\n\nAdditional content direction from the user: {direction}" if direction else base_instruction
+                        foreground_pipeline = int(record["style_snapshot"].get("renderer", {}).get("driver_version", 1)) >= 3
+                        output_relative = Path("production") / batch_id / "raw-foregrounds" / f"{item['item_id']}.png" if foreground_pipeline else master_relative
+                        self.store.absolute_path(output_relative).parent.mkdir(parents=True, exist_ok=True)
+                        if foreground_pipeline:
+                            with Image.open(source_path) as opened:
+                                chroma_name, chroma = choose_chroma_key(opened)
+                            item["chroma_key"] = {"name": chroma_name, "hex": "#%02x%02x%02x" % chroma}
+                            instruction += f"\n\nForeground isolation contract: output only the subject against a perfectly flat solid {item['chroma_key']['hex']} chroma-key background. Keep the complete subject silhouette inside the frame with clear padding. The key background must have no texture, gradient, vignette, scenery, floor, shadow, halo, or reflected key colour. Do not use {item['chroma_key']['hex']} on the subject."
                         request = GenerationRequest(
                             identity_image=source_path, style_images=reference_paths,
                             instruction=instruction if int(record["style_snapshot"].get("schema_version", 1)) == 3 else generation_instruction(generation["direction"]),
                             negative_prompt=str(generation.get("avoid") or ""), model=str(generation["model_id"]), quality=str(generation["quality"]),
                             seed=stable_seed(str(item["item_id"])), effective_aspect_ratio=str(record["backend_mapping"]["effective_aspect_ratio"]),
-                            output_path=self.store.absolute_path(master_relative),
+                            output_path=self.store.absolute_path(output_relative),
                             reference_roles=tuple(["generation-reference"] * len(generation_refs)),
                         )
                         item["generation_request"] = {"instruction": request.instruction, "content_direction": item.get("content_direction"), "model": request.model, "quality": request.quality, "seed": request.seed, "target_examples_excluded": True, "reference_order": [{"order": 0, "role": "identity", "source_id": item["source_id"]}, *[{"order": index, "role": "generation-reference", "reference_id": reference["id"]} for index, reference in enumerate(generation_refs, 1)]]}
                         result = adapter.generate(request)
-                        item.update({"master_path": master_relative.as_posix(), "master_checksum_sha256": checksum(self.store.absolute_path(master_relative)), "generation": {"backend": result.backend, "model": result.model, "execution_mode": capabilities.execution_mode, "seed": result.seed, "elapsed_seconds": result.elapsed_seconds, "dimensions": result.dimensions, "effective_aspect_ratio": result.effective_aspect_ratio, "usage": result.usage, "cost_usd": result.cost_usd}, "usage": result.usage, "cost_usd": result.cost_usd})
+                        if foreground_pipeline:
+                            item["phase"] = "extracting-foreground"; self._write(record)
+                            foreground_relative = Path("production") / batch_id / "foregrounds" / f"{item['item_id']}.png"
+                            foreground_path = self.store.absolute_path(foreground_relative); foreground_path.parent.mkdir(parents=True, exist_ok=True)
+                            with Image.open(self.store.absolute_path(output_relative)) as opened:
+                                foreground, matte = extract_foreground(opened, tuple(bytes.fromhex(item["chroma_key"]["hex"].removeprefix("#"))))
+                            foreground.save(foreground_path, format="PNG")
+                            item.update({"raw_foreground_path": output_relative.as_posix(), "foreground_path": foreground_relative.as_posix(), "foreground_checksum_sha256": checksum(foreground_path), "matte_metadata": matte})
+                        else:
+                            item.update({"master_path": master_relative.as_posix(), "master_checksum_sha256": checksum(self.store.absolute_path(master_relative))})
+                        item.update({"generation": {"backend": result.backend, "model": result.model, "execution_mode": capabilities.execution_mode, "seed": result.seed, "elapsed_seconds": result.elapsed_seconds, "dimensions": result.dimensions, "effective_aspect_ratio": result.effective_aspect_ratio, "usage": result.usage, "cost_usd": result.cost_usd}, "usage": result.usage, "cost_usd": result.cost_usd})
                     item.update({"status": "processing", "phase": "rendering"}); self._write(record)
                     self._render_item(record, item, None)
                     item["status"] = "ready"; item["phase"] = "complete"; item["finished_at"] = now_iso(); item["error"] = None
@@ -292,21 +311,30 @@ class CardProductionManager:
                 latest[source_id] = item
         return [latest[str(source_id)] for source_id in record.get("selected_source_ids", []) if str(source_id) in latest]
 
-    def _render_item(self, record: dict[str, Any], item: dict[str, Any], framing: dict[str, float] | None, palette_mode: str | None = None) -> None:
+    def _render_item(self, record: dict[str, Any], item: dict[str, Any], framing: dict[str, float] | None, palette_mode: str | None = None, background_id: str | None = None) -> None:
         style = validate_style(copy.deepcopy(record["style_snapshot"]), require_locked=record["purpose"] == "card-production")
         if palette_mode:
             style["renderer"]["palette_mode"] = palette_mode
             style = validate_style(style, require_locked=record["purpose"] == "card-production")
-        master_path = self.store.absolute_path(str(item["master_path"]))
-        with Image.open(master_path) as opened:
-            master = opened.convert("RGB")
         revision = int(item.get("render_revision") or 0) + 1
-        bundle: RenderBundle = registry.render(style, master, str(item["source_label"]), framing)
         base = Path("production") / record["batch_id"] / "renders" / f"{item['item_id']}-r{revision}"
+        resolved_background = background_id or item.get("background_id") or style.get("backgrounds", {}).get("default_id")
+        if item.get("foreground_path"):
+            with Image.open(self.store.absolute_path(str(item["foreground_path"]))) as opened:
+                master, background_metadata = composite_foreground(opened.convert("RGBA"), style, str(resolved_background), framing)
+            master_relative = base.with_name(base.name + "-composite.png")
+            self._save_image(master, self.store.absolute_path(master_relative))
+            item.update({"master_path": master_relative.as_posix(), "master_checksum_sha256": checksum(self.store.absolute_path(master_relative)), "background_id": resolved_background, "background_metadata": background_metadata})
+            render_framing = None
+        else:
+            with Image.open(self.store.absolute_path(str(item["master_path"]))) as opened:
+                master = opened.convert("RGB")
+            render_framing = framing
+        bundle: RenderBundle = registry.render(style, master, str(item["source_label"]), render_framing)
         logical_path, art_path, card_path = base.with_name(base.name + "-logical.png"), base.with_name(base.name + "-art.png"), base.with_name(base.name + "-card.png")
         self._save_image(bundle.logical_art, self.store.absolute_path(logical_path)); self._save_image(bundle.art, self.store.absolute_path(art_path)); self._save_image(bundle.card, self.store.absolute_path(card_path))
         item.update({"render_revision": revision, "framing": framing or style["composition"]["default_framing"], "palette_mode": style["renderer"].get("palette_mode", "fixed-house"), "logical_art_path": logical_path.as_posix(), "art_path": art_path.as_posix(), "card_path": card_path.as_posix(), "card_checksum_sha256": checksum(self.store.absolute_path(card_path)), "render_metadata": bundle.metadata})
-        item.setdefault("render_revisions", []).append({"revision": revision, "logical_art_path": logical_path.as_posix(), "art_path": art_path.as_posix(), "card_path": card_path.as_posix(), "card_checksum_sha256": item["card_checksum_sha256"], "framing": copy.deepcopy(item["framing"]), "palette_mode": item["palette_mode"], "render_metadata": bundle.metadata, "created_at": now_iso()})
+        item.setdefault("render_revisions", []).append({"revision": revision, "master_path": item.get("master_path"), "logical_art_path": logical_path.as_posix(), "art_path": art_path.as_posix(), "card_path": card_path.as_posix(), "card_checksum_sha256": item["card_checksum_sha256"], "framing": copy.deepcopy(item["framing"]), "background_id": item.get("background_id"), "background_metadata": copy.deepcopy(item.get("background_metadata")), "palette_mode": item["palette_mode"], "render_metadata": bundle.metadata, "created_at": now_iso()})
 
     def payload(self, record: dict[str, Any]) -> dict[str, Any]:
         result = copy.deepcopy(record)
@@ -320,7 +348,7 @@ class CardProductionManager:
             item["favorite"] = bool(favourite)
             item["favorited_at"] = favourite.get("favorited_at") if favourite else None
             item["approved"] = current_approvals.get(f"{item.get('source_id')}:{record.get('style_version_id')}", {}).get("attempt_id") == item.get("item_id")
-            for field in ("normalised_path", "master_path", "logical_art_path", "art_path", "card_path"):
+            for field in ("normalised_path", "raw_foreground_path", "foreground_path", "master_path", "logical_art_path", "art_path", "card_path"):
                 item[field.replace("_path", "_url")] = self.store.asset_url(item.get(field))
             for stage in item.get("generation_stages", []):
                 stage["output_url"] = self.store.asset_url(stage.get("output_path"))
@@ -358,8 +386,8 @@ class CardProductionManager:
         existing = [item for item in record["items"] if str(item.get("source_id")) == source_id]
         lineage = str(existing[0].get("lineage_id") if existing else new_id("lineage"))
         references = record["reference_snapshots"]
-        item = self._new_item(source, max([int(candidate.get("attempt_number", 0)) for candidate in existing] + [0]) + 1, lineage, references)
         previous = existing[-1] if existing else None
+        item = self._new_item(source, max([int(candidate.get("attempt_number", 0)) for candidate in existing] + [0]) + 1, lineage, references, prompt_override=previous.get("prompt_override") if previous else None, content_direction=previous.get("content_direction") if previous else None, background_id=previous.get("background_id") if previous else record.get("style_snapshot", {}).get("backgrounds", {}).get("default_id"))
         reused = bool(reuse_normalised and previous and previous.get("normalised_path"))
         if reused:
             item["normalised_path"] = previous["normalised_path"]; item["normalised_checksum_sha256"] = previous.get("normalised_checksum_sha256")
@@ -408,7 +436,7 @@ class CardProductionManager:
             self._write(record)
             return self.payload(record)
 
-    def rerender(self, batch_id: str, item_id: str, framing: dict[str, float] | None, palette_mode: str | None = None) -> dict[str, Any]:
+    def rerender(self, batch_id: str, item_id: str, framing: dict[str, float] | None, palette_mode: str | None = None, background_id: str | None = None) -> dict[str, Any]:
         record = self._read(batch_id); item = next((candidate for candidate in record["items"] if candidate.get("item_id") == item_id), None)
         if not item or item.get("status") != "ready": raise ValueError("only a ready card can be reframed")
         style = record["style_snapshot"]; resolved = {**style["composition"]["default_framing"], **(framing or {})}
@@ -418,7 +446,7 @@ class CardProductionManager:
         if current_approval and current_approval.get("attempt_id") == item_id and int(current_approval.get("render_revision", 0)) == int(item.get("render_revision", 0)):
             approvals["current"].pop(approval_key, None)
             self.store.atomic_json(self.store.root / "approvals" / "approvals.json", approvals)
-        self._render_item(record, item, resolved, palette_mode); item["status"] = "ready"; item["updated_at"] = now_iso(); self._write(record)
+        self._render_item(record, item, resolved, palette_mode, background_id); item["status"] = "ready"; item["updated_at"] = now_iso(); self._write(record)
         return self.payload(record)
 
     def _approval_data(self) -> dict[str, Any]:

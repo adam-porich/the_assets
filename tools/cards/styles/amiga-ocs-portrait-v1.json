@@ -3,8 +3,8 @@
   "identity": {
     "family_id": "amiga-ocs-portrait",
     "pipeline_id": "face-free-style-board",
-    "style_version_id": "style_amiga_ocs_portrait_v4",
-    "version": 4,
+    "style_version_id": "style_amiga_ocs_portrait_v5",
+    "version": 5,
     "state": "locked",
     "label": "Amiga Style Transfer"
   },
@@ -12,7 +12,7 @@
     "model_id": "openai/gpt-image-1-mini",
     "execution_mode": "live",
     "quality": "medium",
-    "prompt": "Input image 1 is the sole source of content and structure. Use the reference board only for foreground rendering vocabulary: connected matte tonal planes, deliberate edges, material ramps, local colour contrast, and controlled texture. Preserve the subject's category, count, silhouette, proportions, viewpoint, materials, markings, colours, and human identity where applicable. Make the foreground subject dominant and clearly separated through readable midtones, highlights, rim light, and local contrast. Use a lively but controlled full colour range suited to later Amiga OCS reduction; retain dark anchors without forcing the image into brown or olive. Backgrounds may vary with the subject and should remain simple, subordinate, and compositionally different from the reference board. Never copy shapes or arrangements from the board or invent a person, face, object, text, or narrative element. Produce a clean pre-quantisation master without visible pixels, dithering, scanlines, borders, card frames, or UI.",
+    "prompt": "Input image 1 is the sole source of content and structure. Use the reference board only for foreground rendering vocabulary: connected matte tonal planes, deliberate edges, material ramps, local colour contrast, and controlled texture. Preserve the subject's category, count, silhouette, proportions, viewpoint, materials, markings, colours, and human identity where applicable. Make the foreground subject dominant and readable through clear midtones, highlights, rim light, and local contrast. Use a lively but controlled full colour range suited to later Amiga OCS reduction; retain dark anchors without forcing the subject into brown or olive. Never copy shapes or arrangements from the board or invent a person, face, object, text, or narrative element. Produce a clean foreground master without visible pixels, dithering, scanlines, borders, card frames, UI, scenery, or environmental background elements.",
     "requested_aspect_policy": "28:23",
     "reference_limit": 9
   },
@@ -44,9 +44,18 @@
     "centering": [0.5, 0.44],
     "requested_art_ratio": "28:23"
   },
+  "backgrounds": {
+    "default_id": "warm-parchment",
+    "composite_size": [336, 276],
+    "presets": [
+      {"id": "warm-parchment", "label": "Warm parchment", "top": "#d3be8e", "bottom": "#674d34", "glow": "#ecd6a5", "glow_strength": 0.22},
+      {"id": "cool-slate", "label": "Cool slate", "top": "#5a7076", "bottom": "#1c272d", "glow": "#8b978f", "glow_strength": 0.22},
+      {"id": "noir", "label": "Noir", "top": "#12191c", "bottom": "#0c0c0e", "glow": "#44372b", "glow_strength": 0.16}
+    ]
+  },
   "renderer": {
     "driver_id": "amiga-ocs",
-    "driver_version": 2,
+    "driver_version": 3,
     "logical_art_size": [168, 138],
     "output_scale": 2,
     "palette_space": "Amiga OCS 12-bit RGB",
@@ -65,7 +74,7 @@
     "logical_card_size": [210, 300],
     "output_scale": 2,
     "layout": {"art_box": [18, 36, 192, 180], "title_box": [16, 191, 194, 213], "details_box": [16, 221, 194, 274]},
-    "text": {"title": "Asset Workbench", "subtitle": "Amiga OCS / 32 colours", "version": "Ingest-normalised style v1", "identity": "Content-preserving redraw"}
+    "text": {"title": "Asset Workbench", "subtitle": "Amiga OCS / 32 colours", "version": "Genlocked background v1", "identity": "Content-preserving redraw"}
   },
   "editor_descriptors": [
     {"id": "generation.prompt", "label": "Style prompt", "type": "text", "group": "Generation"},
@@ -75,6 +84,6 @@
     {"id": "renderer.dither.edge_threshold", "label": "Edge threshold", "type": "range", "min": 0.0, "max": 1.0, "step": 0.01, "group": "Amiga processing"},
     {"id": "composition.centering", "label": "Default centering", "type": "number", "group": "Amiga processing"}
   ],
-  "provenance": {"source": "checked-in", "pack_path": "tools/cards/assets/amiga-ocs-portrait-v1/pack.json", "contract": "ingest-normalised-foreground-style-v2"},
+  "provenance": {"source": "checked-in", "pack_path": "tools/cards/assets/amiga-ocs-portrait-v1/pack.json", "contract": "genlocked-foreground-background-v1"},
   "checksums": {}
 }

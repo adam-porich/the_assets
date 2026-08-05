@@ -22,9 +22,8 @@ image generation. Runtime data is stored in the ignored `portrait-library/`.
 ### Inputs
 
 Upload an image or choose a Pexels result to open the preparation dialog. The
-dialog shows the original beside a prepared preview. The default `Preserve`
-mode only scales and pads the original pixels and is free; `Reconstruct` enables
-the paid generative cleanup prompt and quality. `OK` accepts the displayed
+dialog shows the original beside a generative preparation preview and exposes
+the cleanup prompt and quality. `OK` accepts the displayed
 result without another call. Only accepted Inputs are
 available to Pipeline and Candidates. Clicking an existing Input reopens it for
 inspection or replacement.
@@ -45,7 +44,9 @@ generate a preview, and rerun until the result is worth accepting. Only `OK ·
 Add to pack` promotes that preview into the pack. Older accepted candidates
 remain stored when they scroll out. Open a
 candidate to inspect the Input, styled master, rendered art, final card, and
-provenance. Framing changes do not call the image model.
+provenance. Generation produces an isolated foreground; deterministic renderer
+presets supply the background afterward. Foreground placement, background, and
+palette changes do not call the image model.
 Candidate details also lets you compare the original fixed house palette with
 an adaptive OCS palette. Adaptive keeps ten stable UI anchors and selects the
 remaining 22 registers from the image, while preserving the 32-colour limit.

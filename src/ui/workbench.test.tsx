@@ -5,6 +5,7 @@ import { App, readRoute } from "./App";
 import { api } from "./api";
 
 const style = { schema_version: 3, identity: { family_id: "amiga-ocs-portrait", pipeline_id: "face-free-style-board", style_version_id: "style-face-free", version: 3, state: "locked", label: "Face-free Style Board" }, generation: { model_id: "live-model", execution_mode: "live", quality: "low", prompt: "Apply only the visual language.", requested_aspect_policy: "28:23", reference_limit: 9 }, reference_pack: { id: "pack", version: 1, assets: [{ id: "gen", label: "Face-free board", role: "generation-reference" as const, checksum_sha256: "gen", image_url: "/gen.png" }, { id: "target", label: "Target", role: "target-example" as const, checksum_sha256: "target", image_url: "/target.png" }] }, composition: { logical_art_size: [168, 138] as [number, number], default_framing: { zoom: 1, offset_x: 0, offset_y: 0 }, centering: [0.5, 0.44] as [number, number], requested_art_ratio: "28:23" }, renderer: { driver_id: "amiga-ocs", logical_art_size: [168, 138] as [number, number], output_scale: 2, palette_space: "Amiga", palette: ["#111111"], preprocess: {}, dither: { matrix: "bayer-4x4", strength: .62, edge_threshold: .09 } }, card_assembly: { driver_id: "amiga-ocs", logical_card_size: [210, 300] as [number, number], output_scale: 2, layout: {}, text: {} }, editor_descriptors: [], checksums: { style_sha256: "style-checksum" } };
+Object.assign(style, { backgrounds: { default_id: "warm-parchment", composite_size: [336, 276], presets: [{ id: "warm-parchment", label: "Warm parchment", top: "#d3be8e", bottom: "#674d34", glow: "#ecd6a5", glow_strength: .22 }, { id: "cool-slate", label: "Cool slate", top: "#5a7076", bottom: "#1c272d", glow: "#8b978f", glow_strength: .22 }] } });
 const portraitStyle = { ...style, identity: { ...style.identity, pipeline_id: "portrait-style-reference", style_version_id: "style-portrait", version: 1, label: "Portrait Style Reference" }, reference_pack: { ...style.reference_pack, assets: [{ ...style.reference_pack.assets[0], id: "old-gen", label: "Original portrait style reference", checksum_sha256: "old-gen" }, style.reference_pack.assets[1]] }, checksums: { style_sha256: "portrait-checksum" } };
 const revisions = (id: string, checksum: string) => [{ style_version_id: id, checksum_sha256: checksum, created_at: "2026-08-01T00:00:00Z" }];
 const pipelines = [
@@ -52,8 +53,8 @@ describe("pipeline workbench", () => {
     await act(async () => container.querySelector(".source-select")?.dispatchEvent(new MouseEvent("click", { bubbles: true })));
     expect(container.querySelector('[role="dialog"]')).toBeTruthy();
     expect(container.querySelector('img[alt="Original"]')).toBeTruthy();
-    expect(container.textContent).toContain("Preserve · crop and pad only");
-    expect(container.textContent).toContain("Prepare preview");
+    expect(container.textContent).toContain("Preparation prompt");
+    expect(container.textContent).toContain("Generate preview");
   });
 
   it("keeps only the newest three mixed-pipeline cards in each source pack", async () => {
@@ -116,7 +117,7 @@ describe("pipeline workbench", () => {
     const preview = [...container.querySelectorAll("button")].find((button) => button.textContent?.includes("Generate preview"));
     await act(async () => preview?.click());
     expect(container.textContent).toContain("Content direction");
-    expect(api.createProduction).toHaveBeenCalledWith(["source-1"], "face-free-style-board", true, "");
+    expect(api.createProduction).toHaveBeenCalledWith(["source-1"], "face-free-style-board", true, "", "warm-parchment");
   });
 
   it("adds only an accepted candidate preview to the pack", async () => {
@@ -148,13 +149,15 @@ describe("pipeline workbench", () => {
   });
 
   it("opens a candidate as a complete source-to-card inspector", async () => {
-    vi.spyOn(api, "bootstrap").mockResolvedValue({ ...base, cards: [produced()] } as never);
+    vi.spyOn(api, "bootstrap").mockResolvedValue({ ...base, cards: [produced({ foreground_url: "/foreground.png", background_id: "warm-parchment" })] } as never);
     await act(async () => { window.location.hash = "#candidates/batch-1/item-1"; root.render(<App />); });
     expect(container.textContent).toContain("Candidate details");
-    expect(container.textContent).toContain("Styled master");
+    expect(container.textContent).toContain("Foreground");
+    expect(container.textContent).toContain("Composite");
+    expect(container.textContent).toContain("Warm parchment");
     expect(container.textContent).toContain("Rendered art");
     expect(container.textContent).toContain("Adaptive · 10 anchors + 22 image colours");
-    expect(container.textContent).toContain("Save render · no generation");
+    expect(container.textContent).toContain("Save composite · no generation");
     expect(container.textContent).toContain("Save to Collection");
   });
 

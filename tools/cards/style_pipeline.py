@@ -22,7 +22,7 @@ PIPELINE_LABELS = {
     PORTRAIT_REFERENCE_PIPELINE_ID: "Portrait Style Reference",
 }
 PIPELINE_DESCRIPTIONS = {
-    FACE_FREE_PIPELINE_ID: "Applies a subject-neutral foreground rendering board to a prepared Input.",
+    FACE_FREE_PIPELINE_ID: "Generates a matted foreground, then applies a deterministic renderer-owned background.",
     PORTRAIT_REFERENCE_PIPELINE_ID: "Uses the original portrait reference from historical Pipelines 01/02.",
 }
 FACE_FREE_REFERENCE_CHECKSUM = "6d4dbdd6d031678d83468122d6b8201266b5e2f3272f8628ebfd3af0dd871823"
@@ -46,6 +46,17 @@ def _hex_colour(value: str) -> str:
         raise ValueError(f"invalid palette colour: {value}") from exc
     if any(channel % 17 for channel in channels):
         raise ValueError("Amiga OCS colours must use 4-bit channels expanded to 8-bit")
+    return text
+
+
+def _rgb_colour(value: str) -> str:
+    text = str(value).strip().lower()
+    if not text.startswith("#") or len(text) != 7:
+        raise ValueError(f"invalid RGB colour: {value}")
+    try:
+        bytes.fromhex(text[1:])
+    except ValueError as exc:
+        raise ValueError(f"invalid RGB colour: {value}") from exc
     return text
 
 
@@ -158,6 +169,16 @@ def validate_style(style: dict[str, Any], *, require_locked: bool = False) -> di
     framing = composition.get("default_framing")
     if not isinstance(framing, dict) or float(framing.get("zoom", 0)) < 1 or any(abs(float(framing.get(key, 0))) > 1 for key in ("offset_x", "offset_y")):
         raise ValueError("composition.default_framing is invalid")
+    if int(renderer.get("driver_version", 1)) >= 3:
+        backgrounds = style.get("backgrounds") or {}
+        presets = backgrounds.get("presets") if isinstance(backgrounds, dict) else None
+        if not isinstance(presets, list) or not presets or str(backgrounds.get("default_id") or "") not in {str(item.get("id")) for item in presets if isinstance(item, dict)}:
+            raise ValueError("backgrounds must define presets and a valid default_id")
+        for preset in presets:
+            if not isinstance(preset, dict) or not str(preset.get("id") or "") or any(not isinstance(preset.get(key), str) for key in ("top", "bottom", "glow")):
+                raise ValueError("each background preset requires id, top, bottom, and glow")
+            for key in ("top", "bottom", "glow"):
+                preset[key] = _rgb_colour(preset[key])
     palette = renderer.get("palette")
     if renderer.get("palette_mode", "fixed-house") not in {"fixed-house", "adaptive-hybrid"}:
         raise ValueError("renderer.palette_mode must be fixed-house or adaptive-hybrid")
@@ -239,7 +260,7 @@ class StyleStore:
             active = self.raw_version(str(active_id))
             checked_in = load_checked_in_style()
             active_reference_checksums = {asset.get("checksum_sha256") for asset in active.get("reference_pack", {}).get("assets", [])}
-            if active.get("schema_version") == 3 and active.get("identity", {}).get("pipeline_id") == FACE_FREE_PIPELINE_ID and FACE_FREE_REFERENCE_CHECKSUM in active_reference_checksums and int(active.get("renderer", {}).get("driver_version", 1)) >= 2 and active["generation"].get("model_id") not in SIMULATION_MODEL_IDS and active["generation"].get("execution_mode") != "simulation":
+            if active.get("schema_version") == 3 and active.get("identity", {}).get("pipeline_id") == FACE_FREE_PIPELINE_ID and FACE_FREE_REFERENCE_CHECKSUM in active_reference_checksums and int(active.get("renderer", {}).get("driver_version", 1)) >= 3 and active["generation"].get("model_id") not in SIMULATION_MODEL_IDS and active["generation"].get("execution_mode") != "simulation":
                 return self.payload(active)
             expected_checksum = style_checksum(checked_in)
             matching_version = next((entry for entry in index.get("versions", []) if entry.get("checksum_sha256") == expected_checksum and str(entry.get("style_version_id")) != str(active_id)), None)

@@ -82,12 +82,17 @@ textarea { min-height: 100px; resize: vertical; line-height: 1.45; }
 .dialog-controls > div { display: flex; align-items: center; justify-content: flex-end; gap: 10px; }
 .dialog-controls small { margin-right: auto; color: #9d9185; }
 .candidate-preview { display: grid; grid-template-columns: 1fr 28px 1fr 28px minmax(180px, .72fr); align-items: center; gap: 10px; }
+.candidate-preview.foreground-flow { grid-template-columns: 1fr 20px 1fr 20px 1fr 20px minmax(150px, .68fr); }
 .candidate-preview figure { min-width: 0; margin: 0; }
 .candidate-preview img, .candidate-preview .preview-placeholder { display: grid; width: 100%; aspect-ratio: 1; place-items: center; object-fit: contain; background: #15110f; border: 1px solid #4b3c31; }
 .candidate-preview .candidate-preview-card img, .candidate-preview .candidate-preview-card .preview-placeholder { aspect-ratio: 420 / 600; }
 .candidate-preview > span { color: #b67b3b; text-align: center; }
 .candidate-dialog-actions { display: flex; align-items: center; justify-content: flex-end; gap: 10px; margin-top: 16px; }
 .candidate-dialog-actions small { margin-right: auto; color: #9d9185; }
+.background-presets { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; }
+.background-presets fieldset { border: 1px solid #4b3c31; display: flex; gap: 12px; }
+.background-presets label { display: grid; gap: 5px; color: #9d9185; font-size: 11px; text-transform: capitalize; }
+.background-presets input[type="color"] { width: 42px; height: 30px; padding: 2px; }
 .pipeline-launcher { margin-top: 30px; padding: 20px; display: grid; grid-template-columns: minmax(0, 2fr) minmax(260px, 1fr); gap: 24px; align-items: center; }
 .launcher-flow { display: grid; grid-template-columns: 1fr auto minmax(220px, 1.6fr) auto 1fr; gap: 13px; align-items: center; }
 .launcher-flow > i { color: #9a7041; font-style: normal; }
@@ -112,7 +117,7 @@ textarea { min-height: 100px; resize: vertical; line-height: 1.45; }
 .pipeline-samples span { margin-left: auto; align-self: end; color: #d8aa66; font-size: 20px; }
 .pipeline-diagram { padding: 20px; overflow: hidden; }
 .diagram-heading > span { color: #a99d90; font-size: 12px; }
-.diagram-track { display: grid; grid-template-columns: 120px 25px 120px minmax(75px, 1fr) 120px minmax(75px, 1fr) 120px minmax(75px, 1fr) 120px; align-items: center; min-width: 1050px; overflow-x: auto; gap: 7px; padding-bottom: 8px; }
+.diagram-track { display: grid; grid-template-columns: 120px 25px 120px minmax(75px, 1fr) 120px minmax(75px, 1fr) 120px minmax(75px, 1fr) 120px minmax(75px, 1fr) 120px; align-items: center; min-width: 1300px; overflow-x: auto; gap: 7px; padding-bottom: 8px; }
 .diagram-track figure { margin: 0; }
 .diagram-track figure > img, .diagram-empty { width: 120px; height: 120px; display: grid; place-items: center; object-fit: cover; background: #181412; border: 1px solid #544335; }
 .diagram-track .diagram-card > img, .diagram-track .diagram-card > .diagram-empty { height: 170px; object-fit: contain; background: #181412; }
@@ -206,7 +211,7 @@ summary { cursor: pointer; color: #cdb98e; }
 .asset-stages img { display: block; width: 100%; aspect-ratio: 1; object-fit: cover; }
 .asset-stages .final-stage img { aspect-ratio: 420 / 600; object-fit: contain; }
 .asset-stages figcaption { color: #c0af9b; text-align: center; text-transform: uppercase; letter-spacing: .08em; font-size: 9px; }
-.framing-controls { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin: 18px 0; }
+.framing-controls { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 16px; margin: 18px 0; }
 .details-content { color: #aca095; font-size: 12px; line-height: 1.5; }
 .collection-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 16px; }
 .collection-card { overflow: hidden; padding-bottom: 12px; }

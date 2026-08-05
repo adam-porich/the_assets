@@ -1,7 +1,7 @@
 {
   "id": "amiga-ocs-portrait-v1-reference-pack",
-  "version": 3,
-  "purpose": "Foreground rendering vocabulary and renderer proof for the Amiga OCS house style.",
+  "version": 4,
+  "purpose": "Foreground-only rendering vocabulary and renderer proof for the genlocked-background Amiga OCS house style.",
   "generation_references": [
     {
       "path": "generation-reference-03.png",
@@ -23,10 +23,10 @@
   ],
   "generation_prompt": {
     "intent": "Create a clean pre-quantisation portrait master for later reduction through the deterministic OCS renderer.",
-    "composition": "Keep the source viewpoint and silhouette, make its primary foreground subject dominant, and use a simple variable background.",
+    "composition": "Keep the source viewpoint and complete silhouette, make its primary foreground subject dominant, and leave clear padding for matte extraction.",
     "rendering": "Broad connected tonal shapes, deliberate edges, readable material ramps, and controlled microtexture concentrated in the foreground.",
     "lighting": "Readable midtones and highlights with warm/cool separation chosen to suit the source rather than a fixed scene.",
     "palette_direction": "Full controlled OCS-friendly range with dark anchors, bright midtones, clear highlights, and varied warm/cool foreground separation.",
-    "avoid": "Copied board arrangements, repeated geometric backgrounds, visible pixels, dithering, checker patterns, scanlines, CRT effects, text, borders, card frames, UI, props, and invented narrative elements."
+    "avoid": "Generated scenery or backgrounds, copied board arrangements, visible pixels, dithering, checker patterns, scanlines, CRT effects, text, borders, card frames, UI, props, and invented narrative elements."
   }
 }

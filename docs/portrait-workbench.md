@@ -7,10 +7,8 @@ has been explicitly accepted as an Input.
 ## Input ingest
 
 Uploads and Pexels results begin as temporary pending records. The preparation
-dialog shows the original beside its preview. `Preserve` is the default: it
-applies only deterministic orientation, scaling, and padding, costs nothing,
-and performs no generative redraw. `Reconstruct` explicitly enables the generative
-cleanup prompt and quality controls. Generated previews record consent, model,
+dialog shows the original beside a generative preparation preview and exposes
+its cleanup prompt and quality. Generated previews record consent, model,
 usage, cost, prompt, seed, checksums, and timing and never apply a style
 reference. `OK` promotes the completed preview without another provider call.
 Cancelling a new record deletes its staging files; reopening an accepted Input
@@ -35,8 +33,11 @@ The dialog permits reruns without conflating content direction with style.
 Ready previews remain outside candidate packs until explicitly accepted.
 
 Each preview or trial sends the accepted Input first and style references after
-it, making exactly one provider call. The resulting master is framed,
-mapped to 32 Amiga OCS registers, rendered at 168×138 logical pixels,
+it, making exactly one provider call. Generation is constrained to an isolated
+foreground on a dynamically chosen green or magenta key. The raw output and
+extracted alpha foreground are retained. A named renderer preset then supplies
+the background and composites the foreground directly at the art ratio. The
+result is mapped to 32 Amiga OCS registers, rendered at 168×138 logical pixels,
 and assembled into the 210×300 logical card before exact 2× enlargement.
 The default adaptive mode retains ten house-colour anchors and derives the other
 22 colours from each master, preferring foreground-relevant, perceptually
@@ -45,9 +46,9 @@ uses the original house 32 for comparison. Retries and `Generate another`
 append immutable attempts; framing or palette changes only rerender the saved
 master and make no provider call.
 
-Default framing detects foreground bounds and pads to the art ratio when a crop
-would remove part of the subject. Manual zoom and offsets remain explicit render
-overrides and never call the image model.
+Default placement fits the extracted foreground inside a safe region. Manual
+zoom and offsets recompose that foreground without moving or cropping the
+background. Changing the background preset is also a no-generation rerender.
 
 The Pipeline editor exposes the single style prompt, generation model, quality,
 references, renderer settings, and a selectable comparison cohort of up to

@@ -148,7 +148,7 @@ def _bootstrap(store: WorkspaceStore, styles: StyleStore, manager: CardProductio
         "models": _models_for_store(store, styles),
         "integrations": {"pexels": {"configured": has_pexels_api_key()}, "openrouter": {"configured": bool(os.environ.get("OPENROUTER_API_KEY"))}},
         "starter": {"photo_ids": list(STARTER_PHOTO_IDS)},
-        "normalisation": {"default_prompt": DEFAULT_NORMALISATION_PROMPT, "default_quality": "low", "default_mode": "preserve", "active": normaliser.is_active},
+        "normalisation": {"default_prompt": DEFAULT_NORMALISATION_PROMPT, "default_quality": "low", "active": normaliser.is_active},
     }
 
 
@@ -245,7 +245,7 @@ class WorkbenchHandler(BaseHTTPRequestHandler):
                 payload = self._json(); style = self.styles.active(); models = _models_for_store(self.store, self.styles)
                 model = next((entry for entry in models if entry.get("id") == style["generation"]["model_id"] and entry.get("execution_mode") == style["generation"]["execution_mode"]), None)
                 if not model: raise ValueError("the configured normalisation model is unavailable")
-                item = self.normaliser.start(match.group(1), str(payload.get("prompt") or ""), str(payload.get("quality") or "low"), model, consent=bool(payload.get("consent")), mode=str(payload.get("mode") or "reconstruct"))
+                item = self.normaliser.start(match.group(1), str(payload.get("prompt") or ""), str(payload.get("quality") or "low"), model, consent=bool(payload.get("consent")))
                 self.send_json({"input": item}, HTTPStatus.ACCEPTED); return
             match = re.fullmatch(r"/api/inputs/([^/]+)/accept", path)
             if match:
@@ -253,7 +253,7 @@ class WorkbenchHandler(BaseHTTPRequestHandler):
             if path == "/api/production":
                 if self.normaliser.is_active: raise ValueError("one image generation is already active; wait for it to finish")
                 payload = self._json(); pipeline_id = str(payload.get("pipeline_id") or self.styles.active_pipeline_id()); style = self.styles.raw_pipeline(pipeline_id)
-                batch = self.manager.create([str(item) for item in payload.get("source_ids") or []], style, _models_for_store(self.store, self.styles), purpose="card-production", consent=bool(payload.get("consent")), prompt_override=str(payload.get("prompt_override") or "") or None, content_direction=str(payload.get("content_direction") or "") or None)
+                batch = self.manager.create([str(item) for item in payload.get("source_ids") or []], style, _models_for_store(self.store, self.styles), purpose="card-production", consent=bool(payload.get("consent")), prompt_override=str(payload.get("prompt_override") or "") or None, content_direction=str(payload.get("content_direction") or "") or None, background_id=str(payload.get("background_id") or "") or None)
                 self.send_json({"batch": batch}, HTTPStatus.ACCEPTED); return
             if path == "/api/styles/draft":
                 payload = self._json(); self.send_json({"style": self.styles.create_or_resume_draft(str(payload.get("pipeline_id") or self.styles.active_pipeline_id()))}); return
@@ -267,7 +267,7 @@ class WorkbenchHandler(BaseHTTPRequestHandler):
                 batch_id, action = match.groups(); payload = self._json()
                 if action == "retry": result = {"batch": self.manager.retry_failed(batch_id, consent=bool(payload.get("consent")))}
                 elif action == "try-another": result = {"batch": self.manager.try_another(batch_id, str(payload.get("source_id") or ""), consent=bool(payload.get("consent")))}
-                elif action == "render": result = {"batch": self.manager.rerender(batch_id, str(payload.get("item_id") or ""), dict(payload.get("framing") or {}), str(payload.get("palette_mode") or "") or None)}
+                elif action == "render": result = {"batch": self.manager.rerender(batch_id, str(payload.get("item_id") or ""), dict(payload.get("framing") or {}), str(payload.get("palette_mode") or "") or None, str(payload.get("background_id") or "") or None)}
                 elif action == "accept": result = {"batch": self.manager.accept_candidate(batch_id, str(payload.get("item_id") or ""))}
                 elif action == "approve": result = {"approval": self.manager.approve(batch_id, str(payload.get("item_id") or ""))}
                 else: result = self.manager.bundle(batch_id)

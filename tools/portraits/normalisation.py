@@ -6,8 +6,6 @@ import threading
 from pathlib import Path
 from typing import Any, Callable
 
-from PIL import Image, ImageOps
-
 from .generation import AdapterCapabilities, GenerationRequest, adapter_for, stable_seed, validate_request
 from .workspace import WorkspaceStore, checksum, new_id, now_iso
 
@@ -19,9 +17,6 @@ DEFAULT_NORMALISATION_PROMPT = (
     "Place the complete subject centrally on a plain off-white background. Do not turn objects into people "
     "or invent faces, limbs, clothing, props, symbols, or decorative details."
 )
-NORMALISATION_MODES = {"preserve", "reconstruct"}
-
-
 class InputNormalisationManager:
     def __init__(self, store: WorkspaceStore, adapter_factory: Callable[[str, AdapterCapabilities], Any] | None = None) -> None:
         self.store = store
@@ -51,16 +46,14 @@ class InputNormalisationManager:
     def get(self, input_id: str) -> dict[str, Any]:
         return self.payload(self._find(input_id))
 
-    def start(self, input_id: str, prompt: str, quality: str, model: dict[str, Any], *, consent: bool, mode: str = "reconstruct") -> dict[str, Any]:
+    def start(self, input_id: str, prompt: str, quality: str, model: dict[str, Any], *, consent: bool) -> dict[str, Any]:
         prompt = prompt.strip()
-        if mode not in NORMALISATION_MODES:
-            raise ValueError("normalisation mode must be preserve or reconstruct")
-        if mode == "reconstruct" and not prompt:
+        if not prompt:
             raise ValueError("normalisation prompt is required")
         if quality not in {"low", "medium", "high"}:
             raise ValueError("normalisation quality must be low, medium, or high")
         capabilities = AdapterCapabilities.from_model(model)
-        if mode == "reconstruct" and capabilities.execution_mode == "live" and not consent:
+        if capabilities.execution_mode == "live" and not consent:
             raise ValueError("explicit consent is required before paid normalisation")
         mapping = validate_request({"model": model["id"], "quality": quality, "execution_mode": capabilities.execution_mode}, 0, capabilities)
         with self._lock:
@@ -69,8 +62,8 @@ class InputNormalisationManager:
             item = self._find(input_id)
             attempt_id = new_id("normalisation")
             attempt = {
-                "id": attempt_id, "status": "queued", "created_at": now_iso(), "prompt": prompt, "mode": mode,
-                "quality": quality, "model_id": model["id"] if mode == "reconstruct" else "deterministic/preserve", "execution_mode": capabilities.execution_mode if mode == "reconstruct" else "deterministic",
+                "id": attempt_id, "status": "queued", "created_at": now_iso(), "prompt": prompt,
+                "quality": quality, "model_id": model["id"], "execution_mode": capabilities.execution_mode,
                 "cost_usd": None, "usage": {}, "error": None, "relative_path": None,
             }
             self.store.mutate(lambda data: next(entry for entry in data["inputs"] if entry["id"] == input_id)["normalisation_attempts"].append(attempt))
@@ -86,19 +79,6 @@ class InputNormalisationManager:
             relative = Path("staging") / input_id / f"{attempt_id}.png"
             output = self.store.absolute_path(relative)
             output.parent.mkdir(parents=True, exist_ok=True)
-            if attempt.get("mode") == "preserve":
-                with Image.open(self.store.absolute_path(item["original_path"])) as opened:
-                    source = ImageOps.exif_transpose(opened).convert("RGB")
-                    fitted = ImageOps.contain(source, (1024, 1024), Image.Resampling.LANCZOS)
-                    canvas = Image.new("RGB", (1024, 1024), (246, 243, 237))
-                    canvas.paste(fitted, ((1024 - fitted.width) // 2, (1024 - fitted.height) // 2))
-                    canvas.save(output, format="PNG")
-                self._update(input_id, attempt_id, {
-                    "status": "ready", "finished_at": now_iso(), "relative_path": relative.as_posix(),
-                    "checksum_sha256": checksum(output), "dimensions": [1024, 1024], "usage": {},
-                    "cost_usd": 0, "elapsed_seconds": 0, "backend": "deterministic-preserve", "effective_aspect_ratio": "1:1",
-                })
-                return
             capabilities = AdapterCapabilities.from_model(model)
             request = GenerationRequest(
                 identity_image=self.store.absolute_path(item["original_path"]), style_images=[],

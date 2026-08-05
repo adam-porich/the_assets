@@ -4,7 +4,7 @@ export type InputAsset = {
   accepted_normalisation?: NormalisationAttempt | null; normalisation_attempts?: NormalisationAttempt[];
 };
 
-export type NormalisationAttempt = { id: string; status: "queued" | "running" | "ready" | "failed"; mode?: "preserve" | "reconstruct"; prompt: string; quality: "low" | "medium" | "high"; model_id: string; preview_url?: string; checksum_sha256?: string; cost_usd?: number | null; elapsed_seconds?: number; error?: string | null };
+export type NormalisationAttempt = { id: string; status: "queued" | "running" | "ready" | "failed"; prompt: string; quality: "low" | "medium" | "high"; model_id: string; preview_url?: string; checksum_sha256?: string; cost_usd?: number | null; elapsed_seconds?: number; error?: string | null };
 
 export type SearchResult = Partial<InputAsset> & { id: string; label: string; pexels_photo_id?: number; selected_image_url?: string; preview_url?: string; photographer?: string };
 
@@ -15,6 +15,7 @@ export type PipelineStyle = {
   generation: { model_id: string; execution_mode: "simulation" | "live"; quality: "low" | "medium" | "high"; prompt?: string; stages?: { normalise: { prompt: string }; stylise: { prompt: string } }; direction?: Record<string, string>; avoid?: string; requested_aspect_policy: string; reference_limit: number };
   reference_pack: { id: string; version: number; assets: StyleAsset[] };
   composition: { logical_art_size: [number, number]; default_framing: { zoom: number; offset_x: number; offset_y: number }; centering: [number, number]; requested_art_ratio: string };
+  backgrounds: { default_id: string; composite_size: [number, number]; presets: Array<{ id: string; label: string; top: string; bottom: string; glow: string; glow_strength: number }> };
   renderer: { driver_id: string; driver_version?: number; logical_art_size: [number, number]; output_scale: number; palette_space: string; palette_mode?: "fixed-house" | "adaptive-hybrid"; palette: string[]; preprocess: Record<string, number>; dither: { matrix: string; strength: number; edge_threshold: number } };
   card_assembly: { driver_id: string; logical_card_size: [number, number]; output_scale: number; layout: Record<string, unknown>; text: Record<string, string> };
   editor_descriptors: Array<Record<string, unknown>>;
@@ -38,9 +39,9 @@ export type Model = { id: string; name: string; description?: string; execution_
 export type Framing = { zoom: number; offset_x: number; offset_y: number };
 export type ProductionItem = {
   item_id: string; source_id: string; source_label: string; attempt_number: number; lineage_id: string; approved?: boolean; status: "queued" | "generating" | "processing" | "ready" | "failed" | "interrupted";
-  error?: string | null; phase?: string; source_url?: string; source_original_url?: string; master_url?: string; logical_art_url?: string; art_url?: string; card_url?: string; card_checksum_sha256?: string | null;
+  error?: string | null; phase?: string; source_url?: string; source_original_url?: string; raw_foreground_url?: string; foreground_url?: string; master_url?: string; logical_art_url?: string; art_url?: string; card_url?: string; card_checksum_sha256?: string | null;
   normalised_url?: string; normalised_checksum_sha256?: string | null; master_checksum_sha256?: string | null; render_revision: number; render_revisions: Array<Record<string, unknown>>; framing?: Framing | null; generation?: Record<string, unknown>; generation_stages?: Array<Record<string, unknown>>; render_metadata?: Record<string, unknown>; usage?: Record<string, unknown>; cost_usd?: number | null;
-  accepted?: boolean; accepted_at?: string; prompt_override?: string | null; content_direction?: string | null; palette_mode?: "fixed-house" | "adaptive-hybrid";
+  accepted?: boolean; accepted_at?: string; prompt_override?: string | null; content_direction?: string | null; background_id?: string | null; background_metadata?: Record<string, unknown>; matte_metadata?: Record<string, unknown>; chroma_key?: { name: string; hex: string }; palette_mode?: "fixed-house" | "adaptive-hybrid";
   reference_stack: Array<Record<string, unknown>>; reference_urls?: Array<string | null>;
   favorite?: boolean; favorited_at?: string | null;
 };
@@ -52,4 +53,4 @@ export type ProducedCard = ProductionItem & {
   style_version_id: string; style_checksum_sha256: string; pipeline_id: string; pipeline_label: string; pipeline_description: string; pipeline_version?: number | null;
 };
 
-export type Bootstrap = { workspace: { inputs: InputAsset[] }; inputs: InputAsset[]; style: StyleBootstrap; batches: ProductionSummary[]; cards: ProducedCard[]; favorites: ProducedCard[]; models: Model[]; integrations: { pexels: { configured: boolean }; openrouter: { configured: boolean } }; starter: { photo_ids: number[] }; normalisation: { default_prompt: string; default_quality: "low" | "medium" | "high"; default_mode?: "preserve" | "reconstruct"; active: boolean } };
+export type Bootstrap = { workspace: { inputs: InputAsset[] }; inputs: InputAsset[]; style: StyleBootstrap; batches: ProductionSummary[]; cards: ProducedCard[]; favorites: ProducedCard[]; models: Model[]; integrations: { pexels: { configured: boolean }; openrouter: { configured: boolean } }; starter: { photo_ids: number[] }; normalisation: { default_prompt: string; default_quality: "low" | "medium" | "high"; active: boolean } };
