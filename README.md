@@ -47,6 +47,8 @@ cohort before it is saved.
 
 ### Candidates
 
+New uploads and Pexels additions are pinned into Candidates automatically, with
+the newest source pack shown first so it is ready to generate immediately.
 Each source has a card pack showing its three newest production candidates.
 The Generate tile opens the two real pipeline choices and creates the next card
 for that source; when it is ready, it enters the pack and the oldest visible

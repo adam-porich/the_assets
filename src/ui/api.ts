@@ -14,7 +14,7 @@ export const api = {
   bootstrap: () => request<Bootstrap>("/workspace"),
   styleBootstrap: () => request<{ style: StyleBootstrap }>("/styles/bootstrap"),
   searchSources: (query: string, count = 12, page = 1) => request<{ results: SearchResult[]; page: number; has_more: boolean }>("/sources/search", json("POST", { query, count, page })),
-  importSources: (candidates: SearchResult[]) => request<{ workspace: Bootstrap["workspace"]; imported: number; deduplicated: number; failed: number }>("/sources/import-bulk", json("POST", { candidates, include_in_selection: false })),
+  importSources: (candidates: SearchResult[]) => request<{ workspace: Bootstrap["workspace"]; imported: number; deduplicated: number; failed: number }>("/sources/import-bulk", json("POST", { candidates, include_in_selection: true })),
   loadStarterSources: () => request<{ workspace: Bootstrap["workspace"] }>("/sources/starter", json("POST", {})),
   uploadSource: (file: File, label: string) => { const form = new FormData(); form.append("label", label); form.append("file", file); return request<{ workspace: Bootstrap["workspace"]; record: Source }>("/sources/upload", { method: "POST", body: form }); },
   updateSelection: (source_ids: string[]) => request<{ workspace: Bootstrap["workspace"]; selected_source_ids: string[] }>("/sources/selection", json("POST", { source_ids })),

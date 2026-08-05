@@ -74,6 +74,21 @@ describe("pipeline workbench", () => {
     expect(container.textContent?.toLowerCase()).not.toContain("strategy");
   });
 
+  it("puts the newest selected source pack first", async () => {
+    const older = { ...base.sources[0], created_at: "2026-08-01T00:00:00Z" };
+    const newest = { id: "source-2", label: "Book", image_url: "/book.png", created_at: "2026-08-05T00:00:00Z" };
+    vi.spyOn(api, "bootstrap").mockResolvedValue({ ...base, workspace: { ...base.workspace, sources: [older, newest] }, sources: [older, newest], selected_source_ids: [older.id, newest.id] } as never);
+    await act(async () => { window.location.hash = "#candidates"; root.render(<App />); });
+    expect(container.querySelector(".candidate-pack .source-peek")?.getAttribute("aria-label")).toContain("Source: Book");
+  });
+
+  it("pins imported search results into Candidates", async () => {
+    const request = vi.spyOn(globalThis, "fetch").mockResolvedValue({ ok: true, json: async () => ({ imported: 1 }) } as Response);
+    await api.importSources([{ id: "result-1", label: "Book", pexels_photo_id: 42, selected_image_url: "/book.png" }]);
+    const body = JSON.parse(String(request.mock.calls[0][1]?.body));
+    expect(body.include_in_selection).toBe(true);
+  });
+
   it("shows an incoming card in its source pack while generation is active", async () => {
     const activeBatch = { batch_id: "batch-active", purpose: "card-production", status: "running", created_at: "2026-08-04T00:00:00Z", updated_at: "2026-08-04T00:00:01Z", style_version_id: style.identity.style_version_id, style_checksum_sha256: style.checksums.style_sha256, selected_source_ids: ["source-1"], requested_paid_calls: 1, paid_calls: 1, progress: { selected_sources: 1, ready_cards: 0, approved_cards: 0, failed_sources: 0, paid_calls: 1, total_attempts: 1 } };
     vi.spyOn(api, "bootstrap").mockResolvedValue({ ...base, batches: [activeBatch], cards: [produced()] } as never);

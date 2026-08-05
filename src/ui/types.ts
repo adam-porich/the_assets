@@ -1,6 +1,6 @@
 export type Source = {
   id: string; label: string; dimensions?: [number, number]; image_url?: string;
-  relative_path?: string; checksum_sha256?: string; provenance?: Record<string, unknown>;
+  relative_path?: string; checksum_sha256?: string; created_at?: string; provenance?: Record<string, unknown>;
 };
 
 export type SearchResult = Source & { pexels_photo_id?: number; selected_image_url?: string; preview_url?: string; photographer?: string };
