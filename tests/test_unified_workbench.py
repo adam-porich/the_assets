@@ -11,7 +11,16 @@ from PIL import Image, ImageChops
 
 from tools.cards.amiga import amiga_palette, palette_is_ocs_12_bit
 from tools.cards.registry import registry
-from tools.cards.style_pipeline import StyleStore, load_checked_in_style, style_checksum, validate_style
+from tools.cards.style_pipeline import (
+    FACE_FREE_PIPELINE_ID,
+    FACE_FREE_REFERENCE_CHECKSUM,
+    PORTRAIT_REFERENCE_CHECKSUM,
+    PORTRAIT_REFERENCE_PIPELINE_ID,
+    StyleStore,
+    load_checked_in_style,
+    style_checksum,
+    validate_style,
+)
 from tools.portraits.generation import (
     AdapterCapabilities,
     FakeGenerationAdapter,
@@ -82,7 +91,8 @@ def test_style_schema_checksum_store_and_asset_snapshots(tmp_path: Path) -> None
     assert all(asset["relative_path"].startswith(f"styles/versions/{locked['identity']['style_version_id']}/") for asset in locked["reference_pack"]["assets"])
     styles.activate(locked["identity"]["style_version_id"])
     assert styles.active()["identity"]["style_version_id"] == locked["identity"]["style_version_id"]
-    assert len(styles.versions()) == 2
+    assert len(styles.versions()) == 3
+    assert {pipeline["pipeline_id"] for pipeline in styles.pipelines()} == {FACE_FREE_PIPELINE_ID, PORTRAIT_REFERENCE_PIPELINE_ID}
     version = styles.versions()[-1]
     assert version["model_id"] == locked["generation"]["model_id"]
     assert version["execution_mode"] == "live"
@@ -103,7 +113,21 @@ def test_legacy_simulation_style_is_migrated_to_current_locked_version(tmp_path:
     assert migrated["generation"]["model_id"] == load_checked_in_style()["generation"]["model_id"]
     assert migrated["identity"]["style_version_id"] != original["identity"]["style_version_id"]
     assert styles.raw_version(original["identity"]["style_version_id"])["generation"]["model_id"] == "fake/painterly-deterministic"
-    assert len(styles.versions()) == 2
+    assert len(styles.versions()) == 3
+
+
+def test_two_real_pipelines_have_distinct_references_and_one_active_default(tmp_path: Path) -> None:
+    styles = StyleStore(WorkspaceStore(tmp_path / "library"))
+    pipelines = styles.pipelines()
+    assert [pipeline["pipeline_id"] for pipeline in pipelines] == [FACE_FREE_PIPELINE_ID, PORTRAIT_REFERENCE_PIPELINE_ID]
+    assert [pipeline["active"] for pipeline in pipelines] == [True, False]
+    references = {
+        pipeline["pipeline_id"]: next(asset["checksum_sha256"] for asset in pipeline["style"]["reference_pack"]["assets"] if asset["role"] == "generation-reference")
+        for pipeline in pipelines
+    }
+    assert references == {FACE_FREE_PIPELINE_ID: FACE_FREE_REFERENCE_CHECKSUM, PORTRAIT_REFERENCE_PIPELINE_ID: PORTRAIT_REFERENCE_CHECKSUM}
+    styles.activate_pipeline(PORTRAIT_REFERENCE_PIPELINE_ID)
+    assert styles.active_pipeline_id() == PORTRAIT_REFERENCE_PIPELINE_ID
 
 
 def test_amiga_registered_engine_is_deterministic_and_matches_golden() -> None:
@@ -150,12 +174,7 @@ def test_production_is_one_integrated_operation_and_excludes_target(tmp_path: Pa
     assert all(item["card_url"] and item["art_url"] for item in result["items"])
     assert all(reference["role"] != "target-example" for item in result["items"] for reference in item["reference_stack"])
     assert calls == [simulation_model()["id"]]
-    cards = _cards(manager)
-    assert cards[0]["pipeline_label"] == style["identity"]["label"]
-    assert cards[0]["batch_created_at"] == result["created_at"]
-    assert cards[0]["style_checksum_sha256"] == style["checksums"]["style_sha256"]
-    assert cards[0]["strategy_id"] == "direct-render"
-    assert cards[0]["strategy_label"] == "Direct render"
+    assert _cards(manager) == []
     approvals = [manager.approve(result["batch_id"], item["item_id"]) for item in result["items"]]
     assert len(approvals) == 2
     refreshed = manager.get(result["batch_id"])
@@ -276,7 +295,32 @@ def test_live_provenance_and_consent_use_semantic_fake_without_provider_call(tmp
     assert item["generation_request"]["target_examples_excluded"] is True
     assert item["master_url"] and item["art_url"] and item["card_url"]
     assert batch["generation_authorization"]["consent"] is True
-    assert _cards(manager)[0]["strategy_id"] == "interpretive-redraw"
+    candidate = _cards(manager)[0]
+    assert candidate["pipeline_id"] == FACE_FREE_PIPELINE_ID
+    assert candidate["pipeline_label"] == "Face-free Style Board"
+
+
+def test_multiple_favorites_persist_and_follow_latest_render(tmp_path: Path) -> None:
+    store = WorkspaceStore(tmp_path / "library")
+    styles = StyleStore(store)
+    item = source(store, "favorite")
+    style = styles.raw_pipeline(FACE_FREE_PIPELINE_ID)
+    model = live_model()
+    style["generation"] = {**style["generation"], "model_id": model["id"], "quality": "medium"}
+    style = validate_style(style, require_locked=True)
+    manager = CardProductionManager(store, styles, lambda mode, capabilities: SemanticFakeGenerationAdapter(capabilities))
+    batch = wait_for(manager, manager.create([item["id"]], style, [model], consent=True)["batch_id"])
+    first = batch["items"][0]
+    another = wait_for(manager, manager.try_another(batch["batch_id"], item["id"], consent=True)["batch_id"])
+    second = another["items"][-1]
+    manager.favourite(batch["batch_id"], first["item_id"])
+    manager.favourite(batch["batch_id"], second["item_id"])
+    assert len(manager.favourites()) == 2
+    rerendered = manager.rerender(batch["batch_id"], first["item_id"], {"zoom": 1.2, "offset_x": 0, "offset_y": 0})
+    assert next(candidate for candidate in rerendered["items"] if candidate["item_id"] == first["item_id"])["favorite"] is True
+    assert sum(bool(candidate.get("favorite")) for candidate in _cards(manager)) == 2
+    assert manager.unfavourite(batch["batch_id"], first["item_id"]) is True
+    assert len(manager.favourites()) == 1
 
 
 def test_simulation_is_preview_only_for_lock_and_normal_production(tmp_path: Path) -> None:
@@ -330,6 +374,4 @@ def test_failed_retry_and_try_another_keep_attempt_provenance(tmp_path: Path) ->
     assert [candidate["attempt_number"] for candidate in attempts] == [1, 2, 3]
     assert len({candidate["master_url"] for candidate in attempts if candidate.get("master_url")}) == 2
     assert another["progress"]["total_attempts"] == 3
-    exposed = _cards(manager)
-    assert sorted(card["attempt_number"] for card in exposed) == [2, 3]
-    assert all(card["strategy_id"] == "direct-render" for card in exposed)
+    assert _cards(manager) == []

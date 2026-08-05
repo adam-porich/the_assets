@@ -8,7 +8,7 @@ export type SearchResult = Source & { pexels_photo_id?: number; selected_image_u
 export type StyleAsset = { id: string; asset_key?: string; label: string; role: "generation-reference" | "target-example"; checksum_sha256: string; image_url?: string; relative_path?: string };
 export type PipelineStyle = {
   schema_version: number;
-  identity: { family_id: string; style_version_id: string; version: number; state: "draft" | "locked"; label: string };
+  identity: { family_id: string; pipeline_id?: string; style_version_id: string; version: number; state: "draft" | "locked"; label: string };
   generation: { model_id: string; execution_mode: "simulation" | "live"; quality: "low" | "medium" | "high"; direction: Record<string, string>; avoid: string; requested_aspect_policy: string; reference_limit: number };
   reference_pack: { id: string; version: number; assets: StyleAsset[] };
   composition: { logical_art_size: [number, number]; default_framing: { zoom: number; offset_x: number; offset_y: number }; centering: [number, number]; requested_art_ratio: string };
@@ -20,11 +20,16 @@ export type PipelineStyle = {
 };
 
 export type PipelineVersion = {
-  style_version_id: string; label: string; version: number; checksum_sha256: string; active: boolean;
+  pipeline_id?: string; style_version_id: string; label: string; version: number; checksum_sha256: string; active: boolean;
   created_at?: string | null; execution_mode: "simulation" | "live"; model_id: string; quality: string;
   reference_count: number; renderer_id: string;
 };
-export type StyleBootstrap = { active: PipelineStyle; draft?: PipelineStyle | null; versions: PipelineVersion[]; driver: { id: string; label: string; output: string } };
+export type PipelineRecord = {
+  pipeline_id: string; label: string; description: string; active: boolean; current_version_id: string; revision_count: number;
+  revisions: Array<{ style_version_id: string; checksum_sha256: string; created_at?: string | null }>;
+  style: PipelineStyle;
+};
+export type StyleBootstrap = { active: PipelineStyle; active_pipeline_id: string; pipelines: PipelineRecord[]; draft?: PipelineStyle | null; versions: PipelineVersion[]; driver: { id: string; label: string; output: string } };
 
 export type Model = { id: string; name: string; description?: string; execution_mode: "simulation" | "live"; available: boolean; credentials_configured?: boolean; max_input_references: number; qualities: string[]; aspect_ratios: string[]; pricing: Array<Record<string, unknown>>; provider_name?: string; provider_slug?: string; endpoint_id?: string; endpoint_url?: string };
 export type Framing = { zoom: number; offset_x: number; offset_y: number };
@@ -33,14 +38,14 @@ export type ProductionItem = {
   error?: string | null; phase?: string; source_url?: string; master_url?: string; logical_art_url?: string; art_url?: string; card_url?: string; card_checksum_sha256?: string | null;
   master_checksum_sha256?: string | null; render_revision: number; render_revisions: Array<Record<string, unknown>>; framing?: Framing | null; generation?: Record<string, unknown>; render_metadata?: Record<string, unknown>; usage?: Record<string, unknown>; cost_usd?: number | null;
   reference_stack: Array<Record<string, unknown>>; reference_urls?: Array<string | null>;
+  favorite?: boolean; favorited_at?: string | null;
 };
 export type ProductionProgress = { selected_sources: number; ready_cards: number; approved_cards: number; failed_sources: number; paid_calls: number; total_attempts: number };
 export type ProductionBatch = { batch_id: string; purpose: "card-production" | "style-trial"; status: string; created_at: string; updated_at: string; style_version_id: string; style_checksum_sha256: string; selected_source_ids: string[]; requested_paid_calls: number; paid_calls: number; cost_usd?: number | null; items: ProductionItem[]; progress: ProductionProgress; style_snapshot?: PipelineStyle; calibration_source_ids?: string[] | null; model?: Model; model_capabilities?: Record<string, unknown>; backend_mapping?: Record<string, unknown>; generation_authorization?: Record<string, unknown> };
 export type ProductionSummary = Omit<ProductionBatch, "items" | "style_snapshot">;
 export type ProducedCard = ProductionItem & {
   batch_id: string; batch_created_at: string; purpose: ProductionBatch["purpose"];
-  style_version_id: string; style_checksum_sha256: string; pipeline_label: string; pipeline_version?: number | null;
-  strategy_id: "interpretive-redraw" | "direct-render"; strategy_label: string; strategy_description: string;
+  style_version_id: string; style_checksum_sha256: string; pipeline_id: string; pipeline_label: string; pipeline_description: string; pipeline_version?: number | null;
 };
 
-export type Bootstrap = { workspace: { sources: Source[]; benchmark_source_ids: string[] }; sources: Source[]; selected_source_ids: string[]; style: StyleBootstrap; batches: ProductionSummary[]; cards: ProducedCard[]; models: Model[]; integrations: { pexels: { configured: boolean }; openrouter: { configured: boolean } }; starter: { photo_ids: number[] } };
+export type Bootstrap = { workspace: { sources: Source[]; benchmark_source_ids: string[] }; sources: Source[]; selected_source_ids: string[]; style: StyleBootstrap; batches: ProductionSummary[]; cards: ProducedCard[]; favorites: ProducedCard[]; models: Model[]; integrations: { pexels: { configured: boolean }; openrouter: { configured: boolean } }; starter: { photo_ids: number[] } };

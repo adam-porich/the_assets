@@ -4,13 +4,13 @@ Portrait Workbench turns selected source portraits into finished, pixel-native
 cards through one explicit path:
 
 ```text
-Sources → Pipelines → Cards
+Sources → Pipelines → Candidates → Collection
 ```
 
-The active house pipeline owns the generation direction, ordered image
-references, framing, fixed-palette rendering, and card assembly as one
-versioned contract. Saved versions and working configurations are first-class
-assets with their own produced-card history.
+Each runnable pipeline owns its generation direction, ordered image references,
+framing, fixed-palette rendering, and card assembly as one versioned contract.
+One pipeline is the active default used by Sources, but either saved pipeline
+can generate candidates.
 
 ## Start it
 
@@ -38,30 +38,36 @@ Generation starts immediately from the explicit run action.
 
 ### Pipelines
 
-Saved versions and the current working pipeline sit side-by-side with sample
-outputs. The pipeline anatomy makes the complete source + reference → generated
-master → Amiga art → assembled card path visible. A working configuration can
-change the model direction, ordered references, renderer values, and card
-values, then run the same three-source comparison cohort repeatedly. Each
-checksum remains attached to the candidates it produced.
+The workbench has two real live pipelines: **Face-free Style Board** and
+**Portrait Style Reference**. The latter uses the original portrait reference
+from historical Pipelines 01/02; otherwise it shares the current generation and
+rendering path. Saved revisions live inside their pipeline instead of appearing
+as extra peer pipelines. A working revision can run a three-source calibration
+cohort before it is saved.
 
-### Cards
+### Candidates
 
-Cards are shown as a source-by-strategy matrix: rows keep identity constant and
-the two columns separate **Interpretive redraw** from the deterministic **Direct
-render** baseline. Every ready generation is retained inside its strategy
-gallery; pipeline version, checksum, and attempt stay as compact candidate
-metadata instead of becoming extra columns. Open any candidate to inspect its
-source, generated master, rendered art, final card, and provenance. **Generate
-again** adds an attempt immediately; framing changes rerender the existing
-master without another model call. Approval and bundle gates are intentionally
-absent while the visual pipeline is still being developed.
+Candidates are shown as a source-by-pipeline matrix. Rows keep identity
+constant; columns make the producing pipeline explicit. Every ready production
+attempt is retained. Draft calibration trials stay in the pipeline editor and
+simulation output is not presented as a candidate. Open a candidate to inspect
+its source, generated master, rendered art, final card, and provenance.
+**Generate again** adds an attempt immediately; framing changes rerender the
+existing master without another model call.
+
+### Collection
+
+Favorite any number of candidates to save them in Collection. Collection keeps
+references to the durable production assets, so it does not duplicate image
+files. Removing a favorite does not delete its candidate. If a favorite is
+reframed, Collection follows the candidate's latest render revision.
 
 ## Routes
 
 The refreshable hashes are `#sources`, `#pipelines`,
-`#pipelines/<pipeline-id>`, `#cards`, and
-`#cards/<batch-id>/<item-id>`. Superseded style hashes redirect to Pipelines.
+`#pipelines/<pipeline-id>`, `#candidates`,
+`#candidates/<batch-id>/<item-id>`, and `#collection`. Old `#cards` hashes
+redirect to Candidates.
 
 ## Pipeline and provenance
 
@@ -86,7 +92,7 @@ mapping, model/provider capabilities, execution mode, usage/cost, framing
 transform, and output checksums. Target examples are visible as renderer proof
 assets, but are structurally excluded from provider payloads.
 
-Live runs, comparison cohorts, retries, and **New result** are explicit button
+Live runs, comparison cohorts, retries, and **Generate again** are explicit button
 actions and do not add a second confirmation modal. The UI keeps model, call
 count, and known/unknown cost adjacent to the run action, and the API records
 authorization for live calls. Simulation output is labelled as a preview and
@@ -100,13 +106,20 @@ production/<batch>/batch.json
 production/<batch>/inputs/...
 production/<batch>/masters/...
 production/<batch>/renders/...
-approvals/approvals.json
+favorites.json
 downloads/...
 ```
 
 To reset local development, stop the server and delete only this repository's
 ignored `portrait-library/` directory, then restart the server. No reset is
 performed by normal workflow actions.
+
+The targeted migration used to remove superseded simulation pipelines and
+their batches is idempotent:
+
+```bash
+uv run python -m tools.portraits cleanup-workspace --input portrait-library
+```
 
 ## Verification
 

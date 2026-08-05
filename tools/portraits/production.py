@@ -280,9 +280,13 @@ class CardProductionManager:
     def payload(self, record: dict[str, Any]) -> dict[str, Any]:
         result = copy.deepcopy(record)
         result["progress"] = self.progress(record)
+        favourites = {(str(item.get("batch_id")), str(item.get("item_id"))): item for item in self._favourite_data().get("items", [])}
         current_approvals = self._approval_data().get("current", {})
         result["progress"]["approved_cards"] = sum(1 for source_id in record.get("selected_source_ids", []) if f"{source_id}:{record.get('style_version_id')}" in current_approvals)
         for item in result.get("items", []):
+            favourite = favourites.get((str(record.get("batch_id")), str(item.get("item_id"))))
+            item["favorite"] = bool(favourite)
+            item["favorited_at"] = favourite.get("favorited_at") if favourite else None
             item["approved"] = current_approvals.get(f"{item.get('source_id')}:{record.get('style_version_id')}", {}).get("attempt_id") == item.get("item_id")
             for field in ("master_path", "logical_art_path", "art_path", "card_path"):
                 item[field.replace("_path", "_url")] = self.store.asset_url(item.get(field))
@@ -364,6 +368,57 @@ class CardProductionManager:
 
     def _approval_data(self) -> dict[str, Any]:
         return self.store.read_json(self.store.root / "approvals" / "approvals.json", {"version": 1, "history": [], "current": {}})
+
+    def _favourite_data(self) -> dict[str, Any]:
+        return self.store.read_json(self.store.root / "favorites.json", {"version": 1, "items": []})
+
+    def favourites(self) -> list[dict[str, Any]]:
+        return list(self._favourite_data().get("items", []))
+
+    def favourite(self, batch_id: str, item_id: str) -> dict[str, Any]:
+        record = self._read(batch_id)
+        if record.get("purpose") != "card-production":
+            raise ValueError("only candidates from saved pipelines can be favorited")
+        item = next((candidate for candidate in record.get("items", []) if candidate.get("item_id") == item_id), None)
+        if not item or item.get("status") != "ready":
+            raise ValueError("only a ready candidate can be favorited")
+        data = self._favourite_data()
+        existing = next((entry for entry in data.get("items", []) if entry.get("batch_id") == batch_id and entry.get("item_id") == item_id), None)
+        if existing:
+            return existing
+        favourite = {"favorite_id": new_id("favorite"), "batch_id": batch_id, "item_id": item_id, "favorited_at": now_iso()}
+        data.setdefault("items", []).append(favourite)
+        self.store.atomic_json(self.store.root / "favorites.json", data)
+        return favourite
+
+    def unfavourite(self, batch_id: str, item_id: str) -> bool:
+        data = self._favourite_data()
+        before = len(data.get("items", []))
+        data["items"] = [entry for entry in data.get("items", []) if not (entry.get("batch_id") == batch_id and entry.get("item_id") == item_id)]
+        if len(data["items"]) != before:
+            self.store.atomic_json(self.store.root / "favorites.json", data)
+            return True
+        return False
+
+    def remove_simulation_batches(self) -> list[str]:
+        removed: list[str] = []
+        for path in list((self.store.root / "production").glob("*/batch.json")):
+            record = self.store.read_json(path, {})
+            if record.get("style_snapshot", {}).get("generation", {}).get("execution_mode") != "simulation":
+                continue
+            removed.append(str(record.get("batch_id") or path.parent.name))
+            shutil.rmtree(path.parent)
+        existing = {path.parent.name for path in (self.store.root / "production").glob("*/batch.json")}
+        data = self._favourite_data()
+        data["items"] = [entry for entry in data.get("items", []) if entry.get("batch_id") in existing]
+        self.store.atomic_json(self.store.root / "favorites.json", data)
+        approvals = self._approval_data()
+        approvals["history"] = [entry for entry in approvals.get("history", []) if entry.get("batch_id") in existing]
+        approvals["current"] = {key: entry for key, entry in approvals.get("current", {}).items() if entry.get("batch_id") in existing}
+        self.store.atomic_json(self.store.root / "approvals" / "approvals.json", approvals)
+        for batch_id in removed:
+            (self.store.root / "downloads" / f"{batch_id}-approved.zip").unlink(missing_ok=True)
+        return removed
 
     def approve(self, batch_id: str, item_id: str) -> dict[str, Any]:
         record = self._read(batch_id); item = next((candidate for candidate in record["items"] if candidate.get("item_id") == item_id), None)

@@ -2,10 +2,11 @@
   "schema_version": 1,
   "identity": {
     "family_id": "amiga-ocs-portrait",
+    "pipeline_id": "face-free-style-board",
     "style_version_id": "style_amiga_ocs_portrait_v3",
     "version": 3,
     "state": "locked",
-    "label": "Amiga OCS Neutral Portrait v3"
+    "label": "Face-free Style Board"
   },
   "generation": {
     "model_id": "openai/gpt-image-1-mini",

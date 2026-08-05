@@ -14,6 +14,19 @@ from tools.portraits.workspace import WorkspaceError, WorkspaceStore, checksum, 
 STYLE_DEFINITION_PATH = Path(__file__).parent / "styles" / "amiga-ocs-portrait-v1.json"
 ASSET_ROOT = Path(__file__).parent / "assets" / "amiga-ocs-portrait-v1"
 STYLE_FAMILY_ID = "amiga-ocs-portrait"
+FACE_FREE_PIPELINE_ID = "face-free-style-board"
+PORTRAIT_REFERENCE_PIPELINE_ID = "portrait-style-reference"
+PIPELINE_IDS = {FACE_FREE_PIPELINE_ID, PORTRAIT_REFERENCE_PIPELINE_ID}
+PIPELINE_LABELS = {
+    FACE_FREE_PIPELINE_ID: "Face-free Style Board",
+    PORTRAIT_REFERENCE_PIPELINE_ID: "Portrait Style Reference",
+}
+PIPELINE_DESCRIPTIONS = {
+    FACE_FREE_PIPELINE_ID: "Uses the face-free board for palette, planes, edges, and background treatment.",
+    PORTRAIT_REFERENCE_PIPELINE_ID: "Uses the original portrait reference from historical Pipelines 01/02.",
+}
+FACE_FREE_REFERENCE_CHECKSUM = "ad0a1277a27a61dee615652f6fd81fa163a6dd44d5db378d9ed745faae39085c"
+PORTRAIT_REFERENCE_CHECKSUM = "68ca995a8d308963278a2047863886b382adc8cd1230d05952c017b659838efe"
 LEGACY_SIMULATION_MODEL_ID = "fake/painterly-deterministic"
 SIMULATION_MODEL_IDS = {LEGACY_SIMULATION_MODEL_ID, "fake/amiga-ocs-deterministic"}
 
@@ -69,6 +82,8 @@ def validate_style(style: dict[str, Any], *, require_locked: bool = False) -> di
             raise ValueError(f"style identity.{field} is required")
     if identity["family_id"] != STYLE_FAMILY_ID:
         raise ValueError("only the amiga-ocs-portrait style family is registered")
+    if identity.get("pipeline_id") and identity["pipeline_id"] not in PIPELINE_IDS:
+        raise ValueError("style identity.pipeline_id is not a registered pipeline")
     state = str(identity.get("state") or "")
     if state not in {"draft", "locked"}:
         raise ValueError("style state must be draft or locked")
@@ -152,6 +167,16 @@ def load_checked_in_style() -> dict[str, Any]:
     return validate_style(json.loads(STYLE_DEFINITION_PATH.read_text(encoding="utf-8")))
 
 
+def pipeline_id_for_style(style: dict[str, Any]) -> str:
+    explicit = str(style.get("identity", {}).get("pipeline_id") or "")
+    if explicit in PIPELINE_IDS:
+        return explicit
+    generation_assets = [asset for asset in style.get("reference_pack", {}).get("assets", []) if asset.get("role") == "generation-reference"]
+    if any(str(asset.get("checksum_sha256")) == FACE_FREE_REFERENCE_CHECKSUM for asset in generation_assets):
+        return FACE_FREE_PIPELINE_ID
+    return PORTRAIT_REFERENCE_PIPELINE_ID
+
+
 def legacy_amiga_style(style: dict[str, Any]) -> dict[str, Any]:
     """Adapt the validated snapshot to the proven Amiga implementation."""
     renderer = style["renderer"]
@@ -196,7 +221,7 @@ class StyleStore:
     def _asset_path(self, asset: dict[str, Any]) -> Path:
         return self.store.absolute_path(str(asset.get("relative_path") or ""))
 
-    def ensure_initial(self) -> dict[str, Any]:
+    def _ensure_default(self) -> dict[str, Any]:
         index = self._index()
         active_id = index.get("active_version_id")
         if active_id and self._style_path(str(active_id)).is_file():
@@ -216,6 +241,55 @@ class StyleStore:
             return self._materialize_locked(checked_in, index, activate=True)
         style = load_checked_in_style()
         return self._materialize_locked(style, index, activate=True)
+
+    def _ensure_portrait_reference(self) -> dict[str, Any]:
+        index = self._index()
+        matching: list[str] = []
+        for entry in index.get("versions", []):
+            try:
+                style = self.raw_version(str(entry["style_version_id"]))
+            except ValueError:
+                continue
+            if style["generation"].get("execution_mode") == "live" and style.get("identity", {}).get("pipeline_id") == PORTRAIT_REFERENCE_PIPELINE_ID:
+                matching.append(str(entry["style_version_id"]))
+        if matching:
+            return self.get_version(matching[-1])
+
+        base = self.raw_version(str(index.get("active_version_id")))
+        portrait = _json_copy(base)
+        portrait["identity"] = {
+            **portrait["identity"],
+            "pipeline_id": PORTRAIT_REFERENCE_PIPELINE_ID,
+            "style_version_id": f"style_portrait_reference_v1_{uuid.uuid4().hex[:10]}",
+            "version": 1,
+            "state": "locked",
+            "label": PIPELINE_LABELS[PORTRAIT_REFERENCE_PIPELINE_ID],
+        }
+        target_assets = [asset for asset in portrait["reference_pack"]["assets"] if asset.get("role") == "target-example"]
+        portrait["reference_pack"] = {
+            **portrait["reference_pack"],
+            "id": "portrait-style-reference-pack",
+            "version": 1,
+            "assets": [{
+                "id": "generation-reference-01",
+                "asset_key": "generation-reference-01.png",
+                "role": "generation-reference",
+                "label": "Original portrait style reference",
+                "checksum_sha256": PORTRAIT_REFERENCE_CHECKSUM,
+            }, *target_assets],
+        }
+        portrait["provenance"] = {
+            "source": "seeded-pipeline",
+            "derived_from": base["identity"]["style_version_id"],
+            "reference_lineage": "historical-pipelines-01-02",
+        }
+        portrait["checksums"] = {"style_sha256": style_checksum(portrait)}
+        return self._materialize_locked(portrait, index, activate=False)
+
+    def ensure_initial(self) -> dict[str, Any]:
+        active = self._ensure_default()
+        self._ensure_portrait_reference()
+        return active
 
     def _materialize_locked(self, style: dict[str, Any], index: dict[str, Any], *, activate: bool) -> dict[str, Any]:
         version_id = str(style["identity"]["style_version_id"])
@@ -278,6 +352,7 @@ class StyleStore:
             try:
                 style = self.get_version(str(entry["style_version_id"]))
                 result.append({
+                    "pipeline_id": pipeline_id_for_style(style),
                     "style_version_id": style["identity"]["style_version_id"],
                     "label": style["identity"]["label"],
                     "version": style["identity"].get("version"),
@@ -294,6 +369,53 @@ class StyleStore:
                 continue
         return result
 
+    def pipelines(self) -> list[dict[str, Any]]:
+        self.ensure_initial()
+        index = self._index()
+        result: list[dict[str, Any]] = []
+        for pipeline_id in (FACE_FREE_PIPELINE_ID, PORTRAIT_REFERENCE_PIPELINE_ID):
+            revisions: list[dict[str, Any]] = []
+            for entry in index.get("versions", []):
+                try:
+                    raw = self.raw_version(str(entry["style_version_id"]))
+                except ValueError:
+                    continue
+                if raw["generation"].get("execution_mode") != "live" or pipeline_id_for_style(raw) != pipeline_id:
+                    continue
+                revisions.append({
+                    "style_version_id": raw["identity"]["style_version_id"],
+                    "checksum_sha256": raw["checksums"]["style_sha256"],
+                    "created_at": entry.get("created_at"),
+                })
+            if not revisions:
+                continue
+            current_id = str(revisions[-1]["style_version_id"])
+            style = self.get_version(current_id)
+            result.append({
+                "pipeline_id": pipeline_id,
+                "label": PIPELINE_LABELS[pipeline_id],
+                "description": PIPELINE_DESCRIPTIONS[pipeline_id],
+                "active": current_id == self.active_id(),
+                "current_version_id": current_id,
+                "revision_count": len(revisions),
+                "revisions": revisions,
+                "style": style,
+            })
+        return result
+
+    def active_pipeline_id(self) -> str:
+        return pipeline_id_for_style(self.raw_version(str(self.active_id())))
+
+    def raw_pipeline(self, pipeline_id: str) -> dict[str, Any]:
+        pipeline = next((item for item in self.pipelines() if item["pipeline_id"] == pipeline_id), None)
+        if not pipeline:
+            raise ValueError(f"pipeline {pipeline_id} does not exist")
+        return self.raw_version(str(pipeline["current_version_id"]))
+
+    def activate_pipeline(self, pipeline_id: str) -> dict[str, Any]:
+        style = self.raw_pipeline(pipeline_id)
+        return self.activate(str(style["identity"]["style_version_id"]))
+
     def draft(self) -> dict[str, Any] | None:
         draft_id = self._index().get("draft")
         if not draft_id:
@@ -309,13 +431,17 @@ class StyleStore:
             return None
         return validate_style(self.store.read_json(path, {}))
 
-    def create_or_resume_draft(self) -> dict[str, Any]:
+    def create_or_resume_draft(self, pipeline_id: str | None = None) -> dict[str, Any]:
         current = self.draft()
         if current:
+            requested = pipeline_id or self.active_pipeline_id()
+            if pipeline_id_for_style(current) != requested:
+                raise ValueError("finish the existing working pipeline before editing another pipeline")
             return current
-        base = self.raw_version(str(self.active_id()))
+        requested = pipeline_id or self.active_pipeline_id()
+        base = self.raw_pipeline(requested)
         draft = _json_copy(base)
-        draft["identity"] = {**draft["identity"], "state": "draft", "style_version_id": f"draft_{uuid.uuid4().hex[:16]}"}
+        draft["identity"] = {**draft["identity"], "pipeline_id": requested, "label": PIPELINE_LABELS[requested], "state": "draft", "style_version_id": f"draft_{uuid.uuid4().hex[:16]}"}
         draft["provenance"] = {"derived_from": base["identity"]["style_version_id"], "created_at": now_iso()}
         draft["checksums"] = {"style_sha256": style_checksum(draft), "base_style_version_id": base["identity"]["style_version_id"]}
         self.store.atomic_json(self.store.root / "styles" / "draft.json", draft)
@@ -323,7 +449,7 @@ class StyleStore:
         return self.payload(draft)
 
     def update_draft(self, patch: dict[str, Any]) -> dict[str, Any]:
-        draft = self.create_or_resume_draft()
+        draft = self.draft() or self.create_or_resume_draft()
         raw = self.store.read_json(self.store.root / "styles" / "draft.json", {})
         if not isinstance(patch, dict):
             raise ValueError("draft patch must be an object")
@@ -346,7 +472,7 @@ class StyleStore:
         return self.payload(normalized)
 
     def add_draft_reference(self, label: str, original_name: str, content: bytes, content_type: str | None = None) -> dict[str, Any]:
-        draft = self.create_or_resume_draft()
+        draft = self.draft() or self.create_or_resume_draft()
         record = self.store.add_image_record("reference", label, original_name, content, content_type)
         raw = self.store.read_json(self.store.root / "styles" / "draft.json", {})
         asset = {"id": f"draft-reference-{uuid.uuid4().hex[:12]}", "label": record["label"], "role": "generation-reference", "relative_path": record["relative_path"], "checksum_sha256": record["checksum_sha256"], "provenance": {"kind": "draft-upload", "created_at": now_iso()}}
@@ -364,9 +490,10 @@ class StyleStore:
                 raise ValueError("style draft reference assets changed; refresh the draft before locking")
         index = self._index()
         next_version = max([int(self.get_version(str(item["style_version_id"])).get("identity", {}).get("version", 0)) for item in index.get("versions", [])] + [0]) + 1
-        version_id = f"style_{STYLE_FAMILY_ID.replace('-', '_')}_v{next_version}_{uuid.uuid4().hex[:10]}"
+        pipeline_id = pipeline_id_for_style(draft)
+        version_id = f"style_{pipeline_id.replace('-', '_')}_v{next_version}_{uuid.uuid4().hex[:10]}"
         locked = _json_copy(draft)
-        locked["identity"] = {**locked["identity"], "state": "locked", "version": next_version, "style_version_id": version_id}
+        locked["identity"] = {**locked["identity"], "pipeline_id": pipeline_id, "label": PIPELINE_LABELS[pipeline_id], "state": "locked", "version": next_version, "style_version_id": version_id}
         locked["provenance"] = {"derived_from_draft": draft["identity"]["style_version_id"], "created_at": now_iso()}
         version_dir = self._style_path(version_id).parent
         for asset in locked["reference_pack"]["assets"]:
@@ -390,6 +517,52 @@ class StyleStore:
         index = self._index(); index["active_version_id"] = style["identity"]["style_version_id"]; self._write_index(index)
         return self.get_version(version_id)
 
+    def remove_simulation_versions(self) -> list[str]:
+        self.ensure_initial()
+        index = self._index()
+        removed: list[str] = []
+        retained: list[dict[str, Any]] = []
+        for entry in index.get("versions", []):
+            version_id = str(entry.get("style_version_id") or "")
+            try:
+                style = self.raw_version(version_id)
+            except ValueError:
+                continue
+            if style["generation"].get("execution_mode") == "simulation":
+                if version_id == index.get("active_version_id"):
+                    raise ValueError("cannot remove the active pipeline version")
+                shutil.rmtree(self._style_path(version_id).parent)
+                removed.append(version_id)
+            else:
+                retained.append(entry)
+        index["versions"] = retained
+        self._write_index(index)
+        return removed
+
+    def remove_superseded_legacy_versions(self, protected_version_ids: set[str] | None = None) -> list[str]:
+        """Remove unreferenced pre-pipeline live versions after the two pipelines are seeded."""
+        self.ensure_initial()
+        index = self._index()
+        removed: list[str] = []
+        retained: list[dict[str, Any]] = []
+        active_id = str(index.get("active_version_id") or "")
+        protected = protected_version_ids or set()
+        for entry in index.get("versions", []):
+            version_id = str(entry.get("style_version_id") or "")
+            try:
+                style = self.raw_version(version_id)
+            except ValueError:
+                continue
+            legacy_nonactive = style["generation"].get("execution_mode") == "live" and not style.get("identity", {}).get("pipeline_id") and version_id != active_id and version_id not in protected
+            if legacy_nonactive:
+                shutil.rmtree(self._style_path(version_id).parent)
+                removed.append(version_id)
+            else:
+                retained.append(entry)
+        index["versions"] = retained
+        self._write_index(index)
+        return removed
+
     def payload(self, style: dict[str, Any]) -> dict[str, Any]:
         result = _json_copy(style)
         for asset in result.get("reference_pack", {}).get("assets", []):
@@ -399,4 +572,4 @@ class StyleStore:
 
     def bootstrap(self) -> dict[str, Any]:
         active = self.active()
-        return {"active": active, "draft": self.draft(), "versions": self.versions(), "driver": {"id": "amiga-ocs", "label": "Amiga OCS", "output": "420×600 final cards"}}
+        return {"active": active, "active_pipeline_id": self.active_pipeline_id(), "pipelines": self.pipelines(), "draft": self.draft(), "versions": self.versions(), "driver": {"id": "amiga-ocs", "label": "Amiga OCS", "output": "420×600 final cards"}}

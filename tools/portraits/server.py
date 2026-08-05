@@ -14,7 +14,7 @@ from urllib.parse import unquote, urlparse
 
 import requests
 
-from tools.cards.style_pipeline import StyleStore
+from tools.cards.style_pipeline import PIPELINE_DESCRIPTIONS, PIPELINE_LABELS, StyleStore, pipeline_id_for_style
 
 from .generation import DEFAULT_LIVE_MODEL_ID, fetch_model_catalogue, simulation_model, unavailable_live_model
 from .pexels import STARTER_PHOTO_IDS, get_pexels_photo, has_pexels_api_key, is_plausible_portrait, search_pexels
@@ -45,7 +45,7 @@ def fetch_models() -> list[dict[str, Any]]:
 def _models_for_store(store: WorkspaceStore, styles: StyleStore) -> list[dict[str, Any]]:
     models = fetch_models()
     known = {str(item.get("id")) for item in models}
-    stale = [str(styles.active().get("generation", {}).get("model_id"))]
+    stale = [str(pipeline.get("style", {}).get("generation", {}).get("model_id")) for pipeline in styles.pipelines()]
     if styles.draft():
         stale.append(str(styles.draft().get("generation", {}).get("model_id")))
     return [*models, *(unavailable_live_model(model_id) for model_id in dict.fromkeys(stale) if model_id and model_id not in known)]
@@ -114,13 +114,9 @@ def _cards(manager: CardProductionManager) -> list[dict[str, Any]]:
             detail = manager.get(str(batch["batch_id"]))
         except ValueError:
             continue
-        generation = detail.get("style_snapshot", {}).get("generation", {})
-        live = generation.get("execution_mode") == "live"
-        strategy = {
-            "strategy_id": "interpretive-redraw" if live else "direct-render",
-            "strategy_label": "Interpretive redraw" if live else "Direct render",
-            "strategy_description": "Image-model redraw followed by Amiga rendering" if live else "Source-led deterministic rendering baseline",
-        }
+        if detail.get("purpose") != "card-production":
+            continue
+        pipeline_id = pipeline_id_for_style(detail.get("style_snapshot", {}))
         for item in detail.get("items", []):
             if item.get("status") == "ready":
                 identity = detail.get("style_snapshot", {}).get("identity", {})
@@ -131,17 +127,19 @@ def _cards(manager: CardProductionManager) -> list[dict[str, Any]]:
                     "purpose": detail["purpose"],
                     "style_version_id": detail["style_version_id"],
                     "style_checksum_sha256": detail["style_checksum_sha256"],
-                    "pipeline_label": identity.get("label") or detail["style_version_id"],
+                    "pipeline_id": pipeline_id,
+                    "pipeline_label": PIPELINE_LABELS[pipeline_id],
+                    "pipeline_description": PIPELINE_DESCRIPTIONS[pipeline_id],
                     "pipeline_version": identity.get("version"),
-                    **strategy,
                 })
-    return cards
+    return sorted(cards, key=lambda item: (str(item.get("batch_created_at") or ""), int(item.get("attempt_number") or 0)), reverse=True)
 
 
 def _bootstrap(store: WorkspaceStore, styles: StyleStore, manager: CardProductionManager) -> dict[str, Any]:
     styles.ensure_initial()
     workspace = store.payload()
     style = styles.bootstrap()
+    cards = _cards(manager)
     return {
         "ok": True,
         "workspace": workspace,
@@ -149,7 +147,8 @@ def _bootstrap(store: WorkspaceStore, styles: StyleStore, manager: CardProductio
         "selected_source_ids": list(workspace.get("benchmark_source_ids", [])),
         "style": style,
         "batches": manager.list(),
-        "cards": _cards(manager),
+        "cards": cards,
+        "favorites": sorted([card for card in cards if card.get("favorite")], key=lambda card: str(card.get("favorited_at") or ""), reverse=True),
         "models": _models_for_store(store, styles),
         "integrations": {"pexels": {"configured": has_pexels_api_key()}, "openrouter": {"configured": bool(os.environ.get("OPENROUTER_API_KEY"))}},
         "starter": {"photo_ids": list(STARTER_PHOTO_IDS)},
@@ -186,6 +185,8 @@ class WorkbenchHandler(BaseHTTPRequestHandler):
                 self.send_json({"models": _models_for_store(self.store, self.styles)}); return
             if path == "/api/styles/bootstrap":
                 self.send_json({"style": self.styles.bootstrap()}); return
+            if path == "/api/favorites":
+                cards = _cards(self.manager); self.send_json({"favorites": [card for card in cards if card.get("favorite")]}); return
             if path == "/api/production":
                 self.send_json({"batches": self.manager.list()}); return
             match = re.fullmatch(r"/api/production/([^/]+)", path)
@@ -242,12 +243,11 @@ class WorkbenchHandler(BaseHTTPRequestHandler):
                 if len(requested) != len(set(requested)) or any(item not in known for item in requested): raise ValueError("source selection contains an unknown or duplicate image")
                 self.store.mutate(lambda data: data.update({"benchmark_source_ids": requested})); self.send_json({"workspace": self.store.payload(), "selected_source_ids": requested}); return
             if path == "/api/production":
-                payload = self._json(); style_id = str(payload.get("style_version_id") or self.styles.active_id()); style = self.styles.raw_version(style_id)
-                if style_id != self.styles.active_id(): raise ValueError("normal card production must use the active locked style version")
+                payload = self._json(); pipeline_id = str(payload.get("pipeline_id") or self.styles.active_pipeline_id()); style = self.styles.raw_pipeline(pipeline_id)
                 batch = self.manager.create([str(item) for item in payload.get("source_ids") or []], style, _models_for_store(self.store, self.styles), purpose="card-production", consent=bool(payload.get("consent")))
                 self.send_json({"batch": batch}, HTTPStatus.ACCEPTED); return
             if path == "/api/styles/draft":
-                self.send_json({"style": self.styles.create_or_resume_draft()}); return
+                payload = self._json(); self.send_json({"style": self.styles.create_or_resume_draft(str(payload.get("pipeline_id") or self.styles.active_pipeline_id()))}); return
             if path == "/api/styles/draft/references":
                 _, filename, content, content_type = _parse_upload(self.rfile.read(int(self.headers.get("Content-Length", "0"))), self.headers.get("Content-Type", ""))
                 self.send_json({"style": self.styles.add_draft_reference(filename.rsplit(".", 1)[0], filename, content, content_type)}); return
@@ -262,6 +262,12 @@ class WorkbenchHandler(BaseHTTPRequestHandler):
                 elif action == "approve": result = {"approval": self.manager.approve(batch_id, str(payload.get("item_id") or ""))}
                 else: result = self.manager.bundle(batch_id)
                 self.send_json(result); return
+            if path == "/api/favorites":
+                payload = self._json(); favorite = self.manager.favourite(str(payload.get("batch_id") or ""), str(payload.get("item_id") or ""))
+                self.send_json({"favorite": favorite}, HTTPStatus.CREATED); return
+            match = re.fullmatch(r"/api/pipelines/([^/]+)/activate", path)
+            if match:
+                self.styles.activate_pipeline(match.group(1)); self.send_json({"style": self.styles.bootstrap()}); return
             if path == "/api/styles/trials":
                 payload = self._json(); draft = self.styles.draft()
                 if not draft: raise ValueError("create a draft style before starting a trial")
@@ -301,6 +307,9 @@ class WorkbenchHandler(BaseHTTPRequestHandler):
     def do_DELETE(self) -> None:
         path = urlparse(self.path).path.rstrip("/")
         try:
+            favorite_match = re.fullmatch(r"/api/favorites/([^/]+)/([^/]+)", path)
+            if favorite_match:
+                batch_id, item_id = favorite_match.groups(); self.manager.unfavourite(batch_id, item_id); self.send_json({"removed": True}); return
             match = re.fullmatch(r"/api/sources/([^/]+)", path)
             if not match: self.send_error(HTTPStatus.NOT_FOUND); return
             source_id = match.group(1); payload = self._json()

@@ -1,8 +1,8 @@
-# Source, pipeline, and card workbench contract
+# Source, pipeline, candidate, and collection workbench contract
 
-The supported product surfaces are `Sources`, `Pipelines`, and `Cards`.
-The everyday loop keeps a source cohort stable, changes a pipeline, and
-compares the produced cards. Approval is not part of the current UI.
+The supported product surfaces are `Sources`, `Pipelines`, `Candidates`, and
+`Collection`. The everyday loop keeps a source cohort stable, runs either real
+pipeline, compares its candidates, and favorites useful cards into Collection.
 
 ## Style pipeline
 
@@ -36,11 +36,12 @@ unsupported driver IDs, invalid model settings, and unsafe paths. The canonical
 checksum excludes mutable storage paths and state, then hashes the normalized
 configuration and every referenced asset checksum.
 
-`StyleStore` materializes the initial definition at bootstrap under
-`styles/versions/<style-version-id>/references/`. A draft is stored separately.
-Locked files are never edited. Locking creates a new opaque version and
-activation changes only the active pointer; existing batches keep their
-original snapshots and remain available in the comparison history.
+`StyleStore` materializes the initial definition and a second portrait-reference
+pipeline under `styles/versions/<style-version-id>/references/`. A draft is
+stored separately. Locked files are never edited. Locking creates a new opaque
+revision inside its pipeline. The active pointer chooses the Sources default;
+it does not prevent the other saved pipeline from running. Existing batches
+keep their original snapshots.
 
 ## Renderer boundary
 
@@ -67,7 +68,7 @@ cannot enter a generation adapter request.
 ## Production batches
 
 `CardProductionManager` stores both normal batches and pipeline comparison trials.
-Normal batches use `purpose: "card-production"` and a locked active style;
+Normal batches use `purpose: "card-production"` and the selected locked live pipeline;
 trials use `purpose: "style-trial"` and a draft snapshot. A batch snapshots
 source membership/order, source bytes, style configuration, reference bytes,
 model capabilities, provider mapping, and the expected call count before the
@@ -100,27 +101,28 @@ revision without calling the generation adapter. Previous revisions remain on
 disk. The supported UI treats every ready render as a result and does not gate
 it with approval or bundling.
 
-Historical approval records and their API methods remain readable for workspace
-compatibility, but the product no longer writes or surfaces them. They can be
-removed in a later storage migration once old workspaces no longer depend on
-that schema.
+Favorites are stored independently from production under `favorites.json` and
+keyed by batch and item ID. Any number of candidates may be favorited. A
+favorite resolves the candidate's latest render revision, and removing it does
+not delete production data. Historical approval records remain non-product
+compatibility data and are not migrated into Collection.
 
 ## Pipelines
 
-Saved pipelines and the working pipeline are shown as peer assets with result
-samples, generation references, target example, palette, driver output, and
-checksum. A pipeline anatomy diagram exposes each stage from input identity to
-assembled card. The draft editor keeps Generation, Amiga processing, and Card
-groups collapsible.
+The overview shows exactly two top-level live pipelines with result samples,
+generation references, target example, palette, driver output, and checksum:
+**Face-free Style Board** and **Portrait Style Reference**. The latter differs
+only by using the original portrait reference shared by historical Pipelines
+01/02. Saved revisions are collapsed inside their pipeline rather than shown as
+peer pipelines. A pipeline anatomy diagram exposes each stage from input
+identity to assembled card.
 
 The calibration cohort is capped at three workspace sources and persists across
 trials. A trial is reviewable only when every cohort item reaches final-card
-`ready`. The Cards matrix has two strategy columns: live image-model attempts
-are **Interpretive redraw**, while simulation-era deterministic previews are
-the **Direct render** baseline. Pipeline checksums and attempt numbers remain
-on each candidate inside the strategy gallery, so configuration history is
-available without turning every edit into a column. Simulation trials validate
-mechanics but cannot activate a production pipeline. Live activation rechecks
+`ready`. Trials remain in the pipeline editor and never appear as production
+candidates. The Candidates matrix uses one column per real pipeline; pipeline
+checksums and attempt numbers remain on each candidate. Simulation trials
+validate mechanics but cannot activate a production pipeline. Live activation rechecks
 that the draft checksum and referenced asset checksums still match the trial,
 then locks a new immutable version and moves the active pointer. It never
 regenerates existing cards.
@@ -132,7 +134,9 @@ until its driver is registered and proven.
 
 ## Historical data
 
-Existing workspace files are not rewritten or deleted by bootstrap. Ready
-historical cards are exposed in the source-by-strategy comparison when their
-source still belongs to the current cohort; other old files remain directly
-inspectable by an operator.
+The explicit `cleanup-workspace` migration removes simulation pipeline versions
+and their production assets after seeding the two real pipelines. Bootstrap
+does not perform broad deletion. Ready live production attempts are exposed in
+the source-by-pipeline candidate comparison when their source belongs to the
+current cohort; favorites remain visible in Collection regardless of the
+current source selection.
