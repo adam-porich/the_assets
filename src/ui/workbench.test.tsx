@@ -151,7 +151,8 @@ describe("pipeline workbench", () => {
     expect(container.textContent).toContain("Candidate details");
     expect(container.textContent).toContain("Styled master");
     expect(container.textContent).toContain("Rendered art");
-    expect(container.textContent).toContain("Save framing · no generation");
+    expect(container.textContent).toContain("Adaptive · 10 anchors + 22 image colours");
+    expect(container.textContent).toContain("Save render · no generation");
     expect(container.textContent).toContain("Save to Collection");
   });
 

@@ -75,7 +75,8 @@ class AmigaRenderer:
         else:
             transformed, transform = _framing_transform(source, tuple(renderer["logical_art_size"]), resolved_framing, tuple(composition["centering"]))
         logical, art, metadata = render_amiga_art(transformed, centering=tuple(composition["centering"]), style=selected)
-        card = render_amiga_card(logical, label, style=selected)
+        resolved_palette = tuple(tuple(bytes.fromhex(value.removeprefix("#"))) for value in metadata["resolved_palette"])
+        card = render_amiga_card(logical, label, style=selected, palette=resolved_palette)
         metadata = {
             **metadata,
             "driver_id": self.driver_id,

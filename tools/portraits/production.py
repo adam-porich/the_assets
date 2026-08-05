@@ -285,8 +285,11 @@ class CardProductionManager:
                 latest[source_id] = item
         return [latest[str(source_id)] for source_id in record.get("selected_source_ids", []) if str(source_id) in latest]
 
-    def _render_item(self, record: dict[str, Any], item: dict[str, Any], framing: dict[str, float] | None) -> None:
-        style = validate_style(record["style_snapshot"], require_locked=record["purpose"] == "card-production")
+    def _render_item(self, record: dict[str, Any], item: dict[str, Any], framing: dict[str, float] | None, palette_mode: str | None = None) -> None:
+        style = validate_style(copy.deepcopy(record["style_snapshot"]), require_locked=record["purpose"] == "card-production")
+        if palette_mode:
+            style["renderer"]["palette_mode"] = palette_mode
+            style = validate_style(style, require_locked=record["purpose"] == "card-production")
         master_path = self.store.absolute_path(str(item["master_path"]))
         with Image.open(master_path) as opened:
             master = opened.convert("RGB")
@@ -295,8 +298,8 @@ class CardProductionManager:
         base = Path("production") / record["batch_id"] / "renders" / f"{item['item_id']}-r{revision}"
         logical_path, art_path, card_path = base.with_name(base.name + "-logical.png"), base.with_name(base.name + "-art.png"), base.with_name(base.name + "-card.png")
         self._save_image(bundle.logical_art, self.store.absolute_path(logical_path)); self._save_image(bundle.art, self.store.absolute_path(art_path)); self._save_image(bundle.card, self.store.absolute_path(card_path))
-        item.update({"render_revision": revision, "framing": framing or style["composition"]["default_framing"], "logical_art_path": logical_path.as_posix(), "art_path": art_path.as_posix(), "card_path": card_path.as_posix(), "card_checksum_sha256": checksum(self.store.absolute_path(card_path)), "render_metadata": bundle.metadata})
-        item.setdefault("render_revisions", []).append({"revision": revision, "logical_art_path": logical_path.as_posix(), "art_path": art_path.as_posix(), "card_path": card_path.as_posix(), "card_checksum_sha256": item["card_checksum_sha256"], "framing": copy.deepcopy(item["framing"]), "render_metadata": bundle.metadata, "created_at": now_iso()})
+        item.update({"render_revision": revision, "framing": framing or style["composition"]["default_framing"], "palette_mode": style["renderer"].get("palette_mode", "fixed-house"), "logical_art_path": logical_path.as_posix(), "art_path": art_path.as_posix(), "card_path": card_path.as_posix(), "card_checksum_sha256": checksum(self.store.absolute_path(card_path)), "render_metadata": bundle.metadata})
+        item.setdefault("render_revisions", []).append({"revision": revision, "logical_art_path": logical_path.as_posix(), "art_path": art_path.as_posix(), "card_path": card_path.as_posix(), "card_checksum_sha256": item["card_checksum_sha256"], "framing": copy.deepcopy(item["framing"]), "palette_mode": item["palette_mode"], "render_metadata": bundle.metadata, "created_at": now_iso()})
 
     def payload(self, record: dict[str, Any]) -> dict[str, Any]:
         result = copy.deepcopy(record)
@@ -396,7 +399,7 @@ class CardProductionManager:
             self._write(record)
             return self.payload(record)
 
-    def rerender(self, batch_id: str, item_id: str, framing: dict[str, float] | None) -> dict[str, Any]:
+    def rerender(self, batch_id: str, item_id: str, framing: dict[str, float] | None, palette_mode: str | None = None) -> dict[str, Any]:
         record = self._read(batch_id); item = next((candidate for candidate in record["items"] if candidate.get("item_id") == item_id), None)
         if not item or item.get("status") != "ready": raise ValueError("only a ready card can be reframed")
         style = record["style_snapshot"]; resolved = {**style["composition"]["default_framing"], **(framing or {})}
@@ -406,7 +409,7 @@ class CardProductionManager:
         if current_approval and current_approval.get("attempt_id") == item_id and int(current_approval.get("render_revision", 0)) == int(item.get("render_revision", 0)):
             approvals["current"].pop(approval_key, None)
             self.store.atomic_json(self.store.root / "approvals" / "approvals.json", approvals)
-        self._render_item(record, item, resolved); item["status"] = "ready"; item["updated_at"] = now_iso(); self._write(record)
+        self._render_item(record, item, resolved, palette_mode); item["status"] = "ready"; item["updated_at"] = now_iso(); self._write(record)
         return self.payload(record)
 
     def _approval_data(self) -> dict[str, Any]:

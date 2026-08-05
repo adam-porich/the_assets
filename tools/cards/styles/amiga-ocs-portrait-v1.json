@@ -3,8 +3,8 @@
   "identity": {
     "family_id": "amiga-ocs-portrait",
     "pipeline_id": "face-free-style-board",
-    "style_version_id": "style_amiga_ocs_portrait_v3",
-    "version": 3,
+    "style_version_id": "style_amiga_ocs_portrait_v4",
+    "version": 4,
     "state": "locked",
     "label": "Amiga Style Transfer"
   },
@@ -12,21 +12,21 @@
     "model_id": "openai/gpt-image-1-mini",
     "execution_mode": "live",
     "quality": "medium",
-    "prompt": "Input image 1 is the sole source of content and structure. Use the following reference images only for palette, tonal planes, edges, and texture. Redraw the same subject while preserving its category, count, silhouette, proportions, viewpoint, material distinctions, markings, colours, and human identity where applicable. Never copy a subject from a reference or invent a person, face, object, text, or narrative element. Create a pre-quantisation master with broad connected matte tonal planes, deliberate edges, no more than five visible value steps per material, restrained texture, and muted charcoal, umber, rust, ochre, parchment, moss, and slate blue accents. Do not add visible pixels, dithering, scanlines, borders, card frames, or UI.",
+    "prompt": "Input image 1 is the sole source of content and structure. Use the reference board only for foreground rendering vocabulary: connected matte tonal planes, deliberate edges, material ramps, local colour contrast, and controlled texture. Preserve the subject's category, count, silhouette, proportions, viewpoint, materials, markings, colours, and human identity where applicable. Make the foreground subject dominant and clearly separated through readable midtones, highlights, rim light, and local contrast. Use a lively but controlled full colour range suited to later Amiga OCS reduction; retain dark anchors without forcing the image into brown or olive. Backgrounds may vary with the subject and should remain simple, subordinate, and compositionally different from the reference board. Never copy shapes or arrangements from the board or invent a person, face, object, text, or narrative element. Produce a clean pre-quantisation master without visible pixels, dithering, scanlines, borders, card frames, or UI.",
     "requested_aspect_policy": "28:23",
     "reference_limit": 9
   },
   "reference_pack": {
-    "id": "amiga-ocs-neutral-portrait-v3-reference-pack",
-    "version": 3,
+    "id": "amiga-ocs-foreground-v4-reference-pack",
+    "version": 4,
     "assets": [
       {
-        "id": "generation-reference-02",
-        "asset_key": "generation-reference-02.png",
+        "id": "generation-reference-03",
+        "asset_key": "generation-reference-03.png",
         "role": "generation-reference",
-        "label": "Amiga OCS face-free style board",
-        "checked_in_path": "tools/cards/assets/amiga-ocs-portrait-v1/generation-reference-02.png",
-        "checksum_sha256": "ad0a1277a27a61dee615652f6fd81fa163a6dd44d5db378d9ed745faae39085c"
+        "label": "Amiga OCS foreground rendering board",
+        "checked_in_path": "tools/cards/assets/amiga-ocs-portrait-v1/generation-reference-03.png",
+        "checksum_sha256": "6d4dbdd6d031678d83468122d6b8201266b5e2f3272f8628ebfd3af0dd871823"
       },
       {
         "id": "target-example-01",
@@ -49,6 +49,7 @@
     "logical_art_size": [168, 138],
     "output_scale": 2,
     "palette_space": "Amiga OCS 12-bit RGB",
+    "palette_mode": "adaptive-hybrid",
     "palette": [
       "#111111", "#221111", "#111122", "#222233", "#333333", "#332211", "#443322", "#554422",
       "#663322", "#775544", "#886644", "#aa6644", "#bb7755", "#cc8866", "#ddaa88", "#eeccbb",
@@ -67,11 +68,12 @@
   },
   "editor_descriptors": [
     {"id": "generation.prompt", "label": "Style prompt", "type": "text", "group": "Generation"},
+    {"id": "renderer.palette_mode", "label": "Palette mode", "type": "enum", "values": ["adaptive-hybrid", "fixed-house"], "group": "Amiga processing"},
     {"id": "renderer.preprocess.color", "label": "Colour", "type": "range", "min": 0.0, "max": 2.0, "step": 0.01, "group": "Amiga processing"},
     {"id": "renderer.dither.strength", "label": "Dither strength", "type": "range", "min": 0.0, "max": 1.0, "step": 0.01, "group": "Amiga processing"},
     {"id": "renderer.dither.edge_threshold", "label": "Edge threshold", "type": "range", "min": 0.0, "max": 1.0, "step": 0.01, "group": "Amiga processing"},
     {"id": "composition.centering", "label": "Default centering", "type": "number", "group": "Amiga processing"}
   ],
-  "provenance": {"source": "checked-in", "pack_path": "tools/cards/assets/amiga-ocs-portrait-v1/pack.json", "contract": "universal-two-stage-img2img-v1"},
+  "provenance": {"source": "checked-in", "pack_path": "tools/cards/assets/amiga-ocs-portrait-v1/pack.json", "contract": "ingest-normalised-foreground-style-v2"},
   "checksums": {}
 }

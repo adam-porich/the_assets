@@ -9,7 +9,7 @@ from pathlib import Path
 import pytest
 from PIL import Image, ImageChops
 
-from tools.cards.amiga import amiga_palette, palette_is_ocs_12_bit
+from tools.cards.amiga import adaptive_hybrid_palette, amiga_palette, palette_is_ocs_12_bit
 from tools.cards.registry import registry
 from tools.cards.style_pipeline import (
     FACE_FREE_PIPELINE_ID,
@@ -155,6 +155,7 @@ def test_one_universal_pipeline_uses_the_subject_neutral_reference(tmp_path: Pat
 
 def test_amiga_registered_engine_is_deterministic_and_matches_golden() -> None:
     style = load_checked_in_style()
+    style["renderer"]["palette_mode"] = "fixed-house"
     with Image.open(ASSETS / "generation-reference-01.png") as master:
         first = registry.render(style, master, "stage reference")
         second = registry.render(style, master, "stage reference")
@@ -168,6 +169,25 @@ def test_amiga_registered_engine_is_deterministic_and_matches_golden() -> None:
     assert len(set(first.art.getdata())) <= 32
     with pytest.raises(ValueError, match="no renderer"):
         registry.get("unknown-driver")
+
+
+def test_adaptive_hybrid_palette_keeps_ocs_limits_and_is_deterministic() -> None:
+    style = load_checked_in_style()
+    image = Image.new("RGB", (96, 96))
+    image.putdata([((x * 5) % 256, (y * 7) % 256, ((x + y) * 9) % 256) for y in range(96) for x in range(96)])
+    house = amiga_palette(style)
+    resolved = adaptive_hybrid_palette(image, house)
+    first = registry.render(style, image, "colour study")
+    second = registry.render(style, image, "colour study")
+    assert len(resolved) == 32
+    assert palette_is_ocs_12_bit(resolved)
+    assert resolved != house
+    assert first.metadata["palette_mode"] == "adaptive-hybrid"
+    assert len(first.metadata["resolved_palette"]) == 32
+    assert len(set(first.art.getdata())) <= 32
+    assert len(set(first.card.getdata())) <= 32
+    assert first.art.tobytes() == second.art.tobytes()
+    assert first.card.tobytes() == second.card.tobytes()
 
 
 class ReferenceReturningAdapter(FakeGenerationAdapter):
@@ -224,11 +244,13 @@ def test_framing_rerenders_without_generation_and_approval_is_revisioned(tmp_pat
     production_item = batch["items"][0]
     manager.approve(batch["batch_id"], production_item["item_id"])
     old_checksum = production_item["card_checksum_sha256"]
-    rerendered = manager.rerender(batch["batch_id"], production_item["item_id"], {"zoom": 1.25, "offset_x": 0.1, "offset_y": 0})
+    rerendered = manager.rerender(batch["batch_id"], production_item["item_id"], {"zoom": 1.25, "offset_x": 0.1, "offset_y": 0}, "fixed-house")
     assert calls == 1
     assert rerendered["items"][0]["render_revision"] == 2
     assert rerendered["items"][0]["card_checksum_sha256"] != old_checksum
     assert len(rerendered["items"][0]["render_revisions"]) == 2
+    assert rerendered["items"][0]["palette_mode"] == "fixed-house"
+    assert rerendered["style_snapshot"]["renderer"]["palette_mode"] == "adaptive-hybrid"
     assert rerendered["progress"]["approved_cards"] == 0
     manager.approve(batch["batch_id"], production_item["item_id"])
 

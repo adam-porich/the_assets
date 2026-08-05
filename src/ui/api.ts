@@ -26,7 +26,7 @@ export const api = {
   retryFailed: (id: string, consent = false) => request<{ batch: ProductionBatch }>(`/production/${id}/retry`, json("POST", { consent })),
   tryAnother: (id: string, source_id: string, consent = false) => request<{ batch: ProductionBatch }>(`/production/${id}/try-another`, json("POST", { source_id, consent })),
   acceptCandidate: (id: string, item_id: string) => request<{ batch: ProductionBatch }>(`/production/${id}/accept`, json("POST", { item_id })),
-  renderFraming: (id: string, item_id: string, framing: Framing) => request<{ batch: ProductionBatch }>(`/production/${id}/render`, json("POST", { item_id, framing })),
+  renderFraming: (id: string, item_id: string, framing: Framing, palette_mode?: string) => request<{ batch: ProductionBatch }>(`/production/${id}/render`, json("POST", { item_id, framing, palette_mode })),
   createDraft: (pipeline_id: string) => request<{ style: PipelineStyle }>("/styles/draft", json("POST", { pipeline_id })),
   updateDraft: (patch: Partial<PipelineStyle>) => request<{ style: PipelineStyle }>("/styles/draft", json("PUT", patch)),
   uploadDraftReference: (file: File) => { const form = new FormData(); form.append("file", file); return request<{ style: PipelineStyle }>("/styles/draft/references", { method: "POST", body: form }); },

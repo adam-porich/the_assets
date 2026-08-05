@@ -33,10 +33,13 @@ Ready previews remain outside candidate packs until explicitly accepted.
 
 Each preview or trial sends the accepted Input first and style references after
 it, making exactly one provider call. The resulting master is framed,
-mapped to the fixed 32-colour OCS palette, rendered at 168×138 logical pixels,
+mapped to 32 Amiga OCS registers, rendered at 168×138 logical pixels,
 and assembled into the 210×300 logical card before exact 2× enlargement.
-Retries and `Generate another` append immutable attempts; framing changes only
-rerender the saved master and make no provider call.
+The default adaptive mode retains ten house-colour anchors and derives the other
+22 colours from each master, snapped to the OCS 12-bit colour space. Fixed mode
+uses the original house 32 for comparison. Retries and `Generate another`
+append immutable attempts; framing or palette changes only rerender the saved
+master and make no provider call.
 
 The Pipeline editor exposes the single style prompt, generation model, quality,
 references, renderer settings, and a selectable comparison cohort of up to

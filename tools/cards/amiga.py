@@ -18,6 +18,7 @@ BAYER_4X4 = (
     (3, 11, 1, 9),
     (15, 7, 13, 5),
 )
+HOUSE_PALETTE_INDICES = {0, 1, 3, 6, 7, 16, 17, 19, 20, 22}
 
 
 @dataclass(frozen=True)
@@ -82,6 +83,28 @@ def _prepare_master(master: Image.Image, logical_size: tuple[int, int], centerin
     source = ImageEnhance.Color(source).enhance(float(preprocess.get("color", 0.88)))
     source = ImageEnhance.Contrast(source).enhance(float(preprocess.get("contrast", 1.08)))
     return source.filter(ImageFilter.UnsharpMask(radius=float(preprocess.get("unsharp_radius", 0.8)), percent=int(preprocess.get("unsharp_percent", 90)), threshold=int(preprocess.get("unsharp_threshold", 5))))
+
+
+def _ocs_colour(colour: tuple[int, int, int]) -> tuple[int, int, int]:
+    return tuple(max(0, min(255, round(channel / 17) * 17)) for channel in colour)  # type: ignore[return-value]
+
+
+def adaptive_hybrid_palette(image: Image.Image, house: tuple[tuple[int, int, int], ...]) -> tuple[tuple[int, int, int], ...]:
+    """Keep card/UI anchors stable and derive the remaining OCS registers per image."""
+    reduced = image.convert("RGB").quantize(colors=64, method=Image.Quantize.MEDIANCUT).convert("RGB")
+    ranked = [colour for _, colour in sorted(reduced.getcolors(maxcolors=reduced.width * reduced.height) or [], reverse=True)]
+    resolved = list(house)
+    available = [index for index in range(32) if index not in HOUSE_PALETTE_INDICES]
+    candidates: list[tuple[int, int, int]] = []
+    protected = {house[index] for index in HOUSE_PALETTE_INDICES}
+    for colour in ranked:
+        snapped = _ocs_colour(colour)
+        if snapped not in protected and snapped not in candidates:
+            candidates.append(snapped)
+    candidates.extend(colour for colour in house if colour not in protected and colour not in candidates)
+    for index, colour in zip(available, candidates):
+        resolved[index] = colour
+    return tuple(resolved)
 
 
 def _two_nearest(
@@ -172,7 +195,10 @@ def render_amiga_art(
     scale = int(renderer["output_scale"])
     effective_centering = tuple(float(value) for value in composition.get("centering", centering)) if composition else centering
     prepared = _prepare_master(master, logical_size, effective_centering, selected)
-    logical = quantize_amiga(prepared, amiga_palette(selected), style=selected)
+    house_palette = amiga_palette(selected)
+    palette_mode = str(renderer.get("palette_mode") or "fixed-house")
+    resolved_palette = adaptive_hybrid_palette(prepared, house_palette) if palette_mode == "adaptive-hybrid" else house_palette
+    logical = quantize_amiga(prepared, resolved_palette, style=selected)
     art = logical.resize((logical.width * scale, logical.height * scale), Image.Resampling.NEAREST)
     colours = logical.getcolors(maxcolors=logical.width * logical.height) or []
     metadata = {
@@ -182,9 +208,11 @@ def render_amiga_art(
         "output_art_size": list(art.size),
         "output_scale": scale,
         "palette_space": renderer["palette_space"],
-        "palette_limit": len(renderer["palette"]),
+        "palette_limit": len(resolved_palette),
         "palette_colours_used": len(colours),
-        "palette_sha256": hashlib.sha256("\n".join(renderer["palette"]).encode("ascii")).hexdigest(),
+        "palette_mode": palette_mode,
+        "resolved_palette": ["#%02x%02x%02x" % colour for colour in resolved_palette],
+        "palette_sha256": hashlib.sha256("\n".join("#%02x%02x%02x" % colour for colour in resolved_palette).encode("ascii")).hexdigest(),
         "dither": dict(renderer["dither"]),
         "centering": list(effective_centering),
     }
@@ -200,6 +228,7 @@ def render_amiga_card(
     label: str,
     *,
     style: dict[str, Any] | None = None,
+    palette: tuple[tuple[int, int, int], ...] | None = None,
 ) -> Image.Image:
     """Compose the complete card on the same logical pixel grid as its art."""
     selected = style or load_amiga_style()
@@ -207,7 +236,7 @@ def render_amiga_card(
     card_config = selected.get("card_assembly", selected)
     card_width, card_height = (int(value) for value in card_config["logical_card_size"])
     scale = int(card_config.get("output_scale", renderer["output_scale"]))
-    palette = amiga_palette(selected)
+    palette = palette or amiga_palette(selected)
     ink, deep_brown, slate, brown, umber = palette[0], palette[1], palette[3], palette[6], palette[7]
     border, title, copy, accent = palette[19], palette[16], palette[20], palette[22]
     canvas = Image.new("RGB", (card_width, card_height), deep_brown)
@@ -247,7 +276,8 @@ def render_amiga_card(
 def render_amiga(master: Image.Image, label: str, *, centering: tuple[float, float] = (0.5, 0.44)) -> AmigaRender:
     selected = load_amiga_style()
     logical, art, metadata = render_amiga_art(master, centering=centering, style=selected)
-    card = render_amiga_card(logical, label, style=selected)
+    resolved_palette = tuple(tuple(bytes.fromhex(value.removeprefix("#"))) for value in metadata["resolved_palette"])
+    card = render_amiga_card(logical, label, style=selected, palette=resolved_palette)
     card_config = selected.get("card_assembly", selected)
     metadata = {**metadata, "logical_card_size": card_config["logical_card_size"], "output_card_size": list(card.size)}
     return AmigaRender(logical, art, card, metadata)

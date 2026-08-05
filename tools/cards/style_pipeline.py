@@ -22,10 +22,11 @@ PIPELINE_LABELS = {
     PORTRAIT_REFERENCE_PIPELINE_ID: "Portrait Style Reference",
 }
 PIPELINE_DESCRIPTIONS = {
-    FACE_FREE_PIPELINE_ID: "Applies the face-free Amiga style board to a prepared Input.",
+    FACE_FREE_PIPELINE_ID: "Applies a subject-neutral foreground rendering board to a prepared Input.",
     PORTRAIT_REFERENCE_PIPELINE_ID: "Uses the original portrait reference from historical Pipelines 01/02.",
 }
-FACE_FREE_REFERENCE_CHECKSUM = "ad0a1277a27a61dee615652f6fd81fa163a6dd44d5db378d9ed745faae39085c"
+FACE_FREE_REFERENCE_CHECKSUM = "6d4dbdd6d031678d83468122d6b8201266b5e2f3272f8628ebfd3af0dd871823"
+FACE_FREE_REFERENCE_CHECKSUMS = {FACE_FREE_REFERENCE_CHECKSUM, "ad0a1277a27a61dee615652f6fd81fa163a6dd44d5db378d9ed745faae39085c"}
 PORTRAIT_REFERENCE_CHECKSUM = "68ca995a8d308963278a2047863886b382adc8cd1230d05952c017b659838efe"
 LEGACY_SIMULATION_MODEL_ID = "fake/painterly-deterministic"
 SIMULATION_MODEL_IDS = {LEGACY_SIMULATION_MODEL_ID, "fake/amiga-ocs-deterministic"}
@@ -158,6 +159,8 @@ def validate_style(style: dict[str, Any], *, require_locked: bool = False) -> di
     if not isinstance(framing, dict) or float(framing.get("zoom", 0)) < 1 or any(abs(float(framing.get(key, 0))) > 1 for key in ("offset_x", "offset_y")):
         raise ValueError("composition.default_framing is invalid")
     palette = renderer.get("palette")
+    if renderer.get("palette_mode", "fixed-house") not in {"fixed-house", "adaptive-hybrid"}:
+        raise ValueError("renderer.palette_mode must be fixed-house or adaptive-hybrid")
     if not isinstance(palette, list) or len(palette) != 32:
         raise ValueError("the Amiga OCS renderer requires exactly 32 palette colours")
     renderer["palette"] = [_hex_colour(value) for value in palette]
@@ -180,7 +183,7 @@ def pipeline_id_for_style(style: dict[str, Any]) -> str:
     if explicit in PIPELINE_IDS:
         return explicit
     generation_assets = [asset for asset in style.get("reference_pack", {}).get("assets", []) if asset.get("role") == "generation-reference"]
-    if any(str(asset.get("checksum_sha256")) == FACE_FREE_REFERENCE_CHECKSUM for asset in generation_assets):
+    if any(str(asset.get("checksum_sha256")) in FACE_FREE_REFERENCE_CHECKSUMS for asset in generation_assets):
         return FACE_FREE_PIPELINE_ID
     return PORTRAIT_REFERENCE_PIPELINE_ID
 
@@ -235,7 +238,8 @@ class StyleStore:
         if active_id and self._style_path(str(active_id)).is_file():
             active = self.raw_version(str(active_id))
             checked_in = load_checked_in_style()
-            if active.get("schema_version") == 3 and active.get("identity", {}).get("pipeline_id") == FACE_FREE_PIPELINE_ID and active["generation"].get("model_id") not in SIMULATION_MODEL_IDS and active["generation"].get("execution_mode") != "simulation":
+            active_reference_checksums = {asset.get("checksum_sha256") for asset in active.get("reference_pack", {}).get("assets", [])}
+            if active.get("schema_version") == 3 and active.get("identity", {}).get("pipeline_id") == FACE_FREE_PIPELINE_ID and FACE_FREE_REFERENCE_CHECKSUM in active_reference_checksums and active["generation"].get("model_id") not in SIMULATION_MODEL_IDS and active["generation"].get("execution_mode") != "simulation":
                 return self.payload(active)
             expected_checksum = style_checksum(checked_in)
             matching_version = next((entry for entry in index.get("versions", []) if entry.get("checksum_sha256") == expected_checksum and str(entry.get("style_version_id")) != str(active_id)), None)

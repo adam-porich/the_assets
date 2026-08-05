@@ -44,6 +44,9 @@ Add to pack` promotes that preview into the pack. Older accepted candidates
 remain stored when they scroll out. Open a
 candidate to inspect the Input, styled master, rendered art, final card, and
 provenance. Framing changes do not call the image model.
+Candidate details also lets you compare the original fixed house palette with
+an adaptive OCS palette. Adaptive keeps ten stable UI anchors and selects the
+remaining 22 registers from the image, while preserving the 32-colour limit.
 
 ### Collection
 
