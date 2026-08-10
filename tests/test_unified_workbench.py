@@ -216,6 +216,25 @@ def test_foreground_matte_and_backgrounds_are_independent() -> None:
     assert warm_meta["subject_bbox"] == cool_meta["subject_bbox"]
 
 
+def test_foreground_matte_removes_shaded_chroma_field() -> None:
+    source = Image.new("RGB", (120, 120))
+    for y in range(120):
+        shade = 80 + y
+        for x in range(120):
+            source.putpixel((x, y), (4, min(255, shade), 7))
+    for x in range(35, 85):
+        for y in range(20, 120):
+            source.putpixel((x, y), (170, 65, 35))
+
+    foreground, matte = extract_foreground(source, (0, 255, 0))
+
+    assert matte["mode"] == "chroma-matte"
+    assert foreground.getpixel((0, 0))[3] == 0
+    assert foreground.getpixel((0, 119))[3] == 0
+    assert foreground.getpixel((60, 60))[3] == 255
+    assert matte["bbox"] == [35, 20, 85, 120]
+
+
 class ReferenceReturningAdapter(FakeGenerationAdapter):
     def generate(self, request):
         result = super().generate(request)

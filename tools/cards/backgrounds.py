@@ -13,6 +13,11 @@ def _distance(first: tuple[int, int, int], second: tuple[int, int, int]) -> floa
     return math.sqrt(sum((first[channel] - second[channel]) ** 2 for channel in range(3)))
 
 
+def _key_dominance(colour: tuple[int, int, int], key: tuple[int, int, int]) -> int:
+    red, green, blue = colour
+    return green - max(red, blue) if key[1] > 200 else min(red, blue) - green
+
+
 def choose_chroma_key(source: Image.Image) -> tuple[str, tuple[int, int, int]]:
     sample = ImageOps.contain(source.convert("RGB"), (128, 128), Image.Resampling.BILINEAR)
     pixels = list(sample.getdata())
@@ -28,7 +33,7 @@ def extract_foreground(image: Image.Image, key: tuple[int, int, int]) -> tuple[I
     step = max(1, min(width, height) // 128)
     for x in range(0, width, step): border.extend((source.getpixel((x, 0)), source.getpixel((x, height - 1))))
     for y in range(0, height, step): border.extend((source.getpixel((0, y)), source.getpixel((width - 1, y))))
-    border_coverage = sum(_distance(colour, key) < 70 for colour in border) / max(1, len(border))
+    border_coverage = sum(_distance(colour, key) < 70 or _key_dominance(colour, key) > 40 for colour in border) / max(1, len(border))
     if border_coverage < 0.45:
         opaque = source.convert("RGBA")
         return opaque, {"mode": "opaque-fallback", "key": "#%02x%02x%02x" % key, "border_coverage": round(border_coverage, 6), "bbox": [0, 0, width, height]}
@@ -36,7 +41,14 @@ def extract_foreground(image: Image.Image, key: tuple[int, int, int]) -> tuple[I
     result = []
     for red, green, blue in source.getdata():
         distance = _distance((red, green, blue), key)
-        alpha = max(0, min(255, round((distance - 18) / 132 * 255)))
+        distance_alpha = max(0, min(255, round((distance - 18) / 132 * 255)))
+        # Generated chroma fields are rarely the requested literal RGB value:
+        # providers commonly add a gentle vignette or brightness variation.
+        # Key colour dominance remains stable through that shading, so use it
+        # alongside absolute distance to avoid retaining a translucent rectangle.
+        dominance = _key_dominance((red, green, blue), key)
+        dominance_alpha = max(0, min(255, round((72 - dominance) / 54 * 255)))
+        alpha = min(distance_alpha, dominance_alpha)
         if alpha < 255:
             if key[1] > 200:
                 green = min(green, max(red, blue) + 12)
