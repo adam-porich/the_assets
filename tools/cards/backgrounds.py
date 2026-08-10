@@ -111,11 +111,11 @@ def foreground_layers(foreground: Image.Image, style: dict[str, Any], background
     touches_top = box[1] <= edge_margin
     touches_left = box[0] <= edge_margin
     touches_right = box[2] >= foreground.width - edge_margin
-    if touches_top and not (touches_left or touches_right):
-        # The vertical extent is clipped, so use the intact horizontal extent
-        # without allowing a wide canvas to scale the subject far beyond its
-        # vertical bounds. Carry the crop through the top of the art window.
-        base_scale = min(size[0] * 0.94 / subject.width, size[1] * 0.94 / subject.height)
+    if touches_top:
+        # The generated portrait already continues beyond its source frame.
+        # Bleed that crop through the artwork edges so its flat cutoff is not
+        # exposed as padding. Complete silhouettes use the contained branches.
+        base_scale = size[1] / subject.height
     elif (touches_left or touches_right) and not touches_top:
         base_scale = size[1] * 0.94 / subject.height
     else:
@@ -124,13 +124,10 @@ def foreground_layers(foreground: Image.Image, style: dict[str, Any], background
     offset_x = max(-1.0, min(1.0, float(framing.get("offset_x", 0.0))))
     offset_y = max(-1.0, min(1.0, float(framing.get("offset_y", 0.0))))
     x = round((size[0] - subject.width) / 2 + offset_x * size[0] * 0.2)
-    # Anchor every extracted subject to the lower edge of the artwork window.
-    # A source touching its top edge describes an incomplete silhouette, not a
-    # reason to leave the portrait floating above the bottom of a wide crop.
-    y = round(size[1] - subject.height + offset_y * size[1] * 0.2)
+    y = round((0 if touches_top else size[1] - subject.height) + offset_y * size[1] * 0.2)
     layer = Image.new("RGBA", size)
     layer.paste(subject, (x, y), subject)
-    metadata = {"background_id": descriptor["id"], "background_label": descriptor.get("label", descriptor["id"]), "descriptor": {key: descriptor[key] for key in ("top", "bottom", "glow", "glow_strength") if key in descriptor}, "subject_bbox": list(box), "touching_edges": [edge for edge, touching in (("top", touches_top), ("left", touches_left), ("right", touches_right)) if touching], "placement": [x, y, subject.width, subject.height], "composite_size": list(size), "framing": {"zoom": zoom, "offset_x": offset_x, "offset_y": offset_y}}
+    metadata = {"background_id": descriptor["id"], "background_label": descriptor.get("label", descriptor["id"]), "descriptor": {key: descriptor[key] for key in ("top", "bottom", "glow", "glow_strength") if key in descriptor}, "fit_mode": "edge-bleed" if touches_top else "contained", "subject_bbox": list(box), "touching_edges": [edge for edge, touching in (("top", touches_top), ("left", touches_left), ("right", touches_right)) if touching], "placement": [x, y, subject.width, subject.height], "composite_size": list(size), "framing": {"zoom": zoom, "offset_x": offset_x, "offset_y": offset_y}}
     return background, layer, metadata
 
 
