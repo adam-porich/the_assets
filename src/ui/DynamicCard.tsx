@@ -107,10 +107,6 @@ export function DynamicCard({
       aria-label={`${cardText.title} showcase card`}
     >
       <div className="dynamic-card-frame">
-        <i className="card-rivet card-rivet-nw" aria-hidden="true" />
-        <i className="card-rivet card-rivet-ne" aria-hidden="true" />
-        <i className="card-rivet card-rivet-sw" aria-hidden="true" />
-        <i className="card-rivet card-rivet-se" aria-hidden="true" />
         <header className="dynamic-card-brand">
           <PixelText>Asset Workbench</PixelText>
           <span className="brand-rule" aria-hidden="true" />
