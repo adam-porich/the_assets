@@ -56,7 +56,7 @@ function backgroundConfig(style?: PipelineStyle) {
   return (
     style?.backgrounds || {
       default_id: "warm-parchment",
-      composite_size: [336, 276] as [number, number],
+      composite_size: [336, 198] as [number, number],
       presets: [
         {
           id: "warm-parchment",
@@ -2077,7 +2077,7 @@ export function CardsView({
                       }
                     />
                   </label>
-                  {Array.from({ length: 4 }, (_, index) => (
+                  {Array.from({ length: 6 }, (_, index) => (
                     <label key={index}>
                       Line {index + 1}
                       <input

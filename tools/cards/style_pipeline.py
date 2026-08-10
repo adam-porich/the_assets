@@ -30,6 +30,9 @@ FACE_FREE_REFERENCE_CHECKSUMS = {FACE_FREE_REFERENCE_CHECKSUM, "6d4dbdd6d031678d
 PORTRAIT_REFERENCE_CHECKSUM = "68ca995a8d308963278a2047863886b382adc8cd1230d05952c017b659838efe"
 LEGACY_SIMULATION_MODEL_ID = "fake/painterly-deterministic"
 SIMULATION_MODEL_IDS = {LEGACY_SIMULATION_MODEL_ID, "fake/amiga-ocs-deterministic"}
+ART_LOGICAL_SIZE = [168, 99]
+ART_OUTPUT_SIZE = [336, 198]
+ART_RATIO_LABEL = "56:33"
 
 
 def _json_copy(value: Any) -> Any:
@@ -153,6 +156,12 @@ def validate_style(style: dict[str, Any], *, require_locked: bool = False) -> di
     renderer = style.get("renderer")
     if not isinstance(composition, dict) or not isinstance(renderer, dict):
         raise ValueError("composition and renderer sections are required")
+    composition["logical_art_size"] = list(ART_LOGICAL_SIZE)
+    composition["requested_art_ratio"] = ART_RATIO_LABEL
+    renderer["logical_art_size"] = list(ART_LOGICAL_SIZE)
+    generation["requested_aspect_policy"] = ART_RATIO_LABEL
+    if isinstance(style.get("backgrounds"), dict):
+        style["backgrounds"]["composite_size"] = list(ART_OUTPUT_SIZE)
     for section, key in ((composition, "logical_art_size"), (renderer, "logical_art_size")):
         dimensions = section.get(key)
         if not isinstance(dimensions, list) or len(dimensions) != 2 or any(not isinstance(value, int) or value <= 0 or value > 4096 for value in dimensions):

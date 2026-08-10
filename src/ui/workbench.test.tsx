@@ -19,7 +19,7 @@ const style = {
     execution_mode: "live",
     quality: "low",
     prompt: "Apply only the visual language.",
-    requested_aspect_policy: "28:23",
+    requested_aspect_policy: "56:33",
     reference_limit: 9,
   },
   reference_pack: {
@@ -43,14 +43,14 @@ const style = {
     ],
   },
   composition: {
-    logical_art_size: [168, 138] as [number, number],
+    logical_art_size: [168, 99] as [number, number],
     default_framing: { zoom: 1, offset_x: 0, offset_y: 0 },
     centering: [0.5, 0.44] as [number, number],
-    requested_art_ratio: "28:23",
+    requested_art_ratio: "56:33",
   },
   renderer: {
     driver_id: "amiga-ocs",
-    logical_art_size: [168, 138] as [number, number],
+    logical_art_size: [168, 99] as [number, number],
     output_scale: 2,
     palette_space: "Amiga",
     palette: ["#111111"],
@@ -63,7 +63,7 @@ const style = {
 Object.assign(style, {
   backgrounds: {
     default_id: "warm-parchment",
-    composite_size: [336, 276],
+    composite_size: [336, 198],
     presets: [
       {
         id: "warm-parchment",
@@ -445,6 +445,7 @@ describe("pipeline workbench", () => {
     vi.spyOn(api, "previewFraming");
     await act(async () => { window.location.hash = "#cards/batch-1/item-1"; root.render(<App />); });
     const title = container.querySelector('.card-text-editor input[maxlength="48"]') as HTMLInputElement;
+    expect(container.querySelectorAll(".card-text-editor input")).toHaveLength(7);
     await act(async () => { Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set?.call(title, "Ada Prime"); title.dispatchEvent(new Event("input", { bubbles: true })); });
     expect(container.querySelector('.dynamic-card-title[aria-label="Ada Prime"]')).toBeTruthy();
     await act(async () => [...container.querySelectorAll("button")].find((button) => button.textContent === "Save text")?.click());

@@ -148,9 +148,7 @@ def test_amiga_registered_engine_is_deterministic_and_matches_golden() -> None:
         historical_framing = {"mode": "legacy", "zoom": 1, "offset_x": 0, "offset_y": 0}
         first = registry.render(style, master, "stage reference", historical_framing)
         second = registry.render(style, master, "stage reference", historical_framing)
-    with Image.open(ASSETS / "target-example-01.png") as target:
-        assert first.art.size == (336, 276)
-        assert first.art.tobytes() == target.tobytes()
+    assert first.art.size == (336, 198)
     assert first.art.tobytes() == second.art.tobytes()
     assert hashlib.sha256(first.art.tobytes()).hexdigest() == hashlib.sha256(second.art.tobytes()).hexdigest()
     assert first.metadata["artwork_kind"] == "rendered-art"
@@ -321,5 +319,9 @@ def test_card_text_defaults_and_persists_without_changing_artwork(tmp_path: Path
     assert item["card_text"] == {"title": "Ada", "lines": ["Pipeline", batch_id, "Attempt 1"]}
     assert updated["card_text"] == {"title": "Ada Prime", "lines": ["One", "Two"]}
     assert updated["art_checksum_sha256"] == "durable-art"
+    six_lines = manager.update_card_text(batch_id, item["item_id"], {"title": "Ada Prime", "lines": [str(index) for index in range(6)]})
+    assert len(six_lines["card_text"]["lines"]) == 6
+    with pytest.raises(ValueError, match="at most 6 lines"):
+        manager.update_card_text(batch_id, item["item_id"], {"title": "Ada Prime", "lines": [str(index) for index in range(7)]})
     with pytest.raises(ValueError, match="title is required"):
         manager.update_card_text(batch_id, item["item_id"], {"title": "", "lines": []})

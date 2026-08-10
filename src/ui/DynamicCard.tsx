@@ -109,7 +109,6 @@ export function DynamicCard({
       <div className="dynamic-card-frame">
         <header className="dynamic-card-brand">
           <PixelText>Asset Workbench</PixelText>
-          <span className="brand-rule" aria-hidden="true" />
         </header>
         <div className="dynamic-card-art">
           {image ? (

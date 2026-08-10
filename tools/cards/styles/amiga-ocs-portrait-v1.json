@@ -13,7 +13,7 @@
     "execution_mode": "live",
     "quality": "medium",
     "prompt": "Input image 1 is the sole source of content and structure. Use the reference board only for foreground rendering vocabulary: connected matte tonal planes, deliberate edges, material ramps, local colour contrast, and controlled texture. Preserve the subject's category, count, silhouette, proportions, viewpoint, materials, markings, colours, and human identity where applicable. Make the foreground subject dominant and readable through broad midtones, crisp highlights, rim light, and strong local contrast. Preserve dark moods through chromatic midtones and local colour separation, not global underexposure: reserve neutral black for narrow seams, occlusion, and the deepest anchors. Keep major material planes in distinct, richly coloured families with clean light-dark steps suited to later Amiga OCS reduction. Avoid crushed shadows, muddy near-black masses, global desaturation, and brown or olive casts. Never copy shapes or arrangements from the board or invent a person, face, object, text, or narrative element. Produce a clean foreground master without visible pixels, dithering, scanlines, borders, card frames, UI, scenery, or environmental background elements.",
-    "requested_aspect_policy": "28:23",
+    "requested_aspect_policy": "56:33",
     "reference_limit": 9
   },
   "reference_pack": {
@@ -39,14 +39,14 @@
     ]
   },
   "composition": {
-    "logical_art_size": [168, 138],
+    "logical_art_size": [168, 99],
     "default_framing": {"zoom": 1.0, "offset_x": 0.0, "offset_y": 0.0},
     "centering": [0.5, 0.44],
-    "requested_art_ratio": "28:23"
+    "requested_art_ratio": "56:33"
   },
   "backgrounds": {
     "default_id": "warm-parchment",
-    "composite_size": [336, 276],
+    "composite_size": [336, 198],
     "presets": [
       {"id": "warm-parchment", "label": "Warm parchment", "top": "#d3be8e", "bottom": "#674d34", "glow": "#ecd6a5", "glow_strength": 0.22},
       {"id": "cool-slate", "label": "Cool slate", "top": "#5a7076", "bottom": "#1c272d", "glow": "#8b978f", "glow_strength": 0.22},
@@ -56,7 +56,7 @@
   "renderer": {
     "driver_id": "amiga-ocs",
     "driver_version": 3,
-    "logical_art_size": [168, 138],
+    "logical_art_size": [168, 99],
     "output_scale": 2,
     "palette_space": "Amiga OCS 12-bit RGB",
     "palette_mode": "adaptive-hybrid",

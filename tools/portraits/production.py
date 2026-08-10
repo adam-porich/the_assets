@@ -20,7 +20,7 @@ from .workspace import WorkspaceError, WorkspaceStore, checksum, new_id, now_iso
 TERMINAL_ITEM_STATES = {"ready", "failed", "interrupted"}
 CARD_TITLE_MAX = 48
 CARD_LINE_MAX = 72
-CARD_LINE_LIMIT = 4
+CARD_LINE_LIMIT = 6
 
 
 def validate_card_text(value: Any) -> dict[str, Any]:
