@@ -150,7 +150,7 @@ def test_amiga_registered_engine_is_deterministic_and_matches_golden() -> None:
         second = registry.render(style, master, "stage reference", historical_framing)
     with Image.open(ASSETS / "target-example-01.png") as target:
         assert first.art.size == (336, 276)
-        assert first.card.size == (420, 600)
+        assert first.card.size == (840, 1200)
         assert first.art.tobytes() == target.tobytes()
     assert first.art.tobytes() == second.art.tobytes()
     assert first.card.tobytes() == second.card.tobytes()

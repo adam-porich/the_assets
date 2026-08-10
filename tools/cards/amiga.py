@@ -9,7 +9,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Any, Iterable
 
-from PIL import Image, ImageDraw, ImageEnhance, ImageFilter, ImageFont, ImageOps
+from PIL import Image, ImageDraw, ImageEnhance, ImageFilter, ImageOps
 
 
 STYLE_PATH = Path(__file__).parent / "styles" / "amiga-ocs-portrait-v1.json"
@@ -275,8 +275,41 @@ def render_amiga_art(
     return logical, art, metadata
 
 
-def _pixel_text(draw: ImageDraw.ImageDraw, xy: tuple[int, int], text: str, colour: tuple[int, int, int]) -> None:
-    draw.text(xy, text.upper(), fill=colour, font=ImageFont.load_default())
+_PIXEL_GLYPHS = {
+    "A": ("01110", "10001", "10001", "11111", "10001", "10001", "10001"), "B": ("11110", "10001", "10001", "11110", "10001", "10001", "11110"),
+    "C": ("01111", "10000", "10000", "10000", "10000", "10000", "01111"), "D": ("11110", "10001", "10001", "10001", "10001", "10001", "11110"),
+    "E": ("11111", "10000", "10000", "11110", "10000", "10000", "11111"), "F": ("11111", "10000", "10000", "11110", "10000", "10000", "10000"),
+    "G": ("01111", "10000", "10000", "10111", "10001", "10001", "01111"), "H": ("10001", "10001", "10001", "11111", "10001", "10001", "10001"),
+    "I": ("11111", "00100", "00100", "00100", "00100", "00100", "11111"), "J": ("00111", "00010", "00010", "00010", "10010", "10010", "01100"),
+    "K": ("10001", "10010", "10100", "11000", "10100", "10010", "10001"), "L": ("10000", "10000", "10000", "10000", "10000", "10000", "11111"),
+    "M": ("10001", "11011", "10101", "10101", "10001", "10001", "10001"), "N": ("10001", "11001", "10101", "10011", "10001", "10001", "10001"),
+    "O": ("01110", "10001", "10001", "10001", "10001", "10001", "01110"), "P": ("11110", "10001", "10001", "11110", "10000", "10000", "10000"),
+    "Q": ("01110", "10001", "10001", "10001", "10101", "10010", "01101"), "R": ("11110", "10001", "10001", "11110", "10100", "10010", "10001"),
+    "S": ("01111", "10000", "10000", "01110", "00001", "00001", "11110"), "T": ("11111", "00100", "00100", "00100", "00100", "00100", "00100"),
+    "U": ("10001", "10001", "10001", "10001", "10001", "10001", "01110"), "V": ("10001", "10001", "10001", "10001", "10001", "01010", "00100"),
+    "W": ("10001", "10001", "10001", "10101", "10101", "10101", "01010"), "X": ("10001", "10001", "01010", "00100", "01010", "10001", "10001"),
+    "Y": ("10001", "10001", "01010", "00100", "00100", "00100", "00100"), "Z": ("11111", "00001", "00010", "00100", "01000", "10000", "11111"),
+    "0": ("01110", "10001", "10011", "10101", "11001", "10001", "01110"), "1": ("00100", "01100", "00100", "00100", "00100", "00100", "01110"),
+    "2": ("01110", "10001", "00001", "00010", "00100", "01000", "11111"), "3": ("11110", "00001", "00001", "01110", "00001", "00001", "11110"),
+    "4": ("00010", "00110", "01010", "10010", "11111", "00010", "00010"), "5": ("11111", "10000", "10000", "11110", "00001", "00001", "11110"),
+    "6": ("01110", "10000", "10000", "11110", "10001", "10001", "01110"), "7": ("11111", "00001", "00010", "00100", "01000", "01000", "01000"),
+    "8": ("01110", "10001", "10001", "01110", "10001", "10001", "01110"), "9": ("01110", "10001", "10001", "01111", "00001", "00001", "01110"),
+    "-": ("00000", "00000", "00000", "11111", "00000", "00000", "00000"), "/": ("00001", "00010", "00010", "00100", "01000", "01000", "10000"),
+    ".": ("00000", "00000", "00000", "00000", "00000", "01100", "01100"), ":": ("00000", "01100", "01100", "00000", "01100", "01100", "00000"),
+}
+
+
+def _pixel_text(draw: ImageDraw.ImageDraw, xy: tuple[int, int], text: str, colour: tuple[int, int, int], scale: int = 3) -> None:
+    x, y = xy
+    for character in text.upper():
+        glyph = _PIXEL_GLYPHS.get(character)
+        if glyph:
+            for row, bits in enumerate(glyph):
+                for column, bit in enumerate(bits):
+                    if bit == "1":
+                        left, top = x + column * scale, y + row * scale
+                        draw.rectangle((left, top, left + scale - 1, top + scale - 1), fill=colour)
+        x += 6 * scale
 
 
 def render_amiga_card(
@@ -286,50 +319,41 @@ def render_amiga_card(
     style: dict[str, Any] | None = None,
     palette: tuple[tuple[int, int, int], ...] | None = None,
 ) -> Image.Image:
-    """Compose the complete card on the same logical pixel grid as its art."""
+    """Compose a spacious high-resolution card around the pixel-native art."""
     selected = style or load_amiga_style()
     renderer = selected.get("renderer", selected)
     card_config = selected.get("card_assembly", selected)
-    card_width, card_height = (int(value) for value in card_config["logical_card_size"])
-    scale = int(card_config.get("output_scale", renderer["output_scale"]))
+    base_width, base_height = (int(value) for value in card_config["logical_card_size"])
+    card_width, card_height = base_width * 2, base_height * 2
+    output_scale = int(card_config.get("output_scale", renderer["output_scale"]))
     palette = palette or amiga_palette(selected)
     ink, deep_brown, slate, brown, umber = palette[0], palette[1], palette[3], palette[6], palette[7]
     border, title, copy, accent = palette[19], palette[16], palette[20], palette[22]
     canvas = Image.new("RGB", (card_width, card_height), deep_brown)
     draw = ImageDraw.Draw(canvas)
 
-    draw.rectangle((4, 4, card_width - 5, card_height - 5), fill=brown, outline=border, width=2)
-    draw.rectangle((7, 7, card_width - 8, card_height - 8), outline=umber, width=1)
-    for x, y in ((7, 7), (card_width - 12, 7), (7, card_height - 12), (card_width - 12, card_height - 12)):
-        draw.rectangle((x, y, x + 4, y + 4), fill=accent)
+    # One strong frame and open fields replace the old nested panels and bolts.
+    draw.rectangle((10, 10, card_width - 11, card_height - 11), fill=brown, outline=border, width=3)
+    draw.rectangle((18, 18, card_width - 19, card_height - 19), fill=deep_brown)
+    _pixel_text(draw, (30, 30), str((card_config.get("text") or {}).get("title", "Asset Workbench")), title, 3)
+    draw.line((30, 60, card_width - 31, 60), fill=umber, width=2)
 
-    draw.rectangle((17, 10, 192, 31), fill=deep_brown, outline=border, width=1)
-    draw.line((20, 28, 189, 28), fill=umber, width=1)
-    _pixel_text(draw, (23, 16), str((card_config.get("text") or {}).get("title", "Portrait Workbench")), title)
+    art = logical_art.convert("RGB").resize((logical_art.width * 2, logical_art.height * 2), Image.Resampling.NEAREST)
+    art_x, art_y = (card_width - art.width) // 2, 78
+    canvas.paste(art, (art_x, art_y))
+    draw.rectangle((art_x - 3, art_y - 3, art_x + art.width + 2, art_y + art.height + 2), outline=border, width=3)
 
-    art = logical_art.convert("RGB")
-    if art.size != tuple(renderer["logical_art_size"]):
-        art = art.resize(tuple(renderer["logical_art_size"]), Image.Resampling.NEAREST)
-    draw.rectangle((18, 36, 192, 180), fill=ink, outline=border, width=2)
-    canvas.paste(art, (21, 39))
-    draw.rectangle((20, 38, 189, 177), outline=copy, width=1)
-
-    draw.rectangle((16, 191, 194, 213), fill=deep_brown, outline=border, width=1)
-    _pixel_text(draw, (22, 198), label[:28], title)
-    draw.rectangle((16, 221, 194, 274), fill=deep_brown, outline=border, width=1)
+    label_text = label[:20]
+    _pixel_text(draw, (30, 382), label_text, title, 3)
+    draw.line((30, 414, card_width - 31, 414), fill=slate, width=2)
     card_text = card_config.get("text") or {}
-    _pixel_text(draw, (22, 229), str(card_text.get("subtitle", "Amiga OCS / 32 colours")), copy)
-    _pixel_text(draw, (22, 241), str(card_text.get("version", "House style v1")), copy)
-    draw.line((22, 256, 188, 256), fill=slate, width=1)
-    _pixel_text(draw, (22, 261), str(card_text.get("identity", "Identity retained")), border)
-    # Pillow rasterises even its bitmap font through an antialiased mask. Snap
-    # the complete logical card back to the same hardware palette before the
-    # nearest-neighbour presentation scale is applied.
-    # Quantize the card chrome independently, then restore the already
-    # layer-quantized art so its foreground and background palettes survive.
+    _pixel_text(draw, (30, 438), str(card_text.get("subtitle", "Amiga OCS / 32 colours")), copy, 2)
+    _pixel_text(draw, (30, 468), str(card_text.get("identity", "Content-preserving redraw")), accent, 2)
+    _pixel_text(draw, (30, 510), str(card_text.get("version", "Genlocked background v1")), copy, 2)
+
     canvas = quantize_amiga(canvas, palette, dither_strength=0.0)
-    canvas.paste(art, (21, 39))
-    return canvas.resize((card_width * scale, card_height * scale), Image.Resampling.NEAREST)
+    canvas.paste(art, (art_x, art_y))
+    return canvas.resize((card_width * output_scale, card_height * output_scale), Image.Resampling.NEAREST)
 
 
 def render_amiga(master: Image.Image, label: str, *, centering: tuple[float, float] = (0.5, 0.44)) -> AmigaRender:
