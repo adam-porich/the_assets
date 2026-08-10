@@ -3,8 +3,8 @@
   "identity": {
     "family_id": "amiga-ocs-portrait",
     "pipeline_id": "face-free-style-board",
-    "style_version_id": "style_amiga_ocs_portrait_v5",
-    "version": 5,
+    "style_version_id": "style_amiga_ocs_portrait_v6",
+    "version": 6,
     "state": "locked",
     "label": "Amiga Style Transfer"
   },
@@ -12,21 +12,21 @@
     "model_id": "openai/gpt-image-1-mini",
     "execution_mode": "live",
     "quality": "medium",
-    "prompt": "Input image 1 is the sole source of content and structure. Use the reference board only for foreground rendering vocabulary: connected matte tonal planes, deliberate edges, material ramps, local colour contrast, and controlled texture. Preserve the subject's category, count, silhouette, proportions, viewpoint, materials, markings, colours, and human identity where applicable. Make the foreground subject dominant and readable through clear midtones, highlights, rim light, and local contrast. Use a lively but controlled full colour range suited to later Amiga OCS reduction; retain dark anchors without forcing the subject into brown or olive. Never copy shapes or arrangements from the board or invent a person, face, object, text, or narrative element. Produce a clean foreground master without visible pixels, dithering, scanlines, borders, card frames, UI, scenery, or environmental background elements.",
+    "prompt": "Input image 1 is the sole source of content and structure. Use the reference board only for foreground rendering vocabulary: connected matte tonal planes, deliberate edges, material ramps, local colour contrast, and controlled texture. Preserve the subject's category, count, silhouette, proportions, viewpoint, materials, markings, colours, and human identity where applicable. Make the foreground subject dominant and readable through broad midtones, crisp highlights, rim light, and strong local contrast. Preserve dark moods through chromatic midtones and local colour separation, not global underexposure: reserve neutral black for narrow seams, occlusion, and the deepest anchors. Keep major material planes in distinct, richly coloured families with clean light-dark steps suited to later Amiga OCS reduction. Avoid crushed shadows, muddy near-black masses, global desaturation, and brown or olive casts. Never copy shapes or arrangements from the board or invent a person, face, object, text, or narrative element. Produce a clean foreground master without visible pixels, dithering, scanlines, borders, card frames, UI, scenery, or environmental background elements.",
     "requested_aspect_policy": "28:23",
     "reference_limit": 9
   },
   "reference_pack": {
-    "id": "amiga-ocs-foreground-v4-reference-pack",
-    "version": 4,
+    "id": "amiga-ocs-foreground-v5-reference-pack",
+    "version": 5,
     "assets": [
       {
-        "id": "generation-reference-03",
-        "asset_key": "generation-reference-03.png",
+        "id": "generation-reference-04",
+        "asset_key": "generation-reference-04.png",
         "role": "generation-reference",
         "label": "Amiga OCS foreground rendering board",
-        "checked_in_path": "tools/cards/assets/amiga-ocs-portrait-v1/generation-reference-03.png",
-        "checksum_sha256": "6d4dbdd6d031678d83468122d6b8201266b5e2f3272f8628ebfd3af0dd871823"
+        "checked_in_path": "tools/cards/assets/amiga-ocs-portrait-v1/generation-reference-04.png",
+        "checksum_sha256": "b898df7ab12666bc6f409fddd45fbdd39847c754c02f57c20e1419eae2bc9354"
       },
       {
         "id": "target-example-01",
@@ -34,7 +34,7 @@
         "role": "target-example",
         "label": "Amiga OCS target example · review only",
         "checked_in_path": "tools/cards/assets/amiga-ocs-portrait-v1/target-example-01.png",
-        "checksum_sha256": "abebad5ec4628651caefd601567c0c6b3c549e1bbff6b20bb4fd21afe7631d2a"
+        "checksum_sha256": "27b3e8a7eec537fe78ea7ad160ed9044b7c478356a477be63638736b46a55045"
       }
     ]
   },
@@ -66,7 +66,7 @@
       "#eeddcc", "#ffeedd", "#aa7722", "#cc9933", "#eeddaa", "#772211", "#994433", "#bb5522",
       "#551122", "#223322", "#445544", "#668877", "#113344", "#445566", "#778899", "#665544"
     ],
-    "preprocess": {"color": 0.88, "contrast": 1.08, "unsharp_radius": 0.8, "unsharp_percent": 90, "unsharp_threshold": 5},
+    "preprocess": {"color": 1.0, "contrast": 1.02, "unsharp_radius": 0.8, "unsharp_percent": 90, "unsharp_threshold": 5},
     "dither": {"matrix": "bayer-4x4", "strength": 0.62, "edge_threshold": 0.09}
   },
   "card_assembly": {

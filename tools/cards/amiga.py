@@ -81,8 +81,8 @@ def _prepare_master(master: Image.Image, logical_size: tuple[int, int], centerin
     selected = (style or load_amiga_style())
     selected = selected.get("renderer", selected)
     preprocess = selected.get("preprocess") or {}
-    source = ImageEnhance.Color(source).enhance(float(preprocess.get("color", 0.88)))
-    source = ImageEnhance.Contrast(source).enhance(float(preprocess.get("contrast", 1.08)))
+    source = ImageEnhance.Color(source).enhance(float(preprocess.get("color", 1.0)))
+    source = ImageEnhance.Contrast(source).enhance(float(preprocess.get("contrast", 1.02)))
     return source.filter(ImageFilter.UnsharpMask(radius=float(preprocess.get("unsharp_radius", 0.8)), percent=int(preprocess.get("unsharp_percent", 90)), threshold=int(preprocess.get("unsharp_threshold", 5))))
 
 

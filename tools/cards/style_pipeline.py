@@ -25,8 +25,8 @@ PIPELINE_DESCRIPTIONS = {
     FACE_FREE_PIPELINE_ID: "Generates a matted foreground, then applies a deterministic renderer-owned background.",
     PORTRAIT_REFERENCE_PIPELINE_ID: "Uses the original portrait reference from historical Pipelines 01/02.",
 }
-FACE_FREE_REFERENCE_CHECKSUM = "6d4dbdd6d031678d83468122d6b8201266b5e2f3272f8628ebfd3af0dd871823"
-FACE_FREE_REFERENCE_CHECKSUMS = {FACE_FREE_REFERENCE_CHECKSUM, "ad0a1277a27a61dee615652f6fd81fa163a6dd44d5db378d9ed745faae39085c"}
+FACE_FREE_REFERENCE_CHECKSUM = "b898df7ab12666bc6f409fddd45fbdd39847c754c02f57c20e1419eae2bc9354"
+FACE_FREE_REFERENCE_CHECKSUMS = {FACE_FREE_REFERENCE_CHECKSUM, "6d4dbdd6d031678d83468122d6b8201266b5e2f3272f8628ebfd3af0dd871823", "ad0a1277a27a61dee615652f6fd81fa163a6dd44d5db378d9ed745faae39085c"}
 PORTRAIT_REFERENCE_CHECKSUM = "68ca995a8d308963278a2047863886b382adc8cd1230d05952c017b659838efe"
 LEGACY_SIMULATION_MODEL_ID = "fake/painterly-deterministic"
 SIMULATION_MODEL_IDS = {LEGACY_SIMULATION_MODEL_ID, "fake/amiga-ocs-deterministic"}
@@ -224,7 +224,7 @@ def legacy_amiga_style(style: dict[str, Any]) -> dict[str, Any]:
         "palette_space": renderer["palette_space"],
         "palette": list(renderer["palette"]),
         "dither": dict(renderer["dither"]),
-        "preprocess": {"color": float(preprocess.get("color", 0.88)), "contrast": float(preprocess.get("contrast", 1.08)), "unsharp_radius": float(preprocess.get("unsharp_radius", 0.8)), "unsharp_percent": int(preprocess.get("unsharp_percent", 90)), "unsharp_threshold": int(preprocess.get("unsharp_threshold", 5))},
+        "preprocess": {"color": float(preprocess.get("color", 1.0)), "contrast": float(preprocess.get("contrast", 1.02)), "unsharp_radius": float(preprocess.get("unsharp_radius", 0.8)), "unsharp_percent": int(preprocess.get("unsharp_percent", 90)), "unsharp_threshold": int(preprocess.get("unsharp_threshold", 5))},
         "card_text": dict(card.get("text") or {}),
     }
 
