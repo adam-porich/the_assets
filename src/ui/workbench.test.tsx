@@ -26,7 +26,7 @@ beforeEach(() => { (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REA
 afterEach(() => { act(() => root.unmount()); container.remove(); vi.restoreAllMocks(); window.location.hash = ""; });
 
 describe("pipeline workbench", () => {
-  it("uses Sources, Pipelines, Candidates, and Collection routes and redirects Cards", () => {
+  it("uses Inputs, Pipelines, Candidates, Batches, and Collection routes and redirects legacy runs", () => {
     window.location.hash = "#frames/card-1";
     expect(readRoute()).toEqual({ view: "candidates" });
     window.location.hash = "#style";
@@ -37,14 +37,32 @@ describe("pipeline workbench", () => {
     expect(readRoute()).toEqual({ view: "candidates", id: "batch-1", itemId: "item-1" });
     window.location.hash = "#collection";
     expect(readRoute()).toEqual({ view: "collection", id: undefined, itemId: undefined });
+    window.location.hash = "#batches/batch-1/item-1";
+    expect(readRoute()).toEqual({ view: "batches", id: "batch-1", itemId: "item-1" });
+    window.location.hash = "#run/batch-1";
+    expect(readRoute()).toEqual({ view: "batches", id: "batch-1" });
   });
 
   it("keeps only the simple top-level navigation", async () => {
     vi.spyOn(api, "bootstrap").mockResolvedValue(base as never);
     await act(async () => root.render(<App />));
-    expect(container.querySelectorAll('.app-header nav button')).toHaveLength(4);
+    expect(container.querySelectorAll('.app-header nav button')).toHaveLength(5);
     expect(container.textContent).toContain("Inputs");
     expect(container.querySelector(".pipeline-rail")).toBeFalsy();
+  });
+
+  it("shows every batch item in a clickable raw archive", async () => {
+    const batch = { batch_id: "batch-raw", purpose: "card-production" as const, status: "ready", created_at: "2026-08-10T00:00:00Z", updated_at: "2026-08-10T00:01:00Z", style_version_id: "style-face-free", style_checksum_sha256: "style-checksum", selected_source_ids: ["source-1"], requested_paid_calls: 1, paid_calls: 1, progress: { selected_sources: 1, ready_cards: 1, approved_cards: 0, failed_sources: 0, paid_calls: 1, total_attempts: 1 }, items: [produced({ batch_id: undefined, accepted: false, raw_foreground_url: "/raw.png", foreground_url: "/foreground.png", logical_art_url: "/logical.png" })] };
+    vi.spyOn(api, "bootstrap").mockResolvedValue({ ...base, batches: [batch] } as never);
+    vi.spyOn(api, "getProduction").mockResolvedValue({ batch } as never);
+    await act(async () => { window.location.hash = "#batches"; root.render(<App />); });
+    expect(container.textContent).toContain("Every run, whether accepted or not.");
+    const result = container.querySelector(".raw-result");
+    expect(result).toBeTruthy();
+    await act(async () => { result?.dispatchEvent(new MouseEvent("click", { bubbles: true })); window.dispatchEvent(new HashChangeEvent("hashchange")); });
+    expect(container.querySelector('[role="dialog"]')).toBeTruthy();
+    expect(container.querySelector('img[alt="Raw model output"]')?.getAttribute("src")).toBe("/raw.png");
+    expect(container.textContent).toContain("not accepted");
   });
 
   it("opens an accepted Input in the preparation dialog", async () => {

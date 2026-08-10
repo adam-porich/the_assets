@@ -58,6 +58,13 @@ foreground colours.
 Favorite any number of candidates into Collection. Removing a favorite does
 not delete its candidate, and saved rerenders are reflected automatically.
 
+### Batches
+
+`Batches` is the raw generation archive. It lists every attempt, including
+unaccepted previews and failed runs, and opens all retained pipeline artifacts:
+Input, raw model output, matted foreground, background composite, logical art,
+rendered art, and card. Artifact images link to their full-resolution files.
+
 ## Routes
 
 The refreshable hashes are `#inputs`, `#pipelines`,

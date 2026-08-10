@@ -268,6 +268,35 @@ export function CandidatesView({ bootstrap, navigate, refresh, notify, batchId, 
   </section>;
 }
 
+export function BatchesView({ bootstrap, navigate, notify, batchId, itemId }: Shared & { batchId?: string; itemId?: string }) {
+  const [details, setDetails] = useState<ProductionBatch[]>([]);
+  const [loading, setLoading] = useState(true);
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    void Promise.allSettled(bootstrap.batches.map((batch) => api.getProduction(batch.batch_id))).then((results) => {
+      if (cancelled) return;
+      const loaded = results.flatMap((result) => result.status === "fulfilled" ? [result.value.batch] : []);
+      setDetails(loaded); setLoading(false);
+      const failures = results.length - loaded.length;
+      if (failures) notify(`${failures} batch${failures === 1 ? "" : "es"} could not be loaded`, "error");
+    });
+    return () => { cancelled = true; };
+  }, [bootstrap.batches.map((batch) => `${batch.batch_id}:${batch.updated_at}`).join("|")]);
+  const selectedBatch = details.find((batch) => batch.batch_id === batchId);
+  const selectedItem = selectedBatch?.items.find((item) => item.item_id === itemId) || (selectedBatch && !itemId ? selectedBatch.items[0] : undefined);
+  const artifacts: Array<[string, string | undefined]> = selectedItem ? [
+    ["Input", selectedItem.source_url], ["Raw model output", selectedItem.raw_foreground_url], ["Matted foreground", selectedItem.foreground_url],
+    ["Background composite", selectedItem.master_url], ["Logical art", selectedItem.logical_art_url], ["Rendered art", selectedItem.art_url], ["Card", selectedItem.card_url],
+  ] : [];
+  return <section className="page batches-page">
+    <div className="page-heading"><div><p className="eyebrow">Raw generation archive</p><h2>Every run, whether accepted or not.</h2><p>Browse all generation batches and inspect every artifact retained by the pipeline. Opening a result does not promote or modify it.</p></div><span className="status-chip">{bootstrap.batches.length} batches</span></div>
+    {loading && <div className="empty-panel surface" role="status"><span className="spinner" /><p>Loading batch artifacts…</p></div>}
+    {!loading && <div className="batch-list">{details.map((batch) => <section className="surface raw-batch" key={batch.batch_id}><header><div><strong>{batch.items[0]?.source_label || "Untitled batch"}</strong><small>{batch.batch_id} · {batch.purpose} · {batch.created_at}</small></div><span className={`status-chip ${batch.status}`}>{batch.status}</span></header><div className="raw-results">{batch.items.map((item) => <button className="raw-result" key={item.item_id} onClick={() => navigate(`#batches/${batch.batch_id}/${item.item_id}`)}>{item.card_url || item.art_url || item.foreground_url || item.raw_foreground_url ? <img className={item.card_url ? "pixelated card-result" : ""} src={item.card_url || item.art_url || item.foreground_url || item.raw_foreground_url} alt={`${item.source_label} raw result`} /> : <span className="preview-placeholder">No image</span>}<span><strong>{item.source_label}</strong><small>attempt {item.attempt_number} · {item.accepted ? "accepted" : item.status}</small></span></button>)}</div></section>)}</div>}
+    {selectedBatch && selectedItem && <div className="dialog-backdrop" role="presentation"><section className="surface input-dialog raw-dialog" role="dialog" aria-modal="true" aria-labelledby="raw-result-title"><div className="panel-heading"><div><p className="eyebrow">{selectedBatch.batch_id} · attempt {selectedItem.attempt_number}</p><h3 id="raw-result-title">{selectedItem.source_label}</h3><p>{selectedBatch.purpose} · {selectedItem.accepted ? "accepted" : "not accepted"} · {selectedItem.status}</p></div><button className="button secondary" onClick={() => navigate("#batches")}>Close</button></div>{selectedItem.error && <p className="validation-note" role="alert">{selectedItem.error}</p>}<div className="raw-artifacts">{artifacts.map(([label, url]) => <figure key={label}>{url ? <a href={url} target="_blank" rel="noreferrer"><img className={label === "Card" || label.includes("art") ? "pixelated" : ""} src={url} alt={label} /></a> : <div className="preview-placeholder">Unavailable</div>}<figcaption>{label}</figcaption></figure>)}</div><ResultProvenance card={{ ...selectedItem, batch_id: selectedBatch.batch_id, batch_created_at: selectedBatch.created_at, purpose: selectedBatch.purpose, style_version_id: selectedBatch.style_version_id, style_checksum_sha256: selectedBatch.style_checksum_sha256, pipeline_id: "raw", pipeline_label: "Raw batch", pipeline_description: "", reference_stack: selectedItem.reference_stack || [] }} /></section></div>}
+  </section>;
+}
+
 export function CollectionView({ bootstrap, navigate, refresh, notify }: Shared) {
   const [busy, setBusy] = useState("");
   async function remove(card: ProducedCard) {
