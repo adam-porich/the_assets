@@ -1,4 +1,4 @@
-import type { ProductionItem } from "./types";
+import type { ProducedCard, ProductionItem } from "./types";
 
 const GLYPHS: Record<string, string[]> = {
   A: ["01110", "10001", "10001", "11111", "10001", "10001", "10001"],
@@ -83,33 +83,54 @@ export function DynamicCard({
   artUrl,
   text,
 }: {
-  item?: Pick<ProductionItem, "art_url" | "card_text">;
+  item?: Pick<
+    ProductionItem,
+    "art_url" | "card_text" | "source_label" | "attempt_number"
+  > &
+    Partial<Pick<ProducedCard, "batch_id" | "pipeline_label">>;
   artUrl?: string;
   text?: ProductionItem["card_text"];
 }) {
-  const cardText = text || item?.card_text || { title: "Untitled", lines: [] };
+  const cardText = text ||
+    item?.card_text || {
+      title: item?.source_label || "Untitled",
+      lines: [
+        item?.pipeline_label || "Rendered artwork",
+        item?.batch_id || "Asset Workbench",
+        `Attempt ${item?.attempt_number || 1}`,
+      ],
+    };
   const image = artUrl || item?.art_url;
   return (
     <article
       className="dynamic-card"
       aria-label={`${cardText.title} showcase card`}
     >
-      <header>
-        <PixelText>Asset Workbench</PixelText>
-      </header>
-      <div className="dynamic-card-art">
-        {image ? (
-          <img src={image} alt="Rendered artwork" />
-        ) : (
-          <span>Artwork unavailable</span>
-        )}
-      </div>
-      <div className="dynamic-card-copy">
-        <PixelText className="dynamic-card-title">{cardText.title}</PixelText>
-        <div className="dynamic-card-lines">
-          {cardText.lines.map((line, index) => (
-            <span key={index}>{line || "\u00a0"}</span>
-          ))}
+      <div className="dynamic-card-frame">
+        <i className="card-rivet card-rivet-nw" aria-hidden="true" />
+        <i className="card-rivet card-rivet-ne" aria-hidden="true" />
+        <i className="card-rivet card-rivet-sw" aria-hidden="true" />
+        <i className="card-rivet card-rivet-se" aria-hidden="true" />
+        <header className="dynamic-card-brand">
+          <PixelText>Asset Workbench</PixelText>
+          <span className="brand-rule" aria-hidden="true" />
+        </header>
+        <div className="dynamic-card-art">
+          {image ? (
+            <img src={image} alt="Rendered artwork" />
+          ) : (
+            <span>Artwork unavailable</span>
+          )}
+        </div>
+        <div className="dynamic-card-nameplate">
+          <PixelText className="dynamic-card-title">{cardText.title}</PixelText>
+        </div>
+        <div className="dynamic-card-details">
+          <div className="dynamic-card-lines">
+            {cardText.lines.map((line, index) => (
+              <span key={index}>{line || "\u00a0"}</span>
+            ))}
+          </div>
         </div>
       </div>
     </article>

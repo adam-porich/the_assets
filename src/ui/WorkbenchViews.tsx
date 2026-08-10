@@ -40,6 +40,18 @@ function shortChecksum(value: string) {
 function selectedSources(bootstrap: Bootstrap) {
   return bootstrap.inputs;
 }
+function resolvedCardText(card?: ProducedCard) {
+  return (
+    card?.card_text || {
+      title: card?.source_label || "Untitled",
+      lines: [
+        card?.pipeline_label || "Rendered artwork",
+        card?.batch_id || "Asset Workbench",
+        `Attempt ${card?.attempt_number || 1}`,
+      ],
+    }
+  );
+}
 function backgroundConfig(style?: PipelineStyle) {
   return (
     style?.backgrounds || {
@@ -1425,9 +1437,7 @@ export function CardsView({
       backgroundConfig(bootstrap.style.active).default_id,
   );
   const [renderPreview, setRenderPreview] = useState<ProductionItem>();
-  const [cardText, setCardText] = useState(
-    selectedCard?.card_text || { title: "", lines: [] as string[] },
-  );
+  const [cardText, setCardText] = useState(resolvedCardText(selectedCard));
   const activeBatch = bootstrap.batches.find((batch) => isActive(batch.status));
   useEffect(() => {
     if (selectedCard) {
@@ -1441,7 +1451,7 @@ export function CardsView({
         selectedCard.background_id ||
           backgroundConfig(bootstrap.style.active).default_id,
       );
-      setCardText(selectedCard.card_text);
+      setCardText(resolvedCardText(selectedCard));
       setRenderPreview(undefined);
     }
   }, [selectedCard?.item_id]);
@@ -2011,7 +2021,11 @@ export function CardsView({
               <span>→</span>
               <figure className="candidate-preview-card">
                 {renderPreview?.art_url || selectedCard.art_url ? (
-                  <DynamicCard item={selectedCard} artUrl={renderPreview?.art_url || selectedCard.art_url} text={cardText} />
+                  <DynamicCard
+                    item={selectedCard}
+                    artUrl={renderPreview?.art_url || selectedCard.art_url}
+                    text={cardText}
+                  />
                 ) : (
                   <div className="preview-placeholder">Card unavailable</div>
                 )}
@@ -2066,9 +2080,39 @@ export function CardsView({
                 </div>
                 <fieldset className="card-text-editor">
                   <legend>Card text</legend>
-                  <label>Title<input maxLength={48} value={cardText.title} onChange={(event) => setCardText({ ...cardText, title: event.target.value })} /></label>
-                  {Array.from({ length: 4 }, (_, index) => <label key={index}>Line {index + 1}<input maxLength={72} value={cardText.lines[index] || ""} onChange={(event) => { const lines = [...cardText.lines]; lines[index] = event.target.value; setCardText({ ...cardText, lines }); }} /></label>)}
-                  <button className="button secondary" disabled={Boolean(busy) || !cardText.title.trim()} onClick={() => void saveCardText(selectedCard)}>{busy === `text-${selectedCard.item_id}` ? "Saving text…" : "Save text"}</button>
+                  <label>
+                    Title
+                    <input
+                      maxLength={48}
+                      value={cardText.title}
+                      onChange={(event) =>
+                        setCardText({ ...cardText, title: event.target.value })
+                      }
+                    />
+                  </label>
+                  {Array.from({ length: 4 }, (_, index) => (
+                    <label key={index}>
+                      Line {index + 1}
+                      <input
+                        maxLength={72}
+                        value={cardText.lines[index] || ""}
+                        onChange={(event) => {
+                          const lines = [...cardText.lines];
+                          lines[index] = event.target.value;
+                          setCardText({ ...cardText, lines });
+                        }}
+                      />
+                    </label>
+                  ))}
+                  <button
+                    className="button secondary"
+                    disabled={Boolean(busy) || !cardText.title.trim()}
+                    onClick={() => void saveCardText(selectedCard)}
+                  >
+                    {busy === `text-${selectedCard.item_id}`
+                      ? "Saving text…"
+                      : "Save text"}
+                  </button>
                 </fieldset>
               </>
             )}
