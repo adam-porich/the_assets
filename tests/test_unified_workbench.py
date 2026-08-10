@@ -30,7 +30,7 @@ from tools.portraits.generation import (
     unavailable_live_model,
     validate_request,
 )
-from tools.portraits.production import CardProductionManager, prepare_wide_identity_reference
+from tools.portraits.production import CardProductionManager, expand_content_direction, prepare_wide_identity_reference
 from tools.portraits.normalisation import InputNormalisationManager
 from tools.portraits.workspace import WorkspaceError, WorkspaceStore
 
@@ -224,6 +224,15 @@ def test_wide_identity_reference_exposes_generation_safe_area(tmp_path: Path) ->
         assert guide.size == (1536, 864)
         assert guide.getpixel((0, 0)) == (244, 242, 236)
         assert guide.getpixel((guide.width // 2, guide.height // 2)) == (10, 20, 30)
+
+
+def test_concise_content_direction_expands_into_visible_requirements() -> None:
+    older = expand_content_direction("Friendly wizard. Make him look a little older. But the kind of wizard who would help not hinder")
+    assert "clearly mature adult" in older
+    assert "warmth and helpfulness" in older
+    secret = expand_content_direction("An apprentice who has discovered a secret")
+    assert "sideways glance" in secret
+    assert "off-centre half-smile" in secret
 
 
 def test_style_validation_rejects_target_only_and_bad_dimensions() -> None:

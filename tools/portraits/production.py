@@ -35,6 +35,27 @@ def prepare_wide_identity_reference(source_path: Path, destination: Path) -> Non
     canvas.save(destination, format="PNG")
 
 
+def expand_content_direction(direction: str) -> str:
+    """Translate concise relative art direction into visible image requirements."""
+    lowered = direction.casefold()
+    requirements = [
+        "Make the requested character, mood, and story cues unmistakable at small card size; prefer a specific, memorable interpretation over a timid literal copy."
+    ]
+    if any(word in lowered for word in ("older", "aged", "elder")):
+        requirements.append(
+            "Make the age change perceptually clear: if the reference is a child, transform the character into a clearly mature adult while retaining recognizable facial foundations; otherwise show an unmistakable progression in life stage."
+        )
+    if any(word in lowered for word in ("friendly", "help", "kind", "gentle")):
+        requirements.append(
+            "Communicate warmth and helpfulness through kind attentive eyes, an easy expression, and open confidence rather than menace or passivity."
+        )
+    if any(phrase in lowered for phrase in ("knows something", "discovered a secret", "knows a secret", "conspiratorial")):
+        requirements.append(
+            "Make secret knowledge visible in the face: use a slight sideways glance, one subtly raised brow, and a restrained off-centre half-smile, with quiet conspiratorial confidence rather than a generic cheerful pose or broad front-facing smile."
+        )
+    return " ".join(requirements)
+
+
 def validate_card_text(value: Any) -> dict[str, Any]:
     if not isinstance(value, dict):
         raise ValueError("card_text must be an object")
@@ -280,7 +301,8 @@ class CardProductionManager:
                     else:
                         base_instruction = str(item.get("prompt_override") or generation["prompt"])
                         direction = str(item.get("content_direction") or "").strip()
-                        instruction = f"{base_instruction}\n\nAdditional content direction from the user: {direction}" if direction else base_instruction
+                        direction_expansion = expand_content_direction(direction) if direction else ""
+                        instruction = f"{base_instruction}\n\nAdditional content direction from the user: {direction}\n\nPipeline interpretation of that direction: {direction_expansion}" if direction else base_instruction
                         foreground_pipeline = int(record["style_snapshot"].get("renderer", {}).get("driver_version", 1)) >= 3
                         output_relative = Path("production") / batch_id / "raw-foregrounds" / f"{item['item_id']}.png" if foreground_pipeline else master_relative
                         self.store.absolute_path(output_relative).parent.mkdir(parents=True, exist_ok=True)
@@ -302,7 +324,7 @@ class CardProductionManager:
                             output_path=self.store.absolute_path(output_relative),
                             reference_roles=tuple(["generation-reference"] * len(generation_refs)),
                         )
-                        item["generation_request"] = {"instruction": request.instruction, "content_direction": item.get("content_direction"), "model": request.model, "quality": request.quality, "seed": request.seed, "effective_aspect_ratio": request.effective_aspect_ratio, "identity_framing": "16:9-safe-area" if identity_reference != source_path else "source", "target_examples_excluded": True, "reference_order": [{"order": 0, "role": "identity", "source_id": item["source_id"]}, *[{"order": index, "role": "generation-reference", "reference_id": reference["id"]} for index, reference in enumerate(generation_refs, 1)]]}
+                        item["generation_request"] = {"instruction": request.instruction, "content_direction": item.get("content_direction"), "content_direction_expansion": direction_expansion or None, "model": request.model, "quality": request.quality, "seed": request.seed, "effective_aspect_ratio": request.effective_aspect_ratio, "identity_framing": "16:9-safe-area" if identity_reference != source_path else "source", "target_examples_excluded": True, "reference_order": [{"order": 0, "role": "identity", "source_id": item["source_id"]}, *[{"order": index, "role": "generation-reference", "reference_id": reference["id"]} for index, reference in enumerate(generation_refs, 1)]]}
                         result = adapter.generate(request)
                         if foreground_pipeline:
                             item["phase"] = "extracting-foreground"; self._write(record)
