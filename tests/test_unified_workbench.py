@@ -30,7 +30,7 @@ from tools.portraits.generation import (
     unavailable_live_model,
     validate_request,
 )
-from tools.portraits.production import CardProductionManager, expand_content_direction, prepare_wide_identity_reference
+from tools.portraits.production import CardProductionManager, prepare_wide_identity_reference
 from tools.portraits.normalisation import InputNormalisationManager
 from tools.portraits.workspace import WorkspaceError, WorkspaceStore
 
@@ -88,7 +88,7 @@ def test_style_schema_checksum_store_and_asset_snapshots(tmp_path: Path) -> None
     assert active["schema_version"] == 3
     prompt = active["generation"]["prompt"].lower()
     assert "head-and-shoulders" not in prompt and "redraw the person" not in prompt
-    assert "sole source of content" in prompt
+    assert prompt == "redraw input 1 as a vivid, characterful fantasy portrait. use the reference board only for rendering style."
     assert active["identity"]["style_version_id"]
     assert active["identity"]["state"] == "locked"
     assert style_checksum(active) == active["checksums"]["style_sha256"]
@@ -226,15 +226,6 @@ def test_wide_identity_reference_exposes_generation_safe_area(tmp_path: Path) ->
         assert guide.getpixel((guide.width // 2, guide.height // 2)) == (10, 20, 30)
 
 
-def test_concise_content_direction_expands_into_visible_requirements() -> None:
-    older = expand_content_direction("Friendly wizard. Make him look a little older. But the kind of wizard who would help not hinder")
-    assert "clearly mature adult" in older
-    assert "warmth and helpfulness" in older
-    secret = expand_content_direction("An apprentice who has discovered a secret")
-    assert "sideways glance" in secret
-    assert "off-centre half-smile" in secret
-
-
 def test_style_validation_rejects_target_only_and_bad_dimensions() -> None:
     style = load_checked_in_style()
     bad = {**style, "reference_pack": {**style["reference_pack"], "assets": [asset for asset in style["reference_pack"]["assets"] if asset["role"] == "target-example"]}}
@@ -295,6 +286,7 @@ def test_production_requires_model_to_support_requested_art_ratio(tmp_path: Path
         **style["generation"],
         "model_id": live_model()["id"],
         "requested_aspect_policy": "16:9",
+        "provider_aspect_ratio": "16:9",
     }
     with pytest.raises(ValueError, match="does not support aspect ratio 16:9"):
         manager._validate_start(style, ["input-any"], [live_model()], "card-production")

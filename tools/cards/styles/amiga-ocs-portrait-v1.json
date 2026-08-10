@@ -9,11 +9,12 @@
     "label": "Amiga Style Transfer"
   },
   "generation": {
-    "model_id": "openai/gpt-image-2",
+    "model_id": "openai/gpt-image-1-mini",
     "execution_mode": "live",
     "quality": "medium",
-    "prompt": "Input image 1 is the sole source of content and structure. Use the reference board only for foreground rendering vocabulary: connected matte tonal planes, deliberate edges, material ramps, local colour contrast, and controlled texture. Preserve the subject's category, count, silhouette, proportions, viewpoint, materials, markings, colours, and human identity where applicable. Make the foreground subject dominant and readable through broad midtones, crisp highlights, rim light, and strong local contrast. Preserve dark moods through chromatic midtones and local colour separation, not global underexposure: reserve neutral black for narrow seams, occlusion, and the deepest anchors. Keep major material planes in distinct, richly coloured families with clean light-dark steps suited to later Amiga OCS reduction. Avoid crushed shadows, muddy near-black masses, global desaturation, and brown or olive casts. Never copy shapes or arrangements from the board or invent a person, face, object, text, or narrative element. Produce a clean foreground master without visible pixels, dithering, scanlines, borders, card frames, UI, scenery, or environmental background elements.",
-    "requested_aspect_policy": "16:9",
+    "prompt": "Redraw input 1 as a vivid, characterful fantasy portrait. Use the reference board only for rendering style.",
+    "requested_aspect_policy": "1:1",
+    "provider_aspect_ratio": "1:1",
     "reference_limit": 9
   },
   "reference_pack": {
