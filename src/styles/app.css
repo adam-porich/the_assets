@@ -1344,10 +1344,10 @@ summary {
   container-type: inline-size;
   width: 100%;
   aspect-ratio: 7 / 10;
-  padding: 2.8%;
+  padding: 0;
   overflow: hidden;
   color: #f3dbc2;
-  background: #3f2c1c;
+  background: #21100f;
   border: max(1px, 0.45cqi) solid #b77b27;
   box-shadow: 0 1cqi 2cqi rgba(0, 0, 0, 0.35);
   text-align: left;
@@ -1357,11 +1357,11 @@ summary {
   box-sizing: border-box;
   height: 100%;
   display: grid;
-  grid-template-rows: 8.5% 55% 10.5% 20%;
-  gap: 2%;
-  padding: 3.5%;
+  grid-template-rows: 10% 56% 11% 23%;
+  gap: 0;
+  padding: 0;
   overflow: hidden;
-  background: linear-gradient(105deg, #493520, #3d2a1c);
+  background: #21100f;
 }
 .dynamic-card-frame::before {
   content: none;
@@ -1380,8 +1380,8 @@ summary {
 .dynamic-card-brand {
   display: grid;
   align-content: center;
-  gap: 1cqi;
-  padding: 1% 1.5%;
+  gap: 0.8cqi;
+  padding: 1.5% 13%;
   color: #f0d3bd;
   font-size: 3.15cqi;
 }
@@ -1398,8 +1398,10 @@ summary {
   display: grid;
   place-items: center;
   overflow: hidden;
-  padding: 0.7%;
-  border: max(1px, 0.45cqi) solid #c38a35;
+  padding: 0;
+  border: 0;
+  border-top: max(1px, 0.35cqi) solid #8a5c23;
+  border-bottom: max(1px, 0.35cqi) solid #8a5c23;
   background: #ead6a4;
   box-shadow: none;
 }
@@ -1418,14 +1420,15 @@ summary {
 .dynamic-card-nameplate {
   display: flex;
   align-items: center;
-  padding: 1.5%;
+  padding: 2% 3%;
   color: #f0d3bd;
   font-size: 3.35cqi;
 }
 .dynamic-card-details {
   display: grid;
   align-items: center;
-  padding: 3% 1.5%;
+  padding: 3%;
+  border-top: max(1px, 0.35cqi) solid #8a5c23;
 }
 .pixel-text {
   display: flex;
