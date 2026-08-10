@@ -9,7 +9,7 @@ import pytest
 from PIL import Image, ImageChops
 
 from tools.cards.amiga import adaptive_hybrid_palette, amiga_palette, palette_is_ocs_12_bit
-from tools.cards.backgrounds import choose_chroma_key, composite_foreground, extract_foreground
+from tools.cards.backgrounds import choose_chroma_key, composite_foreground, extract_foreground, validate_foreground_clearance
 from tools.cards.registry import registry
 from tools.cards.style_pipeline import (
     FACE_FREE_PIPELINE_ID,
@@ -30,7 +30,7 @@ from tools.portraits.generation import (
     unavailable_live_model,
     validate_request,
 )
-from tools.portraits.production import CardProductionManager
+from tools.portraits.production import CardProductionManager, prepare_wide_identity_reference
 from tools.portraits.normalisation import InputNormalisationManager
 from tools.portraits.workspace import WorkspaceError, WorkspaceStore
 
@@ -208,6 +208,24 @@ def test_foreground_matte_removes_shaded_chroma_field() -> None:
     assert matte["bbox"] == [35, 20, 85, 120]
 
 
+def test_foreground_clearance_rejects_irreplaceable_edge_crops() -> None:
+    validate_foreground_clearance({"mode": "chroma-matte", "bbox": [40, 20, 160, 100]}, (200, 120))
+    with pytest.raises(ValueError, match="top edge"):
+        validate_foreground_clearance({"mode": "chroma-matte", "bbox": [40, 0, 160, 100]}, (200, 120))
+    with pytest.raises(ValueError, match="side edge"):
+        validate_foreground_clearance({"mode": "chroma-matte", "bbox": [0, 20, 160, 100]}, (200, 120))
+
+
+def test_wide_identity_reference_exposes_generation_safe_area(tmp_path: Path) -> None:
+    source, destination = tmp_path / "source.png", tmp_path / "guide.png"
+    Image.new("RGB", (400, 400), (10, 20, 30)).save(source)
+    prepare_wide_identity_reference(source, destination)
+    with Image.open(destination) as guide:
+        assert guide.size == (1536, 864)
+        assert guide.getpixel((0, 0)) == (244, 242, 236)
+        assert guide.getpixel((guide.width // 2, guide.height // 2)) == (10, 20, 30)
+
+
 def test_style_validation_rejects_target_only_and_bad_dimensions() -> None:
     style = load_checked_in_style()
     bad = {**style, "reference_pack": {**style["reference_pack"], "assets": [asset for asset in style["reference_pack"]["assets"] if asset["role"] == "target-example"]}}
@@ -257,6 +275,20 @@ def test_live_request_validation_covers_mode_credentials_capacity_quality_and_as
     unavailable = AdapterCapabilities.from_model(unavailable_live_model("provider/missing"))
     with pytest.raises(ValueError, match="unavailable"):
         validate_request({"model": unavailable.model, "execution_mode": "live", "quality": "medium"}, 1, unavailable)
+
+
+def test_production_requires_model_to_support_requested_art_ratio(tmp_path: Path) -> None:
+    store = WorkspaceStore(tmp_path / "library")
+    styles = StyleStore(store)
+    manager = CardProductionManager(store, styles)
+    style = load_checked_in_style()
+    style["generation"] = {
+        **style["generation"],
+        "model_id": live_model()["id"],
+        "requested_aspect_policy": "16:9",
+    }
+    with pytest.raises(ValueError, match="does not support aspect ratio 16:9"):
+        manager._validate_start(style, ["input-any"], [live_model()], "card-production")
 
 
 def test_openrouter_payload_is_identity_first_and_rejects_targets(tmp_path: Path) -> None:

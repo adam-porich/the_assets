@@ -7,9 +7,9 @@ import uuid
 from pathlib import Path
 from typing import Any, Callable
 
-from PIL import Image
+from PIL import Image, ImageOps
 
-from tools.cards.backgrounds import choose_chroma_key, extract_foreground
+from tools.cards.backgrounds import choose_chroma_key, extract_foreground, validate_foreground_clearance
 from tools.cards.registry import registry
 from tools.cards.style_pipeline import StyleStore, style_checksum, validate_style
 
@@ -21,6 +21,18 @@ TERMINAL_ITEM_STATES = {"ready", "failed", "interrupted"}
 CARD_TITLE_MAX = 48
 CARD_LINE_MAX = 72
 CARD_LINE_LIMIT = 6
+
+
+def prepare_wide_identity_reference(source_path: Path, destination: Path) -> None:
+    """Place a source inside the requested frame so generation sees the safe area."""
+    canvas_size = (1536, 864)
+    with Image.open(source_path) as opened:
+        source = ImageOps.exif_transpose(opened).convert("RGB")
+        contained = ImageOps.contain(source, (round(canvas_size[0] * 0.78), round(canvas_size[1] * 0.80)), Image.Resampling.LANCZOS)
+    canvas = Image.new("RGB", canvas_size, (244, 242, 236))
+    canvas.paste(contained, ((canvas.width - contained.width) // 2, (canvas.height - contained.height) // 2))
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    canvas.save(destination, format="PNG")
 
 
 def validate_card_text(value: Any) -> dict[str, Any]:
@@ -141,7 +153,12 @@ class CardProductionManager:
         if purpose == "card-production" and str(generation.get("execution_mode")) != "live":
             raise ValueError("the active production style must use live image generation; simulation is preview-only")
         generation_refs = [asset for asset in style["reference_pack"]["assets"] if asset.get("role") == "generation-reference"]
-        mapping = validate_request({"model": generation["model_id"], "quality": generation["quality"], "execution_mode": generation["execution_mode"]}, len(generation_refs), capabilities)
+        mapping = validate_request({
+            "model": generation["model_id"],
+            "quality": generation["quality"],
+            "execution_mode": generation["execution_mode"],
+            "provider_aspect_ratio": generation.get("requested_aspect_policy"),
+        }, len(generation_refs), capabilities)
         return model, capabilities, mapping, generation_refs
 
     def create(self, source_ids: list[str], style: dict[str, Any], models: list[dict[str, Any]], *, purpose: str = "card-production", consent: bool = False, prompt_override: str | None = None, content_direction: str | None = None, background_id: str | None = None) -> dict[str, Any]:
@@ -271,16 +288,21 @@ class CardProductionManager:
                             with Image.open(source_path) as opened:
                                 chroma_name, chroma = choose_chroma_key(opened)
                             item["chroma_key"] = {"name": chroma_name, "hex": "#%02x%02x%02x" % chroma}
-                            instruction += f"\n\nForeground isolation contract: output only the subject against a perfectly flat solid {item['chroma_key']['hex']} chroma-key background. Keep the complete subject silhouette inside the frame with clear padding. The key background must have no texture, gradient, vignette, scenery, floor, shadow, halo, or reflected key colour. Do not use {item['chroma_key']['hex']} on the subject."
+                            instruction += f"\n\nForeground isolation contract: generate a native 16:9 landscape image containing only the subject against a perfectly flat solid {item['chroma_key']['hex']} chroma-key background. Compose the subject directly for that final 16:9 frame. If the input crops the subject at its top or sides, conservatively outpaint the natural continuation needed to complete that silhouette—for example, finish a hat cut off by the source edge—without adding a new object or changing its design. The entire top and both sides of the completed silhouette must be visible: leave at least 10% of the image height as uninterrupted key background above hats, hair, or other uppermost details, and at least 8% of the image width on each side. A bust or torso may continue through the bottom edge. Do not crop or touch the top edge. The key background must have no texture, gradient, vignette, scenery, floor, shadow, halo, or reflected key colour. Do not use {item['chroma_key']['hex']} on the subject."
+                        identity_reference = source_path
+                        if foreground_pipeline and str(record["backend_mapping"]["effective_aspect_ratio"]) == "16:9":
+                            identity_relative = Path("production") / batch_id / "inputs" / "generation-guides" / f"{item['item_id']}.png"
+                            identity_reference = self.store.absolute_path(identity_relative)
+                            prepare_wide_identity_reference(source_path, identity_reference)
                         request = GenerationRequest(
-                            identity_image=source_path, style_images=reference_paths,
+                            identity_image=identity_reference, style_images=reference_paths,
                             instruction=instruction if int(record["style_snapshot"].get("schema_version", 1)) == 3 else generation_instruction(generation["direction"]),
                             negative_prompt=str(generation.get("avoid") or ""), model=str(generation["model_id"]), quality=str(generation["quality"]),
                             seed=stable_seed(str(item["item_id"])), effective_aspect_ratio=str(record["backend_mapping"]["effective_aspect_ratio"]),
                             output_path=self.store.absolute_path(output_relative),
                             reference_roles=tuple(["generation-reference"] * len(generation_refs)),
                         )
-                        item["generation_request"] = {"instruction": request.instruction, "content_direction": item.get("content_direction"), "model": request.model, "quality": request.quality, "seed": request.seed, "target_examples_excluded": True, "reference_order": [{"order": 0, "role": "identity", "source_id": item["source_id"]}, *[{"order": index, "role": "generation-reference", "reference_id": reference["id"]} for index, reference in enumerate(generation_refs, 1)]]}
+                        item["generation_request"] = {"instruction": request.instruction, "content_direction": item.get("content_direction"), "model": request.model, "quality": request.quality, "seed": request.seed, "effective_aspect_ratio": request.effective_aspect_ratio, "identity_framing": "16:9-safe-area" if identity_reference != source_path else "source", "target_examples_excluded": True, "reference_order": [{"order": 0, "role": "identity", "source_id": item["source_id"]}, *[{"order": index, "role": "generation-reference", "reference_id": reference["id"]} for index, reference in enumerate(generation_refs, 1)]]}
                         result = adapter.generate(request)
                         if foreground_pipeline:
                             item["phase"] = "extracting-foreground"; self._write(record)
@@ -288,6 +310,7 @@ class CardProductionManager:
                             foreground_path = self.store.absolute_path(foreground_relative); foreground_path.parent.mkdir(parents=True, exist_ok=True)
                             with Image.open(self.store.absolute_path(output_relative)) as opened:
                                 foreground, matte = extract_foreground(opened, tuple(bytes.fromhex(item["chroma_key"]["hex"].removeprefix("#"))))
+                                validate_foreground_clearance(matte, opened.size)
                             foreground.save(foreground_path, format="PNG")
                             item.update({"raw_foreground_path": output_relative.as_posix(), "foreground_path": foreground_relative.as_posix(), "foreground_checksum_sha256": checksum(foreground_path), "matte_metadata": matte})
                         else:

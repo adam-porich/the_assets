@@ -283,7 +283,8 @@ class WorkbenchHandler(BaseHTTPRequestHandler):
             match = re.fullmatch(r"/api/styles/trials/([^/]+)/activate", path)
             if match:
                 trial = self.manager.get(match.group(1))
-                if trial["purpose"] != "style-trial" or trial["status"] != "ready" or any(item.get("status") != "ready" for item in trial.get("items", [])): raise ValueError("only a complete style trial can be activated")
+                current_items = self.manager.latest_items(trial)
+                if trial["purpose"] != "style-trial" or trial["status"] != "ready" or not current_items or any(item.get("status") != "ready" for item in current_items): raise ValueError("only a complete style trial can be activated")
                 if trial.get("model_capabilities", {}).get("execution_mode") != "live": raise ValueError("simulation trials are previews and cannot activate a production style")
                 draft = self.styles.draft()
                 if not draft or draft["checksums"]["style_sha256"] != trial["style_checksum_sha256"]: raise ValueError("the draft changed after this trial; run it again before activation")

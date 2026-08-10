@@ -61,6 +61,18 @@ def extract_foreground(image: Image.Image, key: tuple[int, int, int]) -> tuple[I
     return output, {"mode": "chroma-matte", "key": "#%02x%02x%02x" % key, "border_coverage": round(border_coverage, 6), "bbox": list(bbox)}
 
 
+def validate_foreground_clearance(metadata: dict[str, Any], size: tuple[int, int]) -> None:
+    """Reject generated silhouettes whose irreplaceable top or sides were cropped."""
+    if metadata.get("mode") != "chroma-matte":
+        return
+    left, top, right, _ = (int(value) for value in metadata.get("bbox", (0, 0, *size)))
+    width, height = size
+    if top < max(2, round(height * 0.005)):
+        raise ValueError("generated foreground touches the top edge; regenerate with clear space above the subject")
+    if left < round(width * 0.03) or right > width - round(width * 0.03):
+        raise ValueError("generated foreground touches a side edge; regenerate with clear space around the subject")
+
+
 def _hex(value: str) -> tuple[int, int, int]:
     return tuple(bytes.fromhex(value.removeprefix("#")))  # type: ignore[return-value]
 
