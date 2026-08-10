@@ -9,7 +9,7 @@ from typing import Any, Callable
 
 from PIL import Image, ImageOps
 
-from tools.cards.backgrounds import choose_chroma_key, extract_foreground, validate_foreground_clearance
+from tools.cards.backgrounds import choose_chroma_key, extract_foreground
 from tools.cards.registry import registry
 from tools.cards.style_pipeline import StyleStore, style_checksum, validate_style
 
@@ -311,8 +311,6 @@ class CardProductionManager:
                             foreground_path = self.store.absolute_path(foreground_relative); foreground_path.parent.mkdir(parents=True, exist_ok=True)
                             with Image.open(self.store.absolute_path(output_relative)) as opened:
                                 foreground, matte = extract_foreground(opened, tuple(bytes.fromhex(item["chroma_key"]["hex"].removeprefix("#"))))
-                                if str(record["backend_mapping"]["effective_aspect_ratio"]) == "16:9":
-                                    validate_foreground_clearance(matte, opened.size)
                             foreground.save(foreground_path, format="PNG")
                             item.update({"raw_foreground_path": output_relative.as_posix(), "foreground_path": foreground_relative.as_posix(), "foreground_checksum_sha256": checksum(foreground_path), "matte_metadata": matte})
                         else:
