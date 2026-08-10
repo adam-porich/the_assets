@@ -101,8 +101,9 @@ def foreground_layers(foreground: Image.Image, style: dict[str, Any], background
     touches_right = box[2] >= foreground.width - edge_margin
     if touches_top and not (touches_left or touches_right):
         # The vertical extent is clipped, so use the intact horizontal extent
-        # and carry that crop naturally through the top of the art window.
-        base_scale = size[0] * 0.94 / subject.width
+        # without allowing a wide canvas to scale the subject far beyond its
+        # vertical bounds. Carry the crop through the top of the art window.
+        base_scale = min(size[0] * 0.94 / subject.width, size[1] * 0.94 / subject.height)
     elif (touches_left or touches_right) and not touches_top:
         base_scale = size[1] * 0.94 / subject.height
     else:

@@ -186,6 +186,7 @@ def test_foreground_matte_and_backgrounds_are_independent() -> None:
     _, cropped_meta = composite_foreground(top_cropped, style, "warm-parchment")
     assert cropped_meta["touching_edges"] == ["top"]
     assert cropped_meta["placement"][1] == 0
+    assert cropped_meta["placement"][3] <= style["backgrounds"]["composite_size"][1]
 
 
 def test_foreground_matte_removes_shaded_chroma_field() -> None:
