@@ -22,21 +22,6 @@ from .workspace import WorkspaceError, WorkspaceStore, checksum, new_id, now_iso
 TERMINAL_ITEM_STATES = {"ready", "failed", "interrupted"}
 
 
-def unsafe_foreground_edges(foreground: Image.Image, margin_ratio: float = 0.025) -> list[str]:
-    """Return edges that leave too little transparent room for safe card framing."""
-    alpha = foreground.getchannel("A")
-    box = alpha.getbbox()
-    if not box:
-        return ["empty"]
-    margin = max(2, round(min(foreground.size) * margin_ratio))
-    left, top, right, _ = box
-    edges = []
-    if left <= margin: edges.append("left")
-    if top <= margin: edges.append("top")
-    if right >= foreground.width - margin: edges.append("right")
-    return edges
-
-
 def generation_instruction(direction: dict[str, Any]) -> str:
     """Resolve structured style direction into the exact prompt sent to a provider."""
     labels = {
@@ -275,36 +260,18 @@ class CardProductionManager:
                             reference_roles=tuple(["generation-reference"] * len(generation_refs)),
                         )
                         item["generation_request"] = {"instruction": request.instruction, "content_direction": item.get("content_direction"), "model": request.model, "quality": request.quality, "seed": request.seed, "target_examples_excluded": True, "reference_order": [{"order": 0, "role": "identity", "source_id": item["source_id"]}, *[{"order": index, "role": "generation-reference", "reference_id": reference["id"]} for index, reference in enumerate(generation_refs, 1)]]}
-                        results = [adapter.generate(request)]
+                        result = adapter.generate(request)
                         if foreground_pipeline:
                             item["phase"] = "extracting-foreground"; self._write(record)
                             foreground_relative = Path("production") / batch_id / "foregrounds" / f"{item['item_id']}.png"
                             foreground_path = self.store.absolute_path(foreground_relative); foreground_path.parent.mkdir(parents=True, exist_ok=True)
                             with Image.open(self.store.absolute_path(output_relative)) as opened:
                                 foreground, matte = extract_foreground(opened, tuple(bytes.fromhex(item["chroma_key"]["hex"].removeprefix("#"))))
-                            unsafe_edges = unsafe_foreground_edges(foreground)
-                            if unsafe_edges and capabilities.execution_mode == "live":
-                                item["phase"] = "correcting-framing"
-                                record["requested_paid_calls"] = int(record.get("requested_paid_calls") or 0) + 1
-                                correction = "CORRECTIVE FRAMING REQUIREMENT: the previous result touched the " + ", ".join(unsafe_edges) + " edge. Recompose or outpaint the complete subject so every top and side silhouette edge has at least 8% flat chroma-key padding. Do not crop hats, hair, shoulders, or props."
-                                retry_request = GenerationRequest(**{**request.__dict__, "instruction": f"{request.instruction}\n\n{correction}", "seed": stable_seed(f"{item['item_id']}:framing-retry")})
-                                item["generation_request"].update({"instruction": retry_request.instruction, "seed": retry_request.seed, "automatic_framing_retry": True, "unsafe_edges": unsafe_edges}); self._write(record)
-                                results.append(adapter.generate(retry_request))
-                                with Image.open(self.store.absolute_path(output_relative)) as opened:
-                                    foreground, matte = extract_foreground(opened, tuple(bytes.fromhex(item["chroma_key"]["hex"].removeprefix("#"))))
-                                remaining_edges = unsafe_foreground_edges(foreground)
-                                if remaining_edges:
-                                    raise ValueError("generated subject still touches the " + ", ".join(remaining_edges) + " edge after an automatic framing retry")
                             foreground.save(foreground_path, format="PNG")
                             item.update({"raw_foreground_path": output_relative.as_posix(), "foreground_path": foreground_relative.as_posix(), "foreground_checksum_sha256": checksum(foreground_path), "matte_metadata": matte})
                         else:
                             item.update({"master_path": master_relative.as_posix(), "master_checksum_sha256": checksum(self.store.absolute_path(master_relative))})
-                        result = results[-1]
-                        costs = [float(entry.cost_usd) for entry in results if isinstance(entry.cost_usd, (int, float))]
-                        usage_keys = {key for entry in results for key, value in entry.usage.items() if isinstance(value, (int, float))}
-                        usage = {key: sum(float(entry.usage.get(key, 0) or 0) for entry in results) for key in usage_keys}
-                        attempts = [{"seed": entry.seed, "elapsed_seconds": entry.elapsed_seconds, "cost_usd": entry.cost_usd, "dimensions": entry.dimensions} for entry in results]
-                        item.update({"generation": {"backend": result.backend, "model": result.model, "execution_mode": capabilities.execution_mode, "seed": result.seed, "elapsed_seconds": sum(entry.elapsed_seconds for entry in results), "dimensions": result.dimensions, "effective_aspect_ratio": result.effective_aspect_ratio, "usage": usage, "cost_usd": sum(costs) if costs else None, "attempts": len(results)}, "generation_attempts": attempts, "usage": usage, "cost_usd": sum(costs) if costs else None})
+                        item.update({"generation": {"backend": result.backend, "model": result.model, "execution_mode": capabilities.execution_mode, "seed": result.seed, "elapsed_seconds": result.elapsed_seconds, "dimensions": result.dimensions, "effective_aspect_ratio": result.effective_aspect_ratio, "usage": result.usage, "cost_usd": result.cost_usd}, "usage": result.usage, "cost_usd": result.cost_usd})
                     item.update({"status": "processing", "phase": "rendering"}); self._write(record)
                     self._render_item(record, item, None)
                     item["status"] = "ready"; item["phase"] = "complete"; item["finished_at"] = now_iso(); item["error"] = None
@@ -326,7 +293,7 @@ class CardProductionManager:
                     self._active_batch = None
 
     def _update_totals(self, record: dict[str, Any]) -> None:
-        record["paid_calls"] = sum(sum(1 for stage in item.get("generation_stages", []) if stage.get("result") and not stage["result"].get("reused")) if item.get("generation_stages") else (len(item.get("generation_attempts") or []) or (1 if item.get("generation") else 0)) for item in record.get("items", []))
+        record["paid_calls"] = sum(sum(1 for stage in item.get("generation_stages", []) if stage.get("result") and not stage["result"].get("reused")) if item.get("generation_stages") else (1 if item.get("generation") else 0) for item in record.get("items", []))
         record["usage"] = {key: value for key, value in {key: sum(float(item.get("usage", {}).get(key, 0) or 0) for item in record["items"] if isinstance(item.get("usage", {}).get(key), (int, float))) for key in {key for item in record["items"] for key in (item.get("usage") or {})}}.items()}
         costs = [float(stage["result"]["cost_usd"]) for item in record["items"] for stage in item.get("generation_stages", []) if isinstance(stage.get("result", {}).get("cost_usd"), (int, float)) and not stage["result"].get("reused")]
         costs.extend(float(item["cost_usd"]) for item in record["items"] if not item.get("generation_stages") and isinstance(item.get("cost_usd"), (int, float)))

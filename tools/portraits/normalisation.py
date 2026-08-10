@@ -6,8 +6,6 @@ import threading
 from pathlib import Path
 from typing import Any, Callable
 
-from PIL import Image, ImageOps
-
 from .generation import AdapterCapabilities, GenerationRequest, adapter_for, stable_seed, validate_request
 from .workspace import WorkspaceStore, checksum, new_id, now_iso
 
@@ -115,17 +113,6 @@ class InputNormalisationManager:
         if not attempt or attempt.get("status") != "ready" or not attempt.get("relative_path"):
             raise ValueError("choose a completed normalisation preview before accepting this input")
         source = self.store.absolute_path(attempt["relative_path"])
-        if attempt.get("execution_mode") == "live":
-            with Image.open(source) as opened:
-                preview = ImageOps.contain(opened.convert("RGB"), (256, 256), Image.Resampling.BILINEAR)
-            corners = [preview.getpixel(point) for point in ((0, 0), (preview.width - 1, 0), (0, preview.height - 1), (preview.width - 1, preview.height - 1))]
-            background = tuple(round(sum(colour[channel] for colour in corners) / len(corners)) for channel in range(3))
-            mask = Image.new("L", preview.size)
-            mask.putdata([255 if sum((colour[channel] - background[channel]) ** 2 for channel in range(3)) ** 0.5 >= 32 else 0 for colour in preview.getdata()])
-            box = mask.getbbox()
-            margin = max(3, round(min(preview.size) * 0.025))
-            if box and (box[0] <= margin or box[1] <= margin or box[2] >= preview.width - margin):
-                raise ValueError("the prepared subject touches the top or side edge; rerun preparation with the complete silhouette and clear padding")
         original = self.store.absolute_path(item["original_path"])
         directory = self.store.root / "inputs" / input_id
         directory.mkdir(parents=True, exist_ok=True)

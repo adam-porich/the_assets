@@ -182,6 +182,12 @@ def test_foreground_matte_and_backgrounds_are_independent() -> None:
     assert warm.size == cool.size == tuple(style["backgrounds"]["composite_size"])
     assert warm.tobytes() != cool.tobytes()
     assert warm_meta["subject_bbox"] == cool_meta["subject_bbox"]
+    top_cropped = Image.new("RGBA", (100, 120))
+    for x in range(20, 80):
+        for y in range(120): top_cropped.putpixel((x, y), (170, 65, 35, 255))
+    _, cropped_meta = composite_foreground(top_cropped, style, "warm-parchment")
+    assert cropped_meta["touching_edges"] == ["top"]
+    assert cropped_meta["placement"][1] == 0
 
 
 def test_foreground_matte_removes_shaded_chroma_field() -> None:
