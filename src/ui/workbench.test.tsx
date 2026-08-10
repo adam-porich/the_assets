@@ -57,8 +57,10 @@ describe("pipeline workbench", () => {
     vi.spyOn(api, "getProduction").mockResolvedValue({ batch } as never);
     await act(async () => { window.location.hash = "#batches"; root.render(<App />); });
     expect(container.textContent).toContain("Every run, whether accepted or not.");
+    expect(container.querySelector(".raw-results-grid")).toBeTruthy();
     const result = container.querySelector(".raw-result");
     expect(result).toBeTruthy();
+    expect(result?.textContent).toContain("batch-raw");
     await act(async () => { result?.dispatchEvent(new MouseEvent("click", { bubbles: true })); window.dispatchEvent(new HashChangeEvent("hashchange")); });
     expect(container.querySelector('[role="dialog"]')).toBeTruthy();
     expect(container.querySelector('img[alt="Raw model output"]')?.getAttribute("src")).toBe("/raw.png");
