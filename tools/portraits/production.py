@@ -1,18 +1,16 @@
 from __future__ import annotations
 
 import copy
-import json
 import shutil
 import threading
 import uuid
-import zipfile
 from pathlib import Path
 from typing import Any, Callable
 
 from PIL import Image
 
 from tools.cards.backgrounds import choose_chroma_key, extract_foreground
-from tools.cards.registry import RenderBundle, registry
+from tools.cards.registry import registry
 from tools.cards.style_pipeline import StyleStore, style_checksum, validate_style
 
 from .generation import AdapterCapabilities, GenerationRequest, adapter_for, stable_seed, validate_request
@@ -20,6 +18,26 @@ from .workspace import WorkspaceError, WorkspaceStore, checksum, new_id, now_iso
 
 
 TERMINAL_ITEM_STATES = {"ready", "failed", "interrupted"}
+CARD_TITLE_MAX = 48
+CARD_LINE_MAX = 72
+CARD_LINE_LIMIT = 4
+
+
+def validate_card_text(value: Any) -> dict[str, Any]:
+    if not isinstance(value, dict):
+        raise ValueError("card_text must be an object")
+    title = str(value.get("title") or "").strip()
+    lines = value.get("lines")
+    if not title:
+        raise ValueError("card title is required")
+    if len(title) > CARD_TITLE_MAX:
+        raise ValueError(f"card title must be at most {CARD_TITLE_MAX} characters")
+    if not isinstance(lines, list) or len(lines) > CARD_LINE_LIMIT:
+        raise ValueError(f"card lines must be an array of at most {CARD_LINE_LIMIT} lines")
+    normalized = [str(line).strip() for line in lines]
+    if any(len(line) > CARD_LINE_MAX for line in normalized):
+        raise ValueError(f"card lines must be at most {CARD_LINE_MAX} characters")
+    return {"title": title, "lines": normalized}
 
 
 def generation_instruction(direction: dict[str, Any]) -> str:
@@ -163,7 +181,9 @@ class CardProductionManager:
             items = []
             for source in source_snapshots:
                 lineage_id = new_id("lineage")
-                items.append(self._new_item(source, 1, lineage_id, reference_snapshots, prompt_override=prompt_override, content_direction=content_direction, background_id=background_id or style.get("backgrounds", {}).get("default_id")))
+                item = self._new_item(source, 1, lineage_id, reference_snapshots, prompt_override=prompt_override, content_direction=content_direction, background_id=background_id or style.get("backgrounds", {}).get("default_id"))
+                item["card_text"]["lines"] = [str(style["identity"].get("label") or style["identity"]["style_version_id"]), batch_id, "Attempt 1"]
+                items.append(item)
             record = {
                 "batch_id": batch_id, "purpose": purpose, "created_at": created, "updated_at": created,
                 "status": "queued", "style_snapshot": style, "style_version_id": style["identity"]["style_version_id"],
@@ -188,7 +208,8 @@ class CardProductionManager:
                 {"role": "generation-reference", "reference_id": reference["id"], "label": reference.get("label") or reference["id"], "input_path": reference["input_path"], "checksum_sha256": reference["input_checksum_sha256"]} for reference in references
             ]],
             "framing": None, "background_id": background_id, "background_metadata": {}, "matte_metadata": {}, "render_revision": 0, "render_revisions": [], "raw_foreground_path": None, "foreground_path": None, "master_path": None, "master_checksum_sha256": None,
-            "logical_art_path": None, "art_path": None, "card_path": None, "card_checksum_sha256": None,
+            "logical_art_path": None, "art_path": None, "art_checksum_sha256": None,
+            "card_text": {"title": str(source.get("label") or source["id"]), "lines": []},
             "generation": {}, "generation_request": {}, "generation_stages": [], "normalised_path": None, "normalised_checksum_sha256": None, "render_metadata": {}, "usage": {}, "cost_usd": None,
             "prompt_override": prompt_override.strip() if prompt_override and prompt_override.strip() else None,
             "content_direction": content_direction.strip() if content_direction and content_direction.strip() else None, "accepted": False,
@@ -329,18 +350,16 @@ class CardProductionManager:
                 master = opened.convert("RGB")
             render_framing = framing
             bundle = registry.render(style, master, str(item["source_label"]), render_framing)
-        logical_path, art_path, card_path = base.with_name(base.name + "-logical.png"), base.with_name(base.name + "-art.png"), base.with_name(base.name + "-card.png")
-        self._save_image(bundle.logical_art, self.store.absolute_path(logical_path)); self._save_image(bundle.art, self.store.absolute_path(art_path)); self._save_image(bundle.card, self.store.absolute_path(card_path))
-        item.update({"render_revision": revision, "framing": framing or style["composition"]["default_framing"], "palette_mode": style["renderer"].get("palette_mode", "fixed-house"), "logical_art_path": logical_path.as_posix(), "art_path": art_path.as_posix(), "card_path": card_path.as_posix(), "card_checksum_sha256": checksum(self.store.absolute_path(card_path)), "render_metadata": bundle.metadata})
-        item.setdefault("render_revisions", []).append({"revision": revision, "master_path": item.get("master_path"), "logical_art_path": logical_path.as_posix(), "art_path": art_path.as_posix(), "card_path": card_path.as_posix(), "card_checksum_sha256": item["card_checksum_sha256"], "framing": copy.deepcopy(item["framing"]), "background_id": item.get("background_id"), "background_metadata": copy.deepcopy(item.get("background_metadata")), "palette_mode": item["palette_mode"], "render_metadata": bundle.metadata, "created_at": now_iso()})
+        logical_path, art_path = base.with_name(base.name + "-logical.png"), base.with_name(base.name + "-art.png")
+        self._save_image(bundle.logical_art, self.store.absolute_path(logical_path)); self._save_image(bundle.art, self.store.absolute_path(art_path))
+        item.update({"render_revision": revision, "framing": framing or style["composition"]["default_framing"], "palette_mode": style["renderer"].get("palette_mode", "fixed-house"), "logical_art_path": logical_path.as_posix(), "art_path": art_path.as_posix(), "art_checksum_sha256": checksum(self.store.absolute_path(art_path)), "render_metadata": bundle.metadata})
+        item.setdefault("render_revisions", []).append({"revision": revision, "master_path": item.get("master_path"), "logical_art_path": logical_path.as_posix(), "art_path": art_path.as_posix(), "art_checksum_sha256": item["art_checksum_sha256"], "framing": copy.deepcopy(item["framing"]), "background_id": item.get("background_id"), "background_metadata": copy.deepcopy(item.get("background_metadata")), "palette_mode": item["palette_mode"], "render_metadata": bundle.metadata, "created_at": now_iso()})
 
     def payload(self, record: dict[str, Any]) -> dict[str, Any]:
         result = copy.deepcopy(record)
         result["progress"] = self.progress(record)
         favourites = {(str(item.get("batch_id")), str(item.get("item_id"))): item for item in self._favourite_data().get("items", [])}
         hidden_cards = {(str(item.get("batch_id")), str(item.get("item_id"))): item for item in self._hidden_data().get("items", [])}
-        current_approvals = self._approval_data().get("current", {})
-        result["progress"]["approved_cards"] = sum(1 for source_id in record.get("selected_source_ids", []) if f"{source_id}:{record.get('style_version_id')}" in current_approvals)
         for item in result.get("items", []):
             source_snapshot = next((source for source in result.get("source_snapshots", []) if str(source.get("id")) == str(item.get("source_id"))), {})
             favourite = favourites.get((str(record.get("batch_id")), str(item.get("item_id"))))
@@ -349,8 +368,7 @@ class CardProductionManager:
             item["favorited_at"] = favourite.get("favorited_at") if favourite else None
             item["hidden"] = bool(hidden)
             item["hidden_at"] = hidden.get("hidden_at") if hidden else None
-            item["approved"] = current_approvals.get(f"{item.get('source_id')}:{record.get('style_version_id')}", {}).get("attempt_id") == item.get("item_id")
-            for field in ("normalised_path", "raw_foreground_path", "foreground_path", "master_path", "logical_art_path", "art_path", "card_path"):
+            for field in ("normalised_path", "raw_foreground_path", "foreground_path", "master_path", "logical_art_path", "art_path"):
                 item[field.replace("_path", "_url")] = self.store.asset_url(item.get(field))
             for stage in item.get("generation_stages", []):
                 stage["output_url"] = self.store.asset_url(stage.get("output_path"))
@@ -366,10 +384,21 @@ class CardProductionManager:
     def progress(record: dict[str, Any]) -> dict[str, Any]:
         items = record.get("items", [])
         current = CardProductionManager.latest_items(record)
-        return {"selected_sources": len(record.get("selected_source_ids", [])), "ready_cards": sum(item.get("status") == "ready" for item in current), "approved_cards": 0, "failed_sources": len({item.get("source_id") for item in current if item.get("status") in {"failed", "interrupted"}}), "paid_calls": int(record.get("paid_calls") or 0), "total_attempts": len(items)}
+        return {"selected_sources": len(record.get("selected_source_ids", [])), "ready_cards": sum(item.get("status") == "ready" for item in current), "failed_sources": len({item.get("source_id") for item in current if item.get("status") in {"failed", "interrupted"}}), "paid_calls": int(record.get("paid_calls") or 0), "total_attempts": len(items)}
 
     def get(self, batch_id: str) -> dict[str, Any]:
         return self.payload(self._read(batch_id))
+
+    def update_card_text(self, batch_id: str, item_id: str, card_text: Any) -> dict[str, Any]:
+        with self._lock:
+            record = self._read(batch_id)
+            item = next((candidate for candidate in record.get("items", []) if candidate.get("item_id") == item_id), None)
+            if not item:
+                raise ValueError(f"card {item_id} does not exist in batch {batch_id}")
+            item["card_text"] = validate_card_text(card_text)
+            record["updated_at"] = now_iso()
+            self._write(record)
+            return self.payload(record)["items"][record["items"].index(item)]
 
     def list(self) -> list[dict[str, Any]]:
         records = []
@@ -390,6 +419,7 @@ class CardProductionManager:
         references = record["reference_snapshots"]
         previous = existing[-1] if existing else None
         item = self._new_item(source, max([int(candidate.get("attempt_number", 0)) for candidate in existing] + [0]) + 1, lineage, references, prompt_override=previous.get("prompt_override") if previous else None, content_direction=previous.get("content_direction") if previous else None, background_id=previous.get("background_id") if previous else record.get("style_snapshot", {}).get("backgrounds", {}).get("default_id"))
+        item["card_text"]["lines"] = [str(record.get("style_snapshot", {}).get("identity", {}).get("label") or record.get("style_version_id") or "Pipeline"), str(record["batch_id"]), f"Attempt {item['attempt_number']}"]
         reused = bool(reuse_normalised and previous and previous.get("normalised_path"))
         if reused:
             item["normalised_path"] = previous["normalised_path"]; item["normalised_checksum_sha256"] = previous.get("normalised_checksum_sha256")
@@ -428,12 +458,6 @@ class CardProductionManager:
         record = self._read(batch_id); item = next((candidate for candidate in record["items"] if candidate.get("item_id") == item_id), None)
         if not item or item.get("status") != "ready": raise ValueError("only a ready card can be reframed")
         style = record["style_snapshot"]; resolved = {**style["composition"]["default_framing"], **(framing or {})}
-        approvals = self._approval_data()
-        approval_key = f"{item['source_id']}:{record['style_version_id']}"
-        current_approval = approvals.get("current", {}).get(approval_key)
-        if current_approval and current_approval.get("attempt_id") == item_id and int(current_approval.get("render_revision", 0)) == int(item.get("render_revision", 0)):
-            approvals["current"].pop(approval_key, None)
-            self.store.atomic_json(self.store.root / "approvals" / "approvals.json", approvals)
         self._render_item(record, item, resolved, palette_mode, background_id); item["status"] = "ready"; item["updated_at"] = now_iso(); self._write(record)
         return self.payload(record)
 
@@ -450,9 +474,6 @@ class CardProductionManager:
         resolved = {**style["composition"]["default_framing"], **(framing or {})}
         self._render_item(preview_record, preview_item, resolved, palette_mode, background_id)
         return self.payload(preview_record)["items"][item_index]
-
-    def _approval_data(self) -> dict[str, Any]:
-        return self.store.read_json(self.store.root / "approvals" / "approvals.json", {"version": 1, "history": [], "current": {}})
 
     def _favourite_data(self) -> dict[str, Any]:
         return self.store.read_json(self.store.root / "favorites.json", {"version": 1, "items": []})
@@ -521,33 +542,4 @@ class CardProductionManager:
         data = self._favourite_data()
         data["items"] = [entry for entry in data.get("items", []) if entry.get("batch_id") in existing]
         self.store.atomic_json(self.store.root / "favorites.json", data)
-        approvals = self._approval_data()
-        approvals["history"] = [entry for entry in approvals.get("history", []) if entry.get("batch_id") in existing]
-        approvals["current"] = {key: entry for key, entry in approvals.get("current", {}).items() if entry.get("batch_id") in existing}
-        self.store.atomic_json(self.store.root / "approvals" / "approvals.json", approvals)
-        for batch_id in removed:
-            (self.store.root / "downloads" / f"{batch_id}-approved.zip").unlink(missing_ok=True)
         return removed
-
-    def approve(self, batch_id: str, item_id: str) -> dict[str, Any]:
-        record = self._read(batch_id); item = next((candidate for candidate in record["items"] if candidate.get("item_id") == item_id), None)
-        if not item or item.get("status") != "ready": raise ValueError("only a ready final card can be approved")
-        key = f"{item['source_id']}:{record['style_version_id']}"
-        data = self._approval_data(); approval = {"approval_id": new_id("approval"), "source_id": item["source_id"], "attempt_id": item["item_id"], "batch_id": batch_id, "style_version_id": record["style_version_id"], "style_checksum_sha256": record["style_checksum_sha256"], "card_checksum_sha256": item["card_checksum_sha256"], "render_revision": item["render_revision"], "approved_at": now_iso()}
-        data["history"].append(approval); data["current"][key] = approval; self.store.atomic_json(self.store.root / "approvals" / "approvals.json", data)
-        return approval
-
-    def approvals_for_batch(self, batch_id: str) -> list[dict[str, Any]]:
-        record = self._read(batch_id); current = self._approval_data().get("current", {}); return [current[key] for key in (f"{source_id}:{record['style_version_id']}" for source_id in record["selected_source_ids"]) if key in current]
-
-    def bundle(self, batch_id: str) -> dict[str, Any]:
-        record = self._read(batch_id); approvals = {item["source_id"]: item for item in self.approvals_for_batch(batch_id)}
-        if len(approvals) != len(record["selected_source_ids"]): raise ValueError("approve one current card for every selected source before downloading the bundle")
-        batch_dir = self._path(batch_id).parent; output = self.store.root / "downloads" / f"{batch_id}-approved.zip"; manifest_items = []
-        with zipfile.ZipFile(output, "w", compression=zipfile.ZIP_DEFLATED) as archive:
-            for index, source_id in enumerate(record["selected_source_ids"], 1):
-                approval = approvals[source_id]; item = next(candidate for candidate in record["items"] if candidate["item_id"] == approval["attempt_id"])
-                card_path = self.store.absolute_path(str(item["card_path"])); name = f"{index:02d}-{source_id}.png"; archive.writestr(name, card_path.read_bytes())
-                manifest_items.append({"order": index - 1, "source_id": source_id, "attempt_id": item["item_id"], "style_version_id": record["style_version_id"], "style_checksum_sha256": record["style_checksum_sha256"], "card_checksum_sha256": item["card_checksum_sha256"], "render_revision": item["render_revision"], "path": name})
-            archive.writestr("manifest.json", json.dumps({"batch_id": batch_id, "style_version_id": record["style_version_id"], "items": manifest_items}, indent=2, sort_keys=True) + "\n")
-        return {"download_url": self.store.asset_url(output.relative_to(self.store.root)), "manifest": {"batch_id": batch_id, "style_version_id": record["style_version_id"], "items": manifest_items}}

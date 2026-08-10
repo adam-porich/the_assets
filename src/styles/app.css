@@ -114,6 +114,7 @@ textarea { min-height: 100px; resize: vertical; line-height: 1.45; }
 .pipeline-card.draft { border-style: dashed; }
 .pipeline-samples { align-self: end; display: flex; height: 56px; padding-top: 3px; }
 .pipeline-samples img { width: 40px; height: 56px; object-fit: cover; image-rendering: pixelated; border: 1px solid #6c5238; margin-right: -6px; }
+.pipeline-samples .dynamic-card { width: 40px; margin-right: -6px; font-size: 2px; }
 .pipeline-samples span { margin-left: auto; align-self: end; color: #d8aa66; font-size: 20px; }
 .pipeline-diagram { padding: 20px; overflow: hidden; }
 .diagram-heading > span { color: #a99d90; font-size: 12px; }
@@ -228,6 +229,24 @@ summary { cursor: pointer; color: #cdb98e; }
 .raw-result { min-width: 0; padding: 0; overflow: hidden; color: #eee4d7; text-align: left; border: 1px solid #493a2f; background: #211b17; }
 .raw-result:hover { border-color: #bc7b35; }
 .raw-result > img, .raw-result > .preview-placeholder { display: grid; width: 100%; aspect-ratio: 420 / 600; object-fit: contain; background: #100d0c; }
+.raw-result > .dynamic-card { width: 100%; }
+.dynamic-card { box-sizing: border-box; width: 100%; aspect-ratio: 7 / 10; display: grid; grid-template-rows: auto minmax(0, 1fr) auto; gap: 3%; padding: 5%; overflow: hidden; color: #ffe7b0; background: #17110d; border: max(1px, .025em) solid #c58a42; box-shadow: inset 0 0 0 max(1px, .018em) #51351f; text-align: left; }
+.dynamic-card header { min-width: 0; color: #e8ad55; }
+.dynamic-card-art { min-height: 0; display: grid; place-items: center; overflow: hidden; border: max(1px, .018em) solid #75502e; background: #080706; }
+.dynamic-card-art img { width: 100%; height: 100%; object-fit: cover; image-rendering: pixelated; }
+.dynamic-card-art > span { font: 1em ui-monospace, monospace; color: #8f7c6a; }
+.dynamic-card-copy { min-width: 0; display: grid; gap: .55em; }
+.pixel-text { display: flex; gap: .22em; min-width: 0; overflow: hidden; }
+.pixel-glyph { flex: 0 0 auto; width: 1.05em; height: 1.47em; display: grid; grid-template-columns: repeat(5, 1fr); grid-template-rows: repeat(7, 1fr); gap: .035em; }
+.pixel-glyph i { display: block; background: currentColor; }
+.dynamic-card-title { color: #fff0c9; font-size: 1.28em; }
+.dynamic-card-lines { display: grid; gap: .2em; color: #d7c7b5; font: .72em/1.2 ui-monospace, SFMono-Regular, Consolas, monospace; white-space: nowrap; overflow: hidden; }
+.dynamic-card-lines span { overflow: hidden; text-overflow: ellipsis; }
+.candidate-preview-card .dynamic-card { height: auto; max-height: none; }
+.card-text-editor { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin: 18px 0; padding: 14px; border: 1px solid #564536; }
+.card-text-editor legend { color: #e6c48e; padding: 0 6px; }
+.card-text-editor label { display: grid; gap: 4px; color: #b9aa9c; font-size: 11px; }
+.card-text-editor .button { align-self: end; }
 .raw-result-copy { display: grid; gap: 5px; padding: 12px; }
 .raw-result-copy > span { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .raw-result-copy strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

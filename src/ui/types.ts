@@ -17,7 +17,6 @@ export type PipelineStyle = {
   composition: { logical_art_size: [number, number]; default_framing: { zoom: number; offset_x: number; offset_y: number }; centering: [number, number]; requested_art_ratio: string };
   backgrounds: { default_id: string; composite_size: [number, number]; presets: Array<{ id: string; label: string; top: string; bottom: string; glow: string; glow_strength: number }> };
   renderer: { driver_id: string; driver_version?: number; logical_art_size: [number, number]; output_scale: number; palette_space: string; palette_mode?: "fixed-house" | "adaptive-hybrid"; palette: string[]; preprocess: Record<string, number>; dither: { matrix: string; strength: number; edge_threshold: number } };
-  card_assembly: { driver_id: string; logical_card_size: [number, number]; output_scale: number; layout: Record<string, unknown>; text: Record<string, string> };
   editor_descriptors: Array<Record<string, unknown>>;
   checksums: { style_sha256: string; assets?: Record<string, string> };
   provenance?: Record<string, unknown>;
@@ -38,15 +37,15 @@ export type StyleBootstrap = { active: PipelineStyle; active_pipeline_id: string
 export type Model = { id: string; name: string; description?: string; execution_mode: "simulation" | "live"; available: boolean; credentials_configured?: boolean; max_input_references: number; qualities: string[]; aspect_ratios: string[]; pricing: Array<Record<string, unknown>>; provider_name?: string; provider_slug?: string; endpoint_id?: string; endpoint_url?: string };
 export type Framing = { zoom: number; offset_x: number; offset_y: number };
 export type ProductionItem = {
-  item_id: string; source_id: string; source_label: string; attempt_number: number; lineage_id: string; approved?: boolean; status: "queued" | "generating" | "processing" | "ready" | "failed" | "interrupted";
-  error?: string | null; phase?: string; source_url?: string; source_original_url?: string; raw_foreground_url?: string; foreground_url?: string; master_url?: string; logical_art_url?: string; art_url?: string; card_url?: string; card_checksum_sha256?: string | null;
+  item_id: string; source_id: string; source_label: string; attempt_number: number; lineage_id: string; status: "queued" | "generating" | "processing" | "ready" | "failed" | "interrupted";
+  error?: string | null; phase?: string; source_url?: string; source_original_url?: string; raw_foreground_url?: string; foreground_url?: string; master_url?: string; logical_art_url?: string; art_url?: string; art_checksum_sha256?: string | null; card_text: { title: string; lines: string[] };
   normalised_url?: string; normalised_checksum_sha256?: string | null; master_checksum_sha256?: string | null; render_revision: number; render_revisions: Array<Record<string, unknown>>; framing?: Framing | null; generation?: Record<string, unknown>; generation_stages?: Array<Record<string, unknown>>; render_metadata?: Record<string, unknown>; usage?: Record<string, unknown>; cost_usd?: number | null;
   accepted?: boolean; accepted_at?: string; prompt_override?: string | null; content_direction?: string | null; background_id?: string | null; background_metadata?: Record<string, unknown>; matte_metadata?: Record<string, unknown>; chroma_key?: { name: string; hex: string }; palette_mode?: "fixed-house" | "adaptive-hybrid";
   reference_stack: Array<Record<string, unknown>>; reference_urls?: Array<string | null>;
   favorite?: boolean; favorited_at?: string | null;
   hidden?: boolean; hidden_at?: string | null;
 };
-export type ProductionProgress = { selected_sources: number; ready_cards: number; approved_cards: number; failed_sources: number; paid_calls: number; total_attempts: number };
+export type ProductionProgress = { selected_sources: number; ready_cards: number; failed_sources: number; paid_calls: number; total_attempts: number };
 export type ProductionBatch = { batch_id: string; purpose: "card-production" | "style-trial"; status: string; created_at: string; updated_at: string; style_version_id: string; style_checksum_sha256: string; selected_source_ids: string[]; requested_paid_calls: number; paid_calls: number; cost_usd?: number | null; items: ProductionItem[]; progress: ProductionProgress; style_snapshot?: PipelineStyle; calibration_source_ids?: string[] | null; model?: Model; model_capabilities?: Record<string, unknown>; backend_mapping?: Record<string, unknown>; generation_authorization?: Record<string, unknown> };
 export type ProductionSummary = Omit<ProductionBatch, "items" | "style_snapshot" | "selected_source_ids"> & { selected_source_ids?: string[] };
 export type ProducedCard = ProductionItem & {

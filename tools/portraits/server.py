@@ -256,15 +256,13 @@ class WorkbenchHandler(BaseHTTPRequestHandler):
                 self.send_json({"style": self.styles.add_draft_reference(filename.rsplit(".", 1)[0], filename, content, content_type)}); return
             if path == "/api/styles/draft/lock":
                 self.send_json({"style": self.styles.lock_draft()}); return
-            match = re.fullmatch(r"/api/production/([^/]+)/(retry|try-another|preview|render|approve|bundle)", path)
+            match = re.fullmatch(r"/api/production/([^/]+)/(retry|try-another|preview|render)", path)
             if match:
                 batch_id, action = match.groups(); payload = self._json()
                 if action == "retry": result = {"batch": self.manager.retry_failed(batch_id, consent=bool(payload.get("consent")))}
                 elif action == "try-another": result = {"batch": self.manager.try_another(batch_id, str(payload.get("source_id") or ""), consent=bool(payload.get("consent")))}
                 elif action == "preview": result = {"preview": self.manager.preview_render(batch_id, str(payload.get("item_id") or ""), dict(payload.get("framing") or {}), str(payload.get("palette_mode") or "") or None, str(payload.get("background_id") or "") or None)}
-                elif action == "render": result = {"batch": self.manager.rerender(batch_id, str(payload.get("item_id") or ""), dict(payload.get("framing") or {}), str(payload.get("palette_mode") or "") or None, str(payload.get("background_id") or "") or None)}
-                elif action == "approve": result = {"approval": self.manager.approve(batch_id, str(payload.get("item_id") or ""))}
-                else: result = self.manager.bundle(batch_id)
+                else: result = {"batch": self.manager.rerender(batch_id, str(payload.get("item_id") or ""), dict(payload.get("framing") or {}), str(payload.get("palette_mode") or "") or None, str(payload.get("background_id") or "") or None)}
                 self.send_json(result); return
             if path == "/api/favorites":
                 payload = self._json(); favorite = self.manager.favourite(str(payload.get("batch_id") or ""), str(payload.get("item_id") or ""))
@@ -303,6 +301,10 @@ class WorkbenchHandler(BaseHTTPRequestHandler):
         try:
             if path == "/api/styles/draft":
                 self.send_json({"style": self.styles.update_draft(self._json())}); return
+            match = re.fullmatch(r"/api/cards/([^/]+)/([^/]+)/text", path)
+            if match:
+                batch_id, item_id = match.groups()
+                self.send_json({"card": self.manager.update_card_text(batch_id, item_id, self._json().get("card_text"))}); return
             self.send_error(HTTPStatus.NOT_FOUND)
         except (ValueError, WorkspaceError) as exc:
             self.error(str(exc))

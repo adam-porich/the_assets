@@ -7,7 +7,7 @@ from typing import Any, Protocol
 
 from PIL import Image, ImageOps
 
-from .amiga import render_amiga_art, render_amiga_card, render_amiga_layers
+from .amiga import render_amiga_art, render_amiga_layers
 from .backgrounds import foreground_layers
 from .style_pipeline import legacy_amiga_style, style_checksum
 
@@ -16,7 +16,6 @@ from .style_pipeline import legacy_amiga_style, style_checksum
 class RenderBundle:
     logical_art: Image.Image
     art: Image.Image
-    card: Image.Image
     metadata: dict[str, Any]
 
 
@@ -100,8 +99,6 @@ class AmigaRenderer:
         else:
             transformed, transform = _framing_transform(source, tuple(renderer["logical_art_size"]), resolved_framing, tuple(composition["centering"]))
         logical, art, metadata = render_amiga_art(transformed, centering=tuple(composition["centering"]), style=selected)
-        resolved_palette = tuple(tuple(bytes.fromhex(value.removeprefix("#"))) for value in metadata["resolved_palette"])
-        card = render_amiga_card(logical, label, style=selected, palette=resolved_palette)
         metadata = {
             **metadata,
             "driver_id": self.driver_id,
@@ -109,19 +106,18 @@ class AmigaRenderer:
             "style_checksum_sha256": selected.get("checksums", {}).get("style_sha256") or style_checksum(selected),
             "framing": {"requested": resolved_framing, "resolved": transform},
             "render_revision_input_sha256": hashlib.sha256(source.tobytes()).hexdigest(),
-            "logical_card_size": list(selected["card_assembly"]["logical_card_size"]),
-            "output_card_size": list(card.size),
+            "artwork_kind": "rendered-art",
+            "logical_art_size": list(logical.size),
+            "output_art_size": list(art.size),
         }
-        return RenderBundle(logical, art, card, metadata)
+        return RenderBundle(logical, art, metadata)
 
     def render_layered(self, style: dict[str, Any], foreground: Image.Image, background_id: str, label: str, framing: dict[str, float] | None = None) -> tuple[RenderBundle, dict[str, Any], Image.Image]:
         background, foreground_layer, background_metadata = foreground_layers(foreground, style, background_id, framing)
         logical, art, metadata = render_amiga_layers(foreground_layer, background, style=style)
-        foreground_palette = tuple(tuple(bytes.fromhex(value.removeprefix("#"))) for value in metadata["foreground_palette"])
-        card = render_amiga_card(logical, label, style=style, palette=foreground_palette)
-        metadata.update({"driver_id": self.driver_id, "style_version_id": style["identity"]["style_version_id"], "style_checksum_sha256": style.get("checksums", {}).get("style_sha256") or style_checksum(style), "framing": {"requested": framing or style["composition"]["default_framing"], "resolved": background_metadata["framing"]}, "logical_card_size": list(style["card_assembly"]["logical_card_size"]), "output_card_size": list(card.size)})
+        metadata.update({"driver_id": self.driver_id, "style_version_id": style["identity"]["style_version_id"], "style_checksum_sha256": style.get("checksums", {}).get("style_sha256") or style_checksum(style), "framing": {"requested": framing or style["composition"]["default_framing"], "resolved": background_metadata["framing"]}, "artwork_kind": "rendered-art", "logical_art_size": list(logical.size), "output_art_size": list(art.size)})
         composite = background.copy(); composite.paste(foreground_layer, (0, 0), foreground_layer)
-        return RenderBundle(logical, art, card, metadata), background_metadata, composite
+        return RenderBundle(logical, art, metadata), background_metadata, composite
 
 
 class RendererRegistry:

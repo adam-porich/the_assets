@@ -26,7 +26,6 @@ HOUSE_PALETTE_INDICES = {0, 1, 3, 6, 7, 16, 17, 19, 20, 22}
 class AmigaRender:
     logical_art: Image.Image
     art: Image.Image
-    card: Image.Image
     metadata: dict[str, Any]
 
 
@@ -312,58 +311,10 @@ def _pixel_text(draw: ImageDraw.ImageDraw, xy: tuple[int, int], text: str, colou
         x += 6 * scale
 
 
-def render_amiga_card(
-    logical_art: Image.Image,
-    label: str,
-    *,
-    style: dict[str, Any] | None = None,
-    palette: tuple[tuple[int, int, int], ...] | None = None,
-) -> Image.Image:
-    """Compose a spacious high-resolution card around the pixel-native art."""
-    selected = style or load_amiga_style()
-    renderer = selected.get("renderer", selected)
-    card_config = selected.get("card_assembly", selected)
-    base_width, base_height = (int(value) for value in card_config["logical_card_size"])
-    card_width, card_height = base_width * 2, base_height * 2
-    output_scale = int(card_config.get("output_scale", renderer["output_scale"]))
-    palette = palette or amiga_palette(selected)
-    ink, deep_brown, slate, brown, umber = palette[0], palette[1], palette[3], palette[6], palette[7]
-    border, title, copy, accent = palette[19], palette[16], palette[20], palette[22]
-    canvas = Image.new("RGB", (card_width, card_height), deep_brown)
-    draw = ImageDraw.Draw(canvas)
-
-    # One strong frame and open fields replace the old nested panels and bolts.
-    draw.rectangle((10, 10, card_width - 11, card_height - 11), fill=brown, outline=border, width=3)
-    draw.rectangle((18, 18, card_width - 19, card_height - 19), fill=deep_brown)
-    _pixel_text(draw, (30, 30), str((card_config.get("text") or {}).get("title", "Asset Workbench")), title, 3)
-    draw.line((30, 60, card_width - 31, 60), fill=umber, width=2)
-
-    art = logical_art.convert("RGB").resize((logical_art.width * 2, logical_art.height * 2), Image.Resampling.NEAREST)
-    art_x, art_y = (card_width - art.width) // 2, 78
-    canvas.paste(art, (art_x, art_y))
-    draw.rectangle((art_x - 3, art_y - 3, art_x + art.width + 2, art_y + art.height + 2), outline=border, width=3)
-
-    label_text = label[:20]
-    _pixel_text(draw, (30, 382), label_text, title, 3)
-    draw.line((30, 414, card_width - 31, 414), fill=slate, width=2)
-    card_text = card_config.get("text") or {}
-    _pixel_text(draw, (30, 438), str(card_text.get("subtitle", "Amiga OCS / 32 colours")), copy, 2)
-    _pixel_text(draw, (30, 468), str(card_text.get("identity", "Content-preserving redraw")), accent, 2)
-    _pixel_text(draw, (30, 510), str(card_text.get("version", "Genlocked background v1")), copy, 2)
-
-    canvas = quantize_amiga(canvas, palette, dither_strength=0.0)
-    canvas.paste(art, (art_x, art_y))
-    return canvas.resize((card_width * output_scale, card_height * output_scale), Image.Resampling.NEAREST)
-
-
 def render_amiga(master: Image.Image, label: str, *, centering: tuple[float, float] = (0.5, 0.44)) -> AmigaRender:
     selected = load_amiga_style()
     logical, art, metadata = render_amiga_art(master, centering=centering, style=selected)
-    resolved_palette = tuple(tuple(bytes.fromhex(value.removeprefix("#"))) for value in metadata["resolved_palette"])
-    card = render_amiga_card(logical, label, style=selected, palette=resolved_palette)
-    card_config = selected.get("card_assembly", selected)
-    metadata = {**metadata, "logical_card_size": card_config["logical_card_size"], "output_card_size": list(card.size)}
-    return AmigaRender(logical, art, card, metadata)
+    return AmigaRender(logical, art, metadata)
 
 
 def palette_is_ocs_12_bit(palette: Iterable[tuple[int, int, int]]) -> bool:

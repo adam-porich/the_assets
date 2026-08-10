@@ -69,13 +69,6 @@
     "preprocess": {"color": 1.0, "contrast": 1.02, "unsharp_radius": 0.8, "unsharp_percent": 90, "unsharp_threshold": 5},
     "dither": {"matrix": "bayer-4x4", "strength": 0.62, "edge_threshold": 0.09}
   },
-  "card_assembly": {
-    "driver_id": "amiga-ocs",
-    "logical_card_size": [210, 300],
-    "output_scale": 2,
-    "layout": {"art_box": [18, 36, 192, 180], "title_box": [16, 191, 194, 213], "details_box": [16, 221, 194, 274]},
-    "text": {"title": "Asset Workbench", "subtitle": "Amiga OCS / 32 colours", "version": "Genlocked background v1", "identity": "Content-preserving redraw"}
-  },
   "editor_descriptors": [
     {"id": "generation.prompt", "label": "Style prompt", "type": "text", "group": "Generation"},
     {"id": "renderer.palette_mode", "label": "Palette mode", "type": "enum", "values": ["adaptive-hybrid", "fixed-house"], "group": "Amiga processing"},

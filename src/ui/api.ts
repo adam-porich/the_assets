@@ -37,4 +37,5 @@ export const api = {
   unfavorite: (batch_id: string, item_id: string) => request<{ removed: boolean }>(`/favorites/${batch_id}/${item_id}`, { method: "DELETE" }),
   hideCard: (batch_id: string, item_id: string) => request<{ hidden: Record<string, unknown> }>("/trash", json("POST", { batch_id, item_id })),
   restoreCard: (batch_id: string, item_id: string) => request<{ restored: boolean }>(`/trash/${batch_id}/${item_id}`, { method: "DELETE" }),
+  updateCardText: (batch_id: string, item_id: string, card_text: ProductionItem["card_text"]) => request<{ card: ProductionItem }>(`/cards/${batch_id}/${item_id}/text`, json("PUT", { card_text })),
 };

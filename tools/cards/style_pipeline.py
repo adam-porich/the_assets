@@ -151,10 +151,9 @@ def validate_style(style: dict[str, Any], *, require_locked: bool = False) -> di
         raise ValueError("the style reference pack exceeds generation.reference_limit")
     composition = style.get("composition")
     renderer = style.get("renderer")
-    card = style.get("card_assembly")
-    if not isinstance(composition, dict) or not isinstance(renderer, dict) or not isinstance(card, dict):
-        raise ValueError("composition, renderer, and card_assembly sections are required")
-    for section, key in ((composition, "logical_art_size"), (renderer, "logical_art_size"), (card, "logical_card_size")):
+    if not isinstance(composition, dict) or not isinstance(renderer, dict):
+        raise ValueError("composition and renderer sections are required")
+    for section, key in ((composition, "logical_art_size"), (renderer, "logical_art_size")):
         dimensions = section.get(key)
         if not isinstance(dimensions, list) or len(dimensions) != 2 or any(not isinstance(value, int) or value <= 0 or value > 4096 for value in dimensions):
             raise ValueError(f"{key} must contain two positive integer dimensions")
@@ -188,7 +187,7 @@ def validate_style(style: dict[str, Any], *, require_locked: bool = False) -> di
     dither = renderer.get("dither")
     if not isinstance(dither, dict) or dither.get("matrix") != "bayer-4x4" or not 0 <= float(dither.get("strength", -1)) <= 1 or not 0 <= float(dither.get("edge_threshold", -1)) <= 1:
         raise ValueError("renderer.dither must define bayer-4x4 strength and edge_threshold from 0 to 1")
-    if renderer.get("driver_id") != "amiga-ocs" or card.get("driver_id") != "amiga-ocs":
+    if renderer.get("driver_id") != "amiga-ocs":
         raise ValueError("the registered Amiga pipeline requires the amiga-ocs driver")
     normalized = _json_copy(style)
     normalized["checksums"] = {**dict(normalized.get("checksums") or {}), "style_sha256": style_checksum(normalized)}
@@ -212,20 +211,18 @@ def pipeline_id_for_style(style: dict[str, Any]) -> str:
 def legacy_amiga_style(style: dict[str, Any]) -> dict[str, Any]:
     """Adapt the validated snapshot to the proven Amiga implementation."""
     renderer = style["renderer"]
-    card = style["card_assembly"]
     preprocess = renderer.get("preprocess") or {}
     return {
         "id": style["identity"]["family_id"],
         "version": style["identity"].get("version", 1),
         "label": style["identity"]["label"],
         "logical_art_size": list(renderer["logical_art_size"]),
-        "logical_card_size": list(card["logical_card_size"]),
+        "logical_card_size": [210, 300],
         "output_scale": renderer["output_scale"],
         "palette_space": renderer["palette_space"],
         "palette": list(renderer["palette"]),
         "dither": dict(renderer["dither"]),
         "preprocess": {"color": float(preprocess.get("color", 1.0)), "contrast": float(preprocess.get("contrast", 1.02)), "unsharp_radius": float(preprocess.get("unsharp_radius", 0.8)), "unsharp_percent": int(preprocess.get("unsharp_percent", 90)), "unsharp_threshold": int(preprocess.get("unsharp_threshold", 5))},
-        "card_text": dict(card.get("text") or {}),
     }
 
 
@@ -494,7 +491,7 @@ class StyleStore:
         if not isinstance(patch, dict):
             raise ValueError("draft patch must be an object")
         candidate = copy.deepcopy(raw)
-        for section in ("generation", "composition", "renderer", "card_assembly"):
+        for section in ("generation", "composition", "renderer"):
             if isinstance(patch.get(section), dict):
                 candidate[section] = {**candidate.get(section, {}), **patch[section]}
         if "reference_pack" in patch:
@@ -612,4 +609,4 @@ class StyleStore:
 
     def bootstrap(self) -> dict[str, Any]:
         active = self.active()
-        return {"active": active, "active_pipeline_id": self.active_pipeline_id(), "pipelines": self.pipelines(), "draft": self.draft(), "versions": self.versions(), "driver": {"id": "amiga-ocs", "label": "Amiga OCS", "output": "420×600 final cards"}}
+        return {"active": active, "active_pipeline_id": self.active_pipeline_id(), "pipelines": self.pipelines(), "draft": self.draft(), "versions": self.versions(), "driver": {"id": "amiga-ocs", "label": "Amiga OCS", "output": "336×276 rendered artwork"}}

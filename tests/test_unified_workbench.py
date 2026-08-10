@@ -150,10 +150,10 @@ def test_amiga_registered_engine_is_deterministic_and_matches_golden() -> None:
         second = registry.render(style, master, "stage reference", historical_framing)
     with Image.open(ASSETS / "target-example-01.png") as target:
         assert first.art.size == (336, 276)
-        assert first.card.size == (840, 1200)
         assert first.art.tobytes() == target.tobytes()
     assert first.art.tobytes() == second.art.tobytes()
-    assert first.card.tobytes() == second.card.tobytes()
+    assert hashlib.sha256(first.art.tobytes()).hexdigest() == hashlib.sha256(second.art.tobytes()).hexdigest()
+    assert first.metadata["artwork_kind"] == "rendered-art"
     assert palette_is_ocs_12_bit(amiga_palette(style))
     assert len(set(first.art.getdata())) <= 32
     with pytest.raises(ValueError, match="no renderer"):
@@ -305,3 +305,21 @@ def test_card_trash_is_soft_and_clears_favorite(tmp_path: Path) -> None:
     assert manager._hidden_data()["items"][0]["item_id"] == item_id
     assert manager.restore(batch_id, item_id) is True
     assert manager._hidden_data()["items"] == []
+
+
+def test_card_text_defaults_and_persists_without_changing_artwork(tmp_path: Path) -> None:
+    store = WorkspaceStore(tmp_path / "library")
+    manager = CardProductionManager(store, StyleStore(store))
+    batch_id = "batch-text"
+    item = manager._new_item({"id": "source-1", "label": "Ada", "input_path": "input.png", "input_checksum_sha256": "input"}, 1, "lineage", [])
+    item["card_text"]["lines"] = ["Pipeline", batch_id, "Attempt 1"]
+    item["art_checksum_sha256"] = "durable-art"
+    record = {"batch_id": batch_id, "purpose": "card-production", "selected_source_ids": ["source-1"], "style_snapshot": load_checked_in_style(), "items": [item]}
+    manager._write(record)
+
+    updated = manager.update_card_text(batch_id, item["item_id"], {"title": "Ada Prime", "lines": ["One", "Two"]})
+    assert item["card_text"] == {"title": "Ada", "lines": ["Pipeline", batch_id, "Attempt 1"]}
+    assert updated["card_text"] == {"title": "Ada Prime", "lines": ["One", "Two"]}
+    assert updated["art_checksum_sha256"] == "durable-art"
+    with pytest.raises(ValueError, match="title is required"):
+        manager.update_card_text(batch_id, item["item_id"], {"title": "", "lines": []})
