@@ -173,7 +173,6 @@ class CardProductionManager:
                 "generation_authorization": {"required": capabilities.execution_mode == "live", "consent": bool(consent), "granted_at": now_iso() if consent else None, "purpose": purpose},
                 "requested_paid_calls": len(source_ids) * (2 if int(style.get("schema_version", 1)) == 2 else 1), "paid_calls": 0, "usage": {}, "cost_usd": 0.0,
                 "items": items, "calibration_source_ids": source_ids if purpose == "style-trial" else None,
-                "requires_acceptance": purpose == "card-production",
             }
             self._write(record)
             self._active_batch = batch_id
@@ -339,13 +338,17 @@ class CardProductionManager:
         result = copy.deepcopy(record)
         result["progress"] = self.progress(record)
         favourites = {(str(item.get("batch_id")), str(item.get("item_id"))): item for item in self._favourite_data().get("items", [])}
+        hidden_cards = {(str(item.get("batch_id")), str(item.get("item_id"))): item for item in self._hidden_data().get("items", [])}
         current_approvals = self._approval_data().get("current", {})
         result["progress"]["approved_cards"] = sum(1 for source_id in record.get("selected_source_ids", []) if f"{source_id}:{record.get('style_version_id')}" in current_approvals)
         for item in result.get("items", []):
             source_snapshot = next((source for source in result.get("source_snapshots", []) if str(source.get("id")) == str(item.get("source_id"))), {})
             favourite = favourites.get((str(record.get("batch_id")), str(item.get("item_id"))))
+            hidden = hidden_cards.get((str(record.get("batch_id")), str(item.get("item_id"))))
             item["favorite"] = bool(favourite)
             item["favorited_at"] = favourite.get("favorited_at") if favourite else None
+            item["hidden"] = bool(hidden)
+            item["hidden_at"] = hidden.get("hidden_at") if hidden else None
             item["approved"] = current_approvals.get(f"{item.get('source_id')}:{record.get('style_version_id')}", {}).get("attempt_id") == item.get("item_id")
             for field in ("normalised_path", "raw_foreground_path", "foreground_path", "master_path", "logical_art_path", "art_path", "card_path"):
                 item[field.replace("_path", "_url")] = self.store.asset_url(item.get(field))
@@ -421,20 +424,6 @@ class CardProductionManager:
             threading.Thread(target=self._work, args=(batch_id,), daemon=True, name=f"card-attempt-{batch_id}").start()
             return self.payload(record)
 
-    def accept_candidate(self, batch_id: str, item_id: str) -> dict[str, Any]:
-        with self._lock:
-            record = self._read(batch_id)
-            item = next((candidate for candidate in record.get("items", []) if str(candidate.get("item_id")) == item_id), None)
-            if not item:
-                raise ValueError("candidate attempt does not exist")
-            if record.get("purpose") != "card-production" or item.get("status") != "ready":
-                raise ValueError("only a ready production preview can be accepted")
-            item["accepted"] = True
-            item["accepted_at"] = now_iso()
-            record["updated_at"] = now_iso()
-            self._write(record)
-            return self.payload(record)
-
     def rerender(self, batch_id: str, item_id: str, framing: dict[str, float] | None, palette_mode: str | None = None, background_id: str | None = None) -> dict[str, Any]:
         record = self._read(batch_id); item = next((candidate for candidate in record["items"] if candidate.get("item_id") == item_id), None)
         if not item or item.get("status") != "ready": raise ValueError("only a ready card can be reframed")
@@ -468,13 +457,14 @@ class CardProductionManager:
     def _favourite_data(self) -> dict[str, Any]:
         return self.store.read_json(self.store.root / "favorites.json", {"version": 1, "items": []})
 
+    def _hidden_data(self) -> dict[str, Any]:
+        return self.store.read_json(self.store.root / "hidden-cards.json", {"version": 1, "items": []})
+
     def favourites(self) -> list[dict[str, Any]]:
         return list(self._favourite_data().get("items", []))
 
     def favourite(self, batch_id: str, item_id: str) -> dict[str, Any]:
         record = self._read(batch_id)
-        if record.get("purpose") != "card-production":
-            raise ValueError("only candidates from saved pipelines can be favorited")
         item = next((candidate for candidate in record.get("items", []) if candidate.get("item_id") == item_id), None)
         if not item or item.get("status") != "ready":
             raise ValueError("only a ready candidate can be favorited")
@@ -486,6 +476,29 @@ class CardProductionManager:
         data.setdefault("items", []).append(favourite)
         self.store.atomic_json(self.store.root / "favorites.json", data)
         return favourite
+
+    def hide(self, batch_id: str, item_id: str) -> dict[str, Any]:
+        record = self._read(batch_id)
+        if not any(candidate.get("item_id") == item_id for candidate in record.get("items", [])):
+            raise ValueError("card attempt does not exist")
+        self.unfavourite(batch_id, item_id)
+        data = self._hidden_data()
+        existing = next((entry for entry in data.get("items", []) if entry.get("batch_id") == batch_id and entry.get("item_id") == item_id), None)
+        if existing:
+            return existing
+        hidden = {"batch_id": batch_id, "item_id": item_id, "hidden_at": now_iso()}
+        data.setdefault("items", []).append(hidden)
+        self.store.atomic_json(self.store.root / "hidden-cards.json", data)
+        return hidden
+
+    def restore(self, batch_id: str, item_id: str) -> bool:
+        data = self._hidden_data()
+        before = len(data.get("items", []))
+        data["items"] = [entry for entry in data.get("items", []) if not (entry.get("batch_id") == batch_id and entry.get("item_id") == item_id)]
+        if len(data["items"]) != before:
+            self.store.atomic_json(self.store.root / "hidden-cards.json", data)
+            return True
+        return False
 
     def unfavourite(self, batch_id: str, item_id: str) -> bool:
         data = self._favourite_data()

@@ -111,13 +111,10 @@ def _cards(manager: CardProductionManager) -> list[dict[str, Any]]:
             detail = manager.get(str(batch["batch_id"]))
         except ValueError:
             continue
-        if detail.get("purpose") != "card-production":
-            continue
         pipeline_id = pipeline_id_for_style(detail.get("style_snapshot", {}))
         for item in detail.get("items", []):
-            if item.get("status") == "ready" and (item.get("accepted") or not detail.get("requires_acceptance")):
-                identity = detail.get("style_snapshot", {}).get("identity", {})
-                cards.append({
+            identity = detail.get("style_snapshot", {}).get("identity", {})
+            cards.append({
                     **item,
                     "batch_id": detail["batch_id"],
                     "batch_created_at": detail["created_at"],
@@ -125,8 +122,8 @@ def _cards(manager: CardProductionManager) -> list[dict[str, Any]]:
                     "style_version_id": detail["style_version_id"],
                     "style_checksum_sha256": detail["style_checksum_sha256"],
                     "pipeline_id": pipeline_id,
-                    "pipeline_label": PIPELINE_LABELS[pipeline_id],
-                    "pipeline_description": PIPELINE_DESCRIPTIONS[pipeline_id],
+                    "pipeline_label": PIPELINE_LABELS.get(pipeline_id, identity.get("label") or "Working pipeline"),
+                    "pipeline_description": PIPELINE_DESCRIPTIONS.get(pipeline_id, "Generated pipeline result"),
                     "pipeline_version": identity.get("version"),
                 })
     return sorted(cards, key=lambda item: (str(item.get("batch_created_at") or ""), int(item.get("attempt_number") or 0)), reverse=True)
@@ -144,7 +141,6 @@ def _bootstrap(store: WorkspaceStore, styles: StyleStore, manager: CardProductio
         "style": style,
         "batches": manager.list(),
         "cards": cards,
-        "favorites": sorted([card for card in cards if card.get("favorite")], key=lambda card: str(card.get("favorited_at") or ""), reverse=True),
         "models": _models_for_store(store, styles),
         "integrations": {"pexels": {"configured": has_pexels_api_key()}, "openrouter": {"configured": bool(os.environ.get("OPENROUTER_API_KEY"))}},
         "starter": {"photo_ids": list(STARTER_PHOTO_IDS)},
@@ -183,8 +179,6 @@ class WorkbenchHandler(BaseHTTPRequestHandler):
                 self.send_json({"models": _models_for_store(self.store, self.styles)}); return
             if path == "/api/styles/bootstrap":
                 self.send_json({"style": self.styles.bootstrap()}); return
-            if path == "/api/favorites":
-                cards = _cards(self.manager); self.send_json({"favorites": [card for card in cards if card.get("favorite")]}); return
             if path == "/api/production":
                 self.send_json({"batches": self.manager.list()}); return
             match = re.fullmatch(r"/api/inputs/([^/]+)", path)
@@ -262,20 +256,22 @@ class WorkbenchHandler(BaseHTTPRequestHandler):
                 self.send_json({"style": self.styles.add_draft_reference(filename.rsplit(".", 1)[0], filename, content, content_type)}); return
             if path == "/api/styles/draft/lock":
                 self.send_json({"style": self.styles.lock_draft()}); return
-            match = re.fullmatch(r"/api/production/([^/]+)/(retry|try-another|preview|render|approve|bundle|accept)", path)
+            match = re.fullmatch(r"/api/production/([^/]+)/(retry|try-another|preview|render|approve|bundle)", path)
             if match:
                 batch_id, action = match.groups(); payload = self._json()
                 if action == "retry": result = {"batch": self.manager.retry_failed(batch_id, consent=bool(payload.get("consent")))}
                 elif action == "try-another": result = {"batch": self.manager.try_another(batch_id, str(payload.get("source_id") or ""), consent=bool(payload.get("consent")))}
                 elif action == "preview": result = {"preview": self.manager.preview_render(batch_id, str(payload.get("item_id") or ""), dict(payload.get("framing") or {}), str(payload.get("palette_mode") or "") or None, str(payload.get("background_id") or "") or None)}
                 elif action == "render": result = {"batch": self.manager.rerender(batch_id, str(payload.get("item_id") or ""), dict(payload.get("framing") or {}), str(payload.get("palette_mode") or "") or None, str(payload.get("background_id") or "") or None)}
-                elif action == "accept": result = {"batch": self.manager.accept_candidate(batch_id, str(payload.get("item_id") or ""))}
                 elif action == "approve": result = {"approval": self.manager.approve(batch_id, str(payload.get("item_id") or ""))}
                 else: result = self.manager.bundle(batch_id)
                 self.send_json(result); return
             if path == "/api/favorites":
                 payload = self._json(); favorite = self.manager.favourite(str(payload.get("batch_id") or ""), str(payload.get("item_id") or ""))
                 self.send_json({"favorite": favorite}, HTTPStatus.CREATED); return
+            if path == "/api/trash":
+                payload = self._json(); hidden = self.manager.hide(str(payload.get("batch_id") or ""), str(payload.get("item_id") or ""))
+                self.send_json({"hidden": hidden}, HTTPStatus.CREATED); return
             match = re.fullmatch(r"/api/pipelines/([^/]+)/activate", path)
             if match:
                 self.styles.activate_pipeline(match.group(1)); self.send_json({"style": self.styles.bootstrap()}); return
@@ -321,6 +317,9 @@ class WorkbenchHandler(BaseHTTPRequestHandler):
             favorite_match = re.fullmatch(r"/api/favorites/([^/]+)/([^/]+)", path)
             if favorite_match:
                 batch_id, item_id = favorite_match.groups(); self.manager.unfavourite(batch_id, item_id); self.send_json({"removed": True}); return
+            trash_match = re.fullmatch(r"/api/trash/([^/]+)/([^/]+)", path)
+            if trash_match:
+                batch_id, item_id = trash_match.groups(); self.manager.restore(batch_id, item_id); self.send_json({"restored": True}); return
             match = re.fullmatch(r"/api/inputs/([^/]+)", path)
             if not match: self.send_error(HTTPStatus.NOT_FOUND); return
             payload = self._json()

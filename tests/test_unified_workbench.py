@@ -285,3 +285,17 @@ def test_simulation_is_preview_only_for_lock_and_normal_production(tmp_path: Pat
     styles.update_draft({"generation": simulation})
     with pytest.raises(ValueError, match="preview"):
         styles.lock_draft()
+
+
+def test_card_trash_is_soft_and_clears_favorite(tmp_path: Path) -> None:
+    store = WorkspaceStore(tmp_path / "library")
+    styles = StyleStore(store)
+    manager = CardProductionManager(store, styles)
+    batch_id, item_id = "batch-test", "item-test"
+    store.atomic_json(store.root / "production" / batch_id / "batch.json", {"batch_id": batch_id, "items": [{"item_id": item_id, "status": "ready"}]})
+    manager.favourite(batch_id, item_id)
+    manager.hide(batch_id, item_id)
+    assert manager.favourites() == []
+    assert manager._hidden_data()["items"][0]["item_id"] == item_id
+    assert manager.restore(batch_id, item_id) is True
+    assert manager._hidden_data()["items"] == []

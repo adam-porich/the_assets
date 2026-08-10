@@ -26,146 +26,38 @@ beforeEach(() => { (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REA
 afterEach(() => { act(() => root.unmount()); container.remove(); vi.restoreAllMocks(); window.location.hash = ""; });
 
 describe("pipeline workbench", () => {
-  it("uses Inputs, Pipelines, Candidates, Batches, and Collection routes and redirects legacy runs", () => {
-    window.location.hash = "#frames/card-1";
-    expect(readRoute()).toEqual({ view: "candidates" });
-    window.location.hash = "#style";
-    expect(readRoute()).toEqual({ view: "pipelines", id: undefined });
-    window.location.hash = "#pipelines/portrait-style-reference";
-    expect(readRoute()).toEqual({ view: "pipelines", id: "portrait-style-reference", itemId: undefined });
+  it("uses one Cards route and redirects the retired views", () => {
     window.location.hash = "#cards/batch-1/item-1";
-    expect(readRoute()).toEqual({ view: "candidates", id: "batch-1", itemId: "item-1" });
-    window.location.hash = "#collection";
-    expect(readRoute()).toEqual({ view: "collection", id: undefined, itemId: undefined });
+    expect(readRoute()).toEqual({ view: "cards", id: "batch-1", itemId: "item-1" });
     window.location.hash = "#batches/batch-1/item-1";
-    expect(readRoute()).toEqual({ view: "batches", id: "batch-1", itemId: "item-1" });
-    window.location.hash = "#run/batch-1";
-    expect(readRoute()).toEqual({ view: "batches", id: "batch-1" });
+    expect(readRoute()).toEqual({ view: "cards", id: "batch-1", itemId: "item-1" });
+    window.location.hash = "#collection";
+    expect(readRoute()).toEqual({ view: "cards" });
   });
 
-  it("keeps only the simple top-level navigation", async () => {
+  it("shows every attempt and exposes favorite, trash, and generation controls", async () => {
+    const failed = produced({ item_id: "failed", batch_id: "batch-2", status: "failed", card_url: undefined, art_url: undefined, master_url: undefined, error: "model failed" });
+    vi.spyOn(api, "bootstrap").mockResolvedValue({ ...base, cards: [produced(), failed] } as never);
+    await act(async () => { window.location.hash = "#cards"; root.render(<App />); });
+    expect(container.querySelectorAll(".app-header nav button")).toHaveLength(3);
+    expect(container.querySelectorAll(".raw-result-card")).toHaveLength(2);
+    expect(container.textContent).toContain("Generation failed");
+    expect(container.querySelector('button[aria-label="Favorite card"]')).toBeTruthy();
+    expect(container.querySelector('button[aria-label="Move card to Trash"]')).toBeTruthy();
+    expect(container.textContent).toContain("＋ Generate");
+  });
+
+  it("starts generation by choosing an Input and keeps the result without acceptance", async () => {
     vi.spyOn(api, "bootstrap").mockResolvedValue(base as never);
-    await act(async () => root.render(<App />));
-    expect(container.querySelectorAll('.app-header nav button')).toHaveLength(5);
-    expect(container.textContent).toContain("Inputs");
-    expect(container.querySelector(".pipeline-rail")).toBeFalsy();
-  });
-
-  it("shows every batch item in a clickable raw archive", async () => {
-    const batch = { batch_id: "batch-raw", purpose: "card-production" as const, status: "ready", created_at: "2026-08-10T00:00:00Z", updated_at: "2026-08-10T00:01:00Z", style_version_id: "style-face-free", style_checksum_sha256: "style-checksum", selected_source_ids: ["source-1"], requested_paid_calls: 1, paid_calls: 1, progress: { selected_sources: 1, ready_cards: 1, approved_cards: 0, failed_sources: 0, paid_calls: 1, total_attempts: 1 }, items: [produced({ batch_id: undefined, accepted: false, raw_foreground_url: "/raw.png", foreground_url: "/foreground.png", logical_art_url: "/logical.png" })] };
-    vi.spyOn(api, "bootstrap").mockResolvedValue({ ...base, batches: [batch] } as never);
-    vi.spyOn(api, "getProduction").mockResolvedValue({ batch } as never);
-    await act(async () => { window.location.hash = "#batches"; root.render(<App />); });
-    expect(container.textContent).toContain("Every run, whether accepted or not.");
-    expect(container.querySelector(".raw-results-grid")).toBeTruthy();
-    const result = container.querySelector(".raw-result");
-    expect(result).toBeTruthy();
-    expect(result?.textContent).toContain("batch-raw");
-    await act(async () => { result?.dispatchEvent(new MouseEvent("click", { bubbles: true })); window.dispatchEvent(new HashChangeEvent("hashchange")); });
-    expect(container.querySelector('[role="dialog"]')).toBeTruthy();
-    expect(container.querySelector('img[alt="Raw model output"]')?.getAttribute("src")).toBe("/raw.png");
-    expect(container.textContent).toContain("not accepted");
-  });
-
-  it("opens an accepted Input in the preparation dialog", async () => {
-    vi.spyOn(api, "bootstrap").mockResolvedValue(base as never);
-    await act(async () => root.render(<App />));
-    await act(async () => container.querySelector(".source-select")?.dispatchEvent(new MouseEvent("click", { bubbles: true })));
-    expect(container.querySelector('[role="dialog"]')).toBeTruthy();
-    expect(container.querySelector('img[alt="Original"]')).toBeTruthy();
-    expect(container.textContent).toContain("Preparation prompt");
-    expect(container.textContent).toContain("Generate preview");
-  });
-
-  it("keeps only the newest three mixed-pipeline cards in each source pack", async () => {
-    const other = produced({ item_id: "item-2", batch_id: "batch-2", pipeline_id: "portrait-style-reference", pipeline_label: "Portrait Style Reference", pipeline_description: "Uses the original portrait reference.", style_version_id: "style-portrait", style_checksum_sha256: "portrait-checksum", pipeline_version: 1, card_url: "/portrait-card.png" });
-    const third = produced({ item_id: "item-3", batch_id: "batch-3", card_url: "/third-card.png" });
-    const old = produced({ item_id: "item-old", batch_id: "batch-old", card_url: "/old-card.png" });
-    vi.spyOn(api, "bootstrap").mockResolvedValue({ ...base, cards: [produced(), other, third, old] } as never);
-    await act(async () => { window.location.hash = "#candidates"; root.render(<App />); });
-    expect(container.textContent).toContain("Next. Next. Ooh, a good one.");
-    expect(container.querySelector('img[alt="Ada Face-free Style Board candidate 1"]')).toBeTruthy();
-    expect(container.querySelector('img[alt="Ada Portrait Style Reference candidate 2"]')).toBeTruthy();
-    expect(container.querySelectorAll(".candidate-pack .generation-card")).toHaveLength(3);
-    expect(container.querySelector('img[src="/old-card.png"]')).toBeFalsy();
-    expect(container.querySelector(".pack-source")).toBeFalsy();
-    expect(container.querySelector('.source-peek[aria-label^="Input: Ada"]')).toBeTruthy();
-    expect(container.textContent).toContain("1 older stored");
-    expect(container.textContent?.toLowerCase()).not.toContain("baseline");
-    expect(container.textContent?.toLowerCase()).not.toContain("strategy");
-  });
-
-  it("puts the newest accepted Input pack first", async () => {
-    const older = { ...base.inputs[0], created_at: "2026-08-01T00:00:00Z" };
-    const newest = { ...input, id: "source-2", label: "Book", image_url: "/book.png", created_at: "2026-08-05T00:00:00Z" };
-    vi.spyOn(api, "bootstrap").mockResolvedValue({ ...base, workspace: { inputs: [older, newest] }, inputs: [older, newest] } as never);
-    await act(async () => { window.location.hash = "#candidates"; root.render(<App />); });
-    expect(container.querySelector(".candidate-pack .source-peek")?.getAttribute("aria-label")).toContain("Input: Book");
-  });
-
-  it("imports a search result as a pending Input", async () => {
-    const request = vi.spyOn(globalThis, "fetch").mockResolvedValue({ ok: true, json: async () => ({ input: { id: "input-1" } }) } as Response);
-    await api.importInput({ id: "result-1", label: "Book", pexels_photo_id: 42, selected_image_url: "/book.png" });
-    const body = JSON.parse(String(request.mock.calls[0][1]?.body));
-    expect(body.candidate.pexels_photo_id).toBe(42);
-    expect(request.mock.calls[0][0]).toContain("/inputs/import");
-  });
-
-  it("shows an incoming card in its source pack while generation is active", async () => {
-    const activeBatch = { batch_id: "batch-active", purpose: "card-production", status: "running", created_at: "2026-08-04T00:00:00Z", updated_at: "2026-08-04T00:00:01Z", style_version_id: style.identity.style_version_id, style_checksum_sha256: style.checksums.style_sha256, selected_source_ids: ["source-1"], requested_paid_calls: 1, paid_calls: 1, progress: { selected_sources: 1, ready_cards: 0, approved_cards: 0, failed_sources: 0, paid_calls: 1, total_attempts: 1 } };
-    vi.spyOn(api, "bootstrap").mockResolvedValue({ ...base, batches: [activeBatch], cards: [produced()] } as never);
-    await act(async () => { window.location.hash = "#candidates"; root.render(<App />); });
-    expect(container.querySelector('.pending-card[role="status"][aria-label="Generating a new card for Ada"] .spinner')).toBeTruthy();
-    expect(container.textContent).not.toContain("Producing new generations");
-  });
-
-  it("tolerates a legacy active batch summary without source IDs", async () => {
-    const legacyBatch = { batch_id: "batch-legacy", purpose: "card-production", status: "running", created_at: "2026-08-04T00:00:00Z", updated_at: "2026-08-04T00:00:01Z", style_version_id: style.identity.style_version_id, style_checksum_sha256: style.checksums.style_sha256, requested_paid_calls: 1, paid_calls: 1, progress: { selected_sources: 1, ready_cards: 0, approved_cards: 0, failed_sources: 0, paid_calls: 1, total_attempts: 1 } };
-    vi.spyOn(api, "bootstrap").mockResolvedValue({ ...base, batches: [legacyBatch], cards: [produced()] } as never);
-    await act(async () => { window.location.hash = "#candidates"; root.render(<App />); });
-    expect(container.querySelector(".candidate-pack")).toBeTruthy();
-    expect(container.querySelector(".pending-card")).toBeFalsy();
-  });
-
-  it("previews a prompted candidate before accepting it", async () => {
-    vi.spyOn(api, "bootstrap").mockResolvedValue(base as never);
-    vi.spyOn(api, "createProduction").mockResolvedValue({ batch: { batch_id: "batch-2" } } as never);
-    await act(async () => { window.location.hash = "#candidates"; root.render(<App />); });
-    const open = [...container.querySelectorAll("button")].find((button) => button.textContent?.includes("Generate new"));
-    await act(async () => open?.click());
+    vi.spyOn(api, "createProduction").mockResolvedValue({ batch: { batch_id: "batch-2", status: "ready", items: [produced()] } } as never);
+    await act(async () => { window.location.hash = "#cards"; root.render(<App />); });
+    await act(async () => [...container.querySelectorAll("button")].find((button) => button.textContent?.includes("Generate"))?.click());
+    expect(container.textContent).toContain("Choose an Input");
+    await act(async () => container.querySelector(".input-picker .source-select")?.dispatchEvent(new MouseEvent("click", { bubbles: true })));
     expect(container.querySelector('[aria-labelledby="candidate-dialog-title"]')).toBeTruthy();
-    const preview = [...container.querySelectorAll("button")].find((button) => button.textContent?.includes("Generate preview"));
-    await act(async () => preview?.click());
-    expect(container.textContent).toContain("Content direction");
+    await act(async () => [...container.querySelectorAll("button")].find((button) => button.textContent === "Generate")?.click());
     expect(api.createProduction).toHaveBeenCalledWith(["source-1"], "face-free-style-board", true, "", "warm-parchment");
-  });
-
-  it("adds only an accepted candidate preview to the pack", async () => {
-    vi.spyOn(api, "bootstrap").mockResolvedValue(base as never);
-    vi.spyOn(api, "createProduction").mockResolvedValue({ batch: { batch_id: "preview-batch", status: "ready", items: [{ item_id: "preview-item", status: "ready", master_url: "/preview-master.png", card_url: "/preview-card.png" }] } } as never);
-    vi.spyOn(api, "acceptCandidate").mockResolvedValue({ batch: {} } as never);
-    await act(async () => { window.location.hash = "#candidates"; root.render(<App />); });
-    const open = [...container.querySelectorAll("button")].find((button) => button.textContent?.includes("Generate new"));
-    await act(async () => open?.click());
-    const preview = [...container.querySelectorAll("button")].find((button) => button.textContent?.includes("Generate preview"));
-    await act(async () => preview?.click());
-    expect(container.querySelector('img[alt="Candidate preview"]')).toBeTruthy();
-    const accept = [...container.querySelectorAll("button")].find((button) => button.textContent?.includes("Add to pack"));
-    await act(async () => accept?.click());
-    expect(api.acceptCandidate).toHaveBeenCalledWith("preview-batch", "preview-item");
-  });
-
-  it("favorites candidates and renders saved cards in Collection", async () => {
-    const saved = produced({ favorite: true, favorited_at: "2026-08-03T00:00:00Z" });
-    vi.spyOn(api, "bootstrap").mockResolvedValueOnce({ ...base, cards: [produced()] } as never).mockResolvedValue({ ...base, cards: [saved], favorites: [saved] } as never);
-    vi.spyOn(api, "favorite").mockResolvedValue({ favorite: {} } as never);
-    await act(async () => { window.location.hash = "#candidates"; root.render(<App />); });
-    const favorite = container.querySelector('button[aria-label="Save to Collection"]');
-    await act(async () => favorite?.dispatchEvent(new MouseEvent("click", { bubbles: true })));
-    expect(api.favorite).toHaveBeenCalledWith("batch-1", "item-1");
-    await act(async () => { window.location.hash = "#collection"; window.dispatchEvent(new HashChangeEvent("hashchange")); });
-    expect(container.textContent).toContain("Your saved candidate cards");
-    expect(container.querySelector('img[alt="Ada from Face-free Style Board"]')).toBeTruthy();
+    expect(container.textContent).not.toContain("Add to pack");
   });
 
   it("opens a candidate as a complete source-to-card inspector", async () => {
@@ -183,7 +75,7 @@ describe("pipeline workbench", () => {
     expect(container.textContent).not.toContain("Vertical");
     expect(container.textContent).toContain("Preview changes");
     expect(container.textContent).toContain("Save changes");
-    expect(container.textContent).toContain("Save to Collection");
+    expect(container.textContent).toContain("Favorite");
   });
 
   it("shows graceful placeholders for legacy candidate artifacts", async () => {

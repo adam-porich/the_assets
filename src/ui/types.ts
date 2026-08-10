@@ -44,13 +44,14 @@ export type ProductionItem = {
   accepted?: boolean; accepted_at?: string; prompt_override?: string | null; content_direction?: string | null; background_id?: string | null; background_metadata?: Record<string, unknown>; matte_metadata?: Record<string, unknown>; chroma_key?: { name: string; hex: string }; palette_mode?: "fixed-house" | "adaptive-hybrid";
   reference_stack: Array<Record<string, unknown>>; reference_urls?: Array<string | null>;
   favorite?: boolean; favorited_at?: string | null;
+  hidden?: boolean; hidden_at?: string | null;
 };
 export type ProductionProgress = { selected_sources: number; ready_cards: number; approved_cards: number; failed_sources: number; paid_calls: number; total_attempts: number };
-export type ProductionBatch = { batch_id: string; purpose: "card-production" | "style-trial"; status: string; created_at: string; updated_at: string; style_version_id: string; style_checksum_sha256: string; selected_source_ids: string[]; requested_paid_calls: number; paid_calls: number; cost_usd?: number | null; items: ProductionItem[]; progress: ProductionProgress; style_snapshot?: PipelineStyle; calibration_source_ids?: string[] | null; model?: Model; model_capabilities?: Record<string, unknown>; backend_mapping?: Record<string, unknown>; generation_authorization?: Record<string, unknown>; requires_acceptance?: boolean };
+export type ProductionBatch = { batch_id: string; purpose: "card-production" | "style-trial"; status: string; created_at: string; updated_at: string; style_version_id: string; style_checksum_sha256: string; selected_source_ids: string[]; requested_paid_calls: number; paid_calls: number; cost_usd?: number | null; items: ProductionItem[]; progress: ProductionProgress; style_snapshot?: PipelineStyle; calibration_source_ids?: string[] | null; model?: Model; model_capabilities?: Record<string, unknown>; backend_mapping?: Record<string, unknown>; generation_authorization?: Record<string, unknown> };
 export type ProductionSummary = Omit<ProductionBatch, "items" | "style_snapshot" | "selected_source_ids"> & { selected_source_ids?: string[] };
 export type ProducedCard = ProductionItem & {
   batch_id: string; batch_created_at: string; purpose: ProductionBatch["purpose"];
   style_version_id: string; style_checksum_sha256: string; pipeline_id: string; pipeline_label: string; pipeline_description: string; pipeline_version?: number | null;
 };
 
-export type Bootstrap = { workspace: { inputs: InputAsset[] }; inputs: InputAsset[]; style: StyleBootstrap; batches: ProductionSummary[]; cards: ProducedCard[]; favorites: ProducedCard[]; models: Model[]; integrations: { pexels: { configured: boolean }; openrouter: { configured: boolean } }; starter: { photo_ids: number[] }; normalisation: { default_prompt: string; default_quality: "low" | "medium" | "high"; active: boolean } };
+export type Bootstrap = { workspace: { inputs: InputAsset[] }; inputs: InputAsset[]; style: StyleBootstrap; batches: ProductionSummary[]; cards: ProducedCard[]; models: Model[]; integrations: { pexels: { configured: boolean }; openrouter: { configured: boolean } }; starter: { photo_ids: number[] }; normalisation: { default_prompt: string; default_quality: "low" | "medium" | "high"; active: boolean } };

@@ -25,7 +25,6 @@ export const api = {
   getProduction: (id: string) => request<{ batch: ProductionBatch }>(`/production/${id}`),
   retryFailed: (id: string, consent = false) => request<{ batch: ProductionBatch }>(`/production/${id}/retry`, json("POST", { consent })),
   tryAnother: (id: string, source_id: string, consent = false) => request<{ batch: ProductionBatch }>(`/production/${id}/try-another`, json("POST", { source_id, consent })),
-  acceptCandidate: (id: string, item_id: string) => request<{ batch: ProductionBatch }>(`/production/${id}/accept`, json("POST", { item_id })),
   renderFraming: (id: string, item_id: string, framing: Framing, palette_mode?: string, background_id?: string) => request<{ batch: ProductionBatch }>(`/production/${id}/render`, json("POST", { item_id, framing, palette_mode, background_id })),
   previewFraming: (id: string, item_id: string, framing: Framing, palette_mode?: string, background_id?: string) => request<{ preview: ProductionItem }>(`/production/${id}/preview`, json("POST", { item_id, framing, palette_mode, background_id })),
   createDraft: (pipeline_id: string) => request<{ style: PipelineStyle }>("/styles/draft", json("POST", { pipeline_id })),
@@ -36,4 +35,6 @@ export const api = {
   activatePipeline: (pipeline_id: string) => request<{ style: StyleBootstrap }>(`/pipelines/${pipeline_id}/activate`, json("POST", {})),
   favorite: (batch_id: string, item_id: string) => request<{ favorite: Record<string, unknown> }>("/favorites", json("POST", { batch_id, item_id })),
   unfavorite: (batch_id: string, item_id: string) => request<{ removed: boolean }>(`/favorites/${batch_id}/${item_id}`, { method: "DELETE" }),
+  hideCard: (batch_id: string, item_id: string) => request<{ hidden: Record<string, unknown> }>("/trash", json("POST", { batch_id, item_id })),
+  restoreCard: (batch_id: string, item_id: string) => request<{ restored: boolean }>(`/trash/${batch_id}/${item_id}`, { method: "DELETE" }),
 };

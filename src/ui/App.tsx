@@ -1,22 +1,21 @@
 import { useCallback, useEffect, useState } from "react";
 import { api } from "./api";
-import { BatchesView, CandidatesView, CollectionView, InputsView, PipelinesView } from "./WorkbenchViews";
+import { CardsView, InputsView, PipelinesView } from "./WorkbenchViews";
 import type { Bootstrap } from "./types";
 
-export type Route = { view: "inputs" | "pipelines" | "candidates" | "batches" | "collection"; id?: string; itemId?: string };
+export type Route = { view: "inputs" | "pipelines" | "cards"; id?: string; itemId?: string };
 
 function replaceHash(hash: string) { window.history.replaceState(null, "", `${window.location.pathname}${window.location.search}${hash}`); }
 
 export function readRoute(): Route {
   const value = window.location.hash.replace(/^#/, "") || "inputs";
   const [view, id, itemId] = value.split("/");
-  if (view === "inputs" || view === "pipelines" || view === "candidates" || view === "batches" || view === "collection") return { view: view as Route["view"], id, itemId };
+  if (view === "inputs" || view === "pipelines" || view === "cards") return { view: view as Route["view"], id, itemId };
   if (view === "sources") { replaceHash("#inputs"); return { view: "inputs", id }; }
-  if (view === "cards") { replaceHash(id ? `#candidates/${id}${itemId ? `/${itemId}` : ""}` : "#candidates"); return { view: "candidates", id, itemId }; }
-  if (["explore", "finish", "set", "frames", "completed"].includes(view)) { replaceHash("#candidates"); return { view: "candidates" }; }
+  if (["candidates", "batches"].includes(view)) { replaceHash(id ? `#cards/${id}${itemId ? `/${itemId}` : ""}` : "#cards"); return { view: "cards", id, itemId }; }
+  if (view === "collection" || ["explore", "finish", "set", "frames", "completed"].includes(view)) { replaceHash("#cards"); return { view: "cards" }; }
   if (["style", "styles", "lab"].includes(view)) { replaceHash(id ? `#pipelines/${id}` : "#pipelines"); return { view: "pipelines", id }; }
-  if (view === "card" && id) { replaceHash(`#candidates/${id}`); return { view: "candidates", id }; }
-  if (view === "run" && id) { replaceHash(`#batches/${id}`); return { view: "batches", id }; }
+  if ((view === "card" || view === "run") && id) { replaceHash(`#cards/${id}`); return { view: "cards", id }; }
   replaceHash("#inputs"); return { view: "inputs" };
 }
 
@@ -39,13 +38,11 @@ export function App() {
   const shared = { bootstrap, navigate, refresh, notify };
   const pipelineCount = bootstrap.style.pipelines.length;
   return <main className="app-shell">
-    <header className="app-header"><a className="brand-block" href="#inputs"><span className="brand-symbol">✳</span><span><small>Experimental asset studio</small><strong>Asset Workbench</strong></span></a><nav aria-label="Primary"><button className={route.view === "inputs" ? "active" : ""} onClick={() => navigate("#inputs")}>Inputs</button><button className={route.view === "pipelines" ? "active" : ""} onClick={() => navigate("#pipelines")}>Pipeline</button><button className={route.view === "candidates" ? "active" : ""} onClick={() => navigate("#candidates")}>Candidates</button><button className={route.view === "batches" ? "active" : ""} onClick={() => navigate("#batches")}>Batches</button><button className={route.view === "collection" ? "active" : ""} onClick={() => navigate("#collection")}>Collection</button></nav></header>
+    <header className="app-header"><a className="brand-block" href="#inputs"><span className="brand-symbol">✳</span><span><small>Experimental asset studio</small><strong>Asset Workbench</strong></span></a><nav aria-label="Primary"><button className={route.view === "inputs" ? "active" : ""} onClick={() => navigate("#inputs")}>Inputs</button><button className={route.view === "pipelines" ? "active" : ""} onClick={() => navigate("#pipelines")}>Pipeline</button><button className={route.view === "cards" ? "active" : ""} onClick={() => navigate("#cards")}>Cards</button></nav></header>
     {message && <div className={`global-message ${message.kind}`} role={message.kind === "error" ? "alert" : "status"}>{message.text}<button aria-label="Dismiss message" onClick={() => setMessage(undefined)}>×</button></div>}
     {route.view === "inputs" && <InputsView {...shared} />}
     {route.view === "pipelines" && <PipelinesView {...shared} pipelineId={route.id} />}
-    {route.view === "candidates" && <CandidatesView {...shared} batchId={route.id} cardId={route.itemId} />}
-    {route.view === "batches" && <BatchesView {...shared} batchId={route.id} itemId={route.itemId} />}
-    {route.view === "collection" && <CollectionView {...shared} />}
-    <footer className="app-footer"><span>{bootstrap.inputs.length} inputs</span><span>→</span><span>{pipelineCount} pipeline</span><span>→</span><span>{bootstrap.cards.length} candidates</span><span>→</span><span>{bootstrap.favorites.length} saved</span></footer>
+    {route.view === "cards" && <CardsView {...shared} batchId={route.id} cardId={route.itemId} />}
+    <footer className="app-footer"><span>{bootstrap.inputs.length} inputs</span><span>→</span><span>{pipelineCount} pipeline</span><span>→</span><span>{bootstrap.cards.length} cards</span><span>→</span><span>{bootstrap.cards.filter((card) => card.favorite).length} favorites</span></footer>
   </main>;
 }
