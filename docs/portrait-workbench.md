@@ -37,18 +37,19 @@ it, making exactly one provider call. Generation is constrained to an isolated
 foreground on a dynamically chosen green or magenta key. The raw output and
 extracted alpha foreground are retained. A named renderer preset then supplies
 the background and composites the foreground directly at the art ratio. The
-result is mapped to 32 Amiga OCS registers, rendered at 168×138 logical pixels,
-and assembled into the 210×300 logical card before exact 2× enlargement.
-The default adaptive mode retains ten house-colour anchors and derives the other
-22 colours from each master, preferring foreground-relevant, perceptually
-distinct choices snapped to the OCS 12-bit colour space. Fixed mode
-uses the original house 32 for comparison. Retries and `Generate another`
-append immutable attempts; framing or palette changes only rerender the saved
-master and make no provider call.
+foreground and background are reduced independently before compositing at
+168×138 logical pixels: the subject keeps a 32-colour OCS palette while the
+background receives its own derived 16-colour OCS palette. Card chrome remains
+on stable house colours, and the assembled 210×300 logical card is enlarged
+exactly 2× without a final whole-card palette pass. The default adaptive
+foreground mode retains ten house-colour anchors and derives the other 22
+colours from opaque subject pixels. Fixed foreground mode uses the original
+house 32 for comparison. Retries and `Generate another` append immutable
+attempts; background or palette changes only rerender the saved foreground and
+make no provider call.
 
-Default placement fits the extracted foreground inside a safe region. Manual
-zoom and offsets recompose that foreground without moving or cropping the
-background. Changing the background preset is also a no-generation rerender.
+Default placement fits the extracted foreground inside a safe region. Changing
+the background preset is a no-generation preview or rerender.
 
 The Pipeline editor exposes the single style prompt, generation model, quality,
 references, renderer settings, and a selectable comparison cohort of up to

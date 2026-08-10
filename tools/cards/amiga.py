@@ -90,15 +90,19 @@ def _ocs_colour(colour: tuple[int, int, int]) -> tuple[int, int, int]:
     return tuple(max(0, min(255, round(channel / 17) * 17)) for channel in colour)  # type: ignore[return-value]
 
 
-def adaptive_hybrid_palette(image: Image.Image, house: tuple[tuple[int, int, int], ...]) -> tuple[tuple[int, int, int], ...]:
+def adaptive_hybrid_palette(image: Image.Image, house: tuple[tuple[int, int, int], ...], mask: Image.Image | None = None) -> tuple[tuple[int, int, int], ...]:
     """Keep UI anchors and greedily choose distinct, foreground-weighted OCS colours."""
     sample = ImageOps.contain(image.convert("RGB"), (128, 128), Image.Resampling.BILINEAR)
     corners = [sample.getpixel(point) for point in ((0, 0), (sample.width - 1, 0), (0, sample.height - 1), (sample.width - 1, sample.height - 1))]
     background = tuple(round(sum(colour[channel] for colour in corners) / len(corners)) for channel in range(3))
     reduced = sample.quantize(colors=64, method=Image.Quantize.MEDIANCUT).convert("RGB")
     pixels = list(reduced.getdata())
+    selected_mask = ImageOps.contain(mask.convert("L"), sample.size, Image.Resampling.BILINEAR) if mask is not None else None
+    mask_pixels = list(selected_mask.getdata()) if selected_mask is not None else None
     weighted: Counter[tuple[int, int, int]] = Counter()
-    for colour in pixels:
+    for index, colour in enumerate(pixels):
+        if mask_pixels is not None and mask_pixels[index] < 32:
+            continue
         distance_from_background = sum((colour[channel] - background[channel]) ** 2 for channel in range(3)) ** 0.5
         weighted[_ocs_colour(colour)] += 1.0 if distance_from_background >= 34 else 0.12
     resolved = list(house)
@@ -115,6 +119,47 @@ def adaptive_hybrid_palette(image: Image.Image, house: tuple[tuple[int, int, int
     for index, colour in zip(available, chosen):
         resolved[index] = colour
     return tuple(resolved)
+
+
+def adaptive_background_palette(image: Image.Image, limit: int = 16) -> tuple[tuple[int, int, int], ...]:
+    """Derive a compact OCS palette for a deterministic background layer."""
+    reduced = ImageOps.contain(image.convert("RGB"), (128, 128), Image.Resampling.BILINEAR).quantize(colors=limit, method=Image.Quantize.MEDIANCUT).convert("RGB")
+    counts = Counter(_ocs_colour(colour) for colour in reduced.getdata())
+    colours = [colour for colour, _ in counts.most_common(limit)]
+    return tuple(colours or [(0, 0, 0)])
+
+
+def render_amiga_layers(foreground: Image.Image, background: Image.Image, *, style: dict[str, Any]) -> tuple[Image.Image, Image.Image, dict[str, Any]]:
+    renderer = style["renderer"]
+    logical_size = tuple(int(value) for value in renderer["logical_art_size"])
+    scale = int(renderer["output_scale"])
+    prepared_background = _prepare_master(background, logical_size, tuple(style["composition"]["centering"]), style)
+    rgba = ImageOps.fit(foreground.convert("RGBA"), logical_size, method=Image.Resampling.LANCZOS, centering=tuple(style["composition"]["centering"]))
+    alpha = rgba.getchannel("A")
+    prepared_foreground = _prepare_master(rgba.convert("RGB"), logical_size, tuple(style["composition"]["centering"]), style)
+    house_palette = amiga_palette(style)
+    foreground_mode = str(renderer.get("palette_mode") or "fixed-house")
+    foreground_palette = adaptive_hybrid_palette(prepared_foreground, house_palette, alpha) if foreground_mode == "adaptive-hybrid" else house_palette
+    background_palette = adaptive_background_palette(prepared_background, 16)
+    logical_background = quantize_amiga(prepared_background, background_palette, style=style)
+    logical_foreground = quantize_amiga(prepared_foreground, foreground_palette, style=style).convert("RGBA")
+    logical_foreground.putalpha(alpha)
+    logical = logical_background.convert("RGBA")
+    logical.alpha_composite(logical_foreground)
+    logical = logical.convert("RGB")
+    art = logical.resize((logical.width * scale, logical.height * scale), Image.Resampling.NEAREST)
+    metadata = {
+        "style_id": style["identity"]["family_id"], "style_version": style["identity"]["version"],
+        "renderer_driver_version": int(renderer.get("driver_version", 1)), "logical_art_size": list(logical.size),
+        "output_art_size": list(art.size), "output_scale": scale, "palette_space": renderer["palette_space"],
+        "palette_mode": "layered-adaptive" if foreground_mode == "adaptive-hybrid" else "layered-fixed-house", "palette_limit": 48,
+        "foreground_palette": ["#%02x%02x%02x" % colour for colour in foreground_palette],
+        "background_palette": ["#%02x%02x%02x" % colour for colour in background_palette],
+        "resolved_palette": ["#%02x%02x%02x" % colour for colour in foreground_palette],
+        "palette_colours_used": len(logical.getcolors(maxcolors=logical.width * logical.height) or []),
+        "dither": dict(renderer["dither"]), "centering": list(style["composition"]["centering"]),
+    }
+    return logical, art, metadata
 
 
 def _two_nearest(
@@ -280,7 +325,10 @@ def render_amiga_card(
     # Pillow rasterises even its bitmap font through an antialiased mask. Snap
     # the complete logical card back to the same hardware palette before the
     # nearest-neighbour presentation scale is applied.
+    # Quantize the card chrome independently, then restore the already
+    # layer-quantized art so its foreground and background palettes survive.
     canvas = quantize_amiga(canvas, palette, dither_strength=0.0)
+    canvas.paste(art, (21, 39))
     return canvas.resize((card_width * scale, card_height * scale), Image.Resampling.NEAREST)
 
 

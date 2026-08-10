@@ -45,16 +45,18 @@ Add to pack` promotes that preview into the pack. Older accepted candidates
 remain stored when they scroll out. Open a
 candidate to inspect the Input, styled master, rendered art, final card, and
 provenance. Generation produces an isolated foreground; deterministic renderer
-presets supply the background afterward. Foreground placement, background, and
-palette changes do not call the image model.
-Candidate details also lets you compare the original fixed house palette with
-an adaptive OCS palette. Adaptive keeps ten stable UI anchors and selects the
-remaining 22 registers from the image, while preserving the 32-colour limit.
+presets supply the background afterward. Background and palette changes do not
+call the image model and can be previewed before saving a new render revision.
+Candidate details also lets you compare the original fixed house foreground
+palette with an adaptive OCS foreground palette. Adaptive keeps ten stable UI
+anchors and selects the remaining 22 registers from the subject. The background
+uses its own derived 16-colour OCS palette, so it cannot consume or shift the
+foreground colours.
 
 ### Collection
 
 Favorite any number of candidates into Collection. Removing a favorite does
-not delete its candidate, and rerendered framing is reflected automatically.
+not delete its candidate, and saved rerenders are reflected automatically.
 
 ## Routes
 

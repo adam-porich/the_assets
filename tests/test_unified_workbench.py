@@ -235,6 +235,24 @@ def test_foreground_matte_removes_shaded_chroma_field() -> None:
     assert matte["bbox"] == [35, 20, 85, 120]
 
 
+def test_layered_background_palettes_do_not_change_foreground() -> None:
+    style = load_checked_in_style()
+    foreground = Image.new("RGBA", (336, 276))
+    for x in range(90, 246):
+        for y in range(45, 276):
+            foreground.putpixel((x, y), (34, 102, 187, 255))
+
+    warm, _, _ = registry.render_layered(style, foreground, "warm-parchment", "Subject")
+    cool, _, _ = registry.render_layered(style, foreground, "cool-slate", "Subject")
+    noir, _, _ = registry.render_layered(style, foreground, "noir", "Subject")
+
+    assert warm.metadata["palette_mode"] == "layered-adaptive"
+    assert len(warm.metadata["background_palette"]) <= 16
+    assert warm.metadata["foreground_palette"] == cool.metadata["foreground_palette"] == noir.metadata["foreground_palette"]
+    assert warm.logical_art.crop((55, 40, 113, 138)).tobytes() == cool.logical_art.crop((55, 40, 113, 138)).tobytes() == noir.logical_art.crop((55, 40, 113, 138)).tobytes()
+    assert warm.logical_art.tobytes() != cool.logical_art.tobytes() != noir.logical_art.tobytes()
+
+
 class ReferenceReturningAdapter(FakeGenerationAdapter):
     def generate(self, request):
         result = super().generate(request)
@@ -410,7 +428,8 @@ def test_live_provenance_and_consent_use_semantic_fake_without_provider_call(tmp
     assert "Foreground isolation contract" in item["generation_request"]["instruction"]
     assert item["content_direction"] == "Add one cracked corner."
     assert item["foreground_url"] and item["master_url"] and item["background_id"] == "warm-parchment"
-    assert item["render_metadata"]["framing"]["resolved"]["mode"] == "subject-aware"
+    assert item["render_metadata"]["framing"]["resolved"] == item["background_metadata"]["framing"]
+    assert item["render_metadata"]["palette_mode"] == "layered-adaptive"
     assert item["master_url"] and item["art_url"] and item["card_url"]
     assert not item["normalised_url"] and batch["paid_calls"] == 1
     assert batch["generation_authorization"]["consent"] is True

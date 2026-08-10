@@ -11,7 +11,7 @@ from typing import Any, Callable
 
 from PIL import Image
 
-from tools.cards.backgrounds import choose_chroma_key, composite_foreground, extract_foreground
+from tools.cards.backgrounds import choose_chroma_key, extract_foreground
 from tools.cards.registry import RenderBundle, registry
 from tools.cards.style_pipeline import StyleStore, style_checksum, validate_style
 
@@ -321,16 +321,15 @@ class CardProductionManager:
         resolved_background = background_id or item.get("background_id") or style.get("backgrounds", {}).get("default_id")
         if item.get("foreground_path"):
             with Image.open(self.store.absolute_path(str(item["foreground_path"]))) as opened:
-                master, background_metadata = composite_foreground(opened.convert("RGBA"), style, str(resolved_background), framing)
+                bundle, background_metadata, master = registry.render_layered(style, opened.convert("RGBA"), str(resolved_background), str(item["source_label"]), framing)
             master_relative = base.with_name(base.name + "-composite.png")
             self._save_image(master, self.store.absolute_path(master_relative))
             item.update({"master_path": master_relative.as_posix(), "master_checksum_sha256": checksum(self.store.absolute_path(master_relative)), "background_id": resolved_background, "background_metadata": background_metadata})
-            render_framing = None
         else:
             with Image.open(self.store.absolute_path(str(item["master_path"]))) as opened:
                 master = opened.convert("RGB")
             render_framing = framing
-        bundle: RenderBundle = registry.render(style, master, str(item["source_label"]), render_framing)
+            bundle = registry.render(style, master, str(item["source_label"]), render_framing)
         logical_path, art_path, card_path = base.with_name(base.name + "-logical.png"), base.with_name(base.name + "-art.png"), base.with_name(base.name + "-card.png")
         self._save_image(bundle.logical_art, self.store.absolute_path(logical_path)); self._save_image(bundle.art, self.store.absolute_path(art_path)); self._save_image(bundle.card, self.store.absolute_path(card_path))
         item.update({"render_revision": revision, "framing": framing or style["composition"]["default_framing"], "palette_mode": style["renderer"].get("palette_mode", "fixed-house"), "logical_art_path": logical_path.as_posix(), "art_path": art_path.as_posix(), "card_path": card_path.as_posix(), "card_checksum_sha256": checksum(self.store.absolute_path(card_path)), "render_metadata": bundle.metadata})

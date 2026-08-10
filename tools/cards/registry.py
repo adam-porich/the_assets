@@ -7,7 +7,8 @@ from typing import Any, Protocol
 
 from PIL import Image, ImageOps
 
-from .amiga import render_amiga_art, render_amiga_card
+from .amiga import render_amiga_art, render_amiga_card, render_amiga_layers
+from .backgrounds import foreground_layers
 from .style_pipeline import legacy_amiga_style, style_checksum
 
 
@@ -113,6 +114,15 @@ class AmigaRenderer:
         }
         return RenderBundle(logical, art, card, metadata)
 
+    def render_layered(self, style: dict[str, Any], foreground: Image.Image, background_id: str, label: str, framing: dict[str, float] | None = None) -> tuple[RenderBundle, dict[str, Any], Image.Image]:
+        background, foreground_layer, background_metadata = foreground_layers(foreground, style, background_id, framing)
+        logical, art, metadata = render_amiga_layers(foreground_layer, background, style=style)
+        foreground_palette = tuple(tuple(bytes.fromhex(value.removeprefix("#"))) for value in metadata["foreground_palette"])
+        card = render_amiga_card(logical, label, style=style, palette=foreground_palette)
+        metadata.update({"driver_id": self.driver_id, "style_version_id": style["identity"]["style_version_id"], "style_checksum_sha256": style.get("checksums", {}).get("style_sha256") or style_checksum(style), "framing": {"requested": framing or style["composition"]["default_framing"], "resolved": background_metadata["framing"]}, "logical_card_size": list(style["card_assembly"]["logical_card_size"]), "output_card_size": list(card.size)})
+        composite = background.copy(); composite.paste(foreground_layer, (0, 0), foreground_layer)
+        return RenderBundle(logical, art, card, metadata), background_metadata, composite
+
 
 class RendererRegistry:
     def __init__(self) -> None:
@@ -129,6 +139,12 @@ class RendererRegistry:
 
     def render(self, style: dict[str, Any], master: Image.Image, label: str, framing: dict[str, float] | None = None) -> RenderBundle:
         return self.get(str(style["renderer"]["driver_id"])).render(style, master, label, framing)
+
+    def render_layered(self, style: dict[str, Any], foreground: Image.Image, background_id: str, label: str, framing: dict[str, float] | None = None) -> tuple[RenderBundle, dict[str, Any], Image.Image]:
+        driver = self.get(str(style["renderer"]["driver_id"]))
+        if not isinstance(driver, AmigaRenderer):
+            raise ValueError(f"renderer {driver.driver_id} does not support layered palettes")
+        return driver.render_layered(style, foreground, background_id, label, framing)
 
     def descriptors(self, driver_id: str) -> dict[str, Any]:
         driver = self.get(driver_id)

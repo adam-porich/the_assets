@@ -82,14 +82,14 @@ def _background(size: tuple[int, int], descriptor: dict[str, Any]) -> Image.Imag
     return image
 
 
-def composite_foreground(foreground: Image.Image, style: dict[str, Any], background_id: str, framing: dict[str, float] | None = None) -> tuple[Image.Image, dict[str, Any]]:
+def foreground_layers(foreground: Image.Image, style: dict[str, Any], background_id: str, framing: dict[str, float] | None = None) -> tuple[Image.Image, Image.Image, dict[str, Any]]:
     config = style.get("backgrounds") or {}
     presets = {str(item["id"]): item for item in config.get("presets", [])}
     descriptor = presets.get(background_id) or presets.get(str(config.get("default_id")))
     if not descriptor:
         raise ValueError(f"background preset {background_id} is not defined")
     size = tuple(int(value) for value in config.get("composite_size", [672, 552]))
-    canvas = _background(size, descriptor)
+    background = _background(size, descriptor)
     alpha = foreground.getchannel("A") if foreground.mode == "RGBA" else Image.new("L", foreground.size, 255)
     box = alpha.getbbox() or (0, 0, foreground.width, foreground.height)
     subject = foreground.convert("RGBA").crop(box)
@@ -101,5 +101,13 @@ def composite_foreground(foreground: Image.Image, style: dict[str, Any], backgro
     offset_y = max(-1.0, min(1.0, float(framing.get("offset_y", 0.0))))
     x = round((size[0] - subject.width) / 2 + offset_x * size[0] * 0.2)
     y = round(size[1] - subject.height + offset_y * size[1] * 0.2)
-    canvas.paste(subject, (x, y), subject)
-    return canvas, {"background_id": descriptor["id"], "background_label": descriptor.get("label", descriptor["id"]), "descriptor": {key: descriptor[key] for key in ("top", "bottom", "glow", "glow_strength") if key in descriptor}, "subject_bbox": list(box), "placement": [x, y, subject.width, subject.height], "composite_size": list(size), "framing": {"zoom": zoom, "offset_x": offset_x, "offset_y": offset_y}}
+    layer = Image.new("RGBA", size)
+    layer.paste(subject, (x, y), subject)
+    metadata = {"background_id": descriptor["id"], "background_label": descriptor.get("label", descriptor["id"]), "descriptor": {key: descriptor[key] for key in ("top", "bottom", "glow", "glow_strength") if key in descriptor}, "subject_bbox": list(box), "placement": [x, y, subject.width, subject.height], "composite_size": list(size), "framing": {"zoom": zoom, "offset_x": offset_x, "offset_y": offset_y}}
+    return background, layer, metadata
+
+
+def composite_foreground(foreground: Image.Image, style: dict[str, Any], background_id: str, framing: dict[str, float] | None = None) -> tuple[Image.Image, dict[str, Any]]:
+    background, layer, metadata = foreground_layers(foreground, style, background_id, framing)
+    background.paste(layer, (0, 0), layer)
+    return background, metadata
