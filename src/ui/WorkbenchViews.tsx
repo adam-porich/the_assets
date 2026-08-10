@@ -1664,7 +1664,7 @@ export function CardsView({
         <div className="raw-results-grid">
           {visibleCards.map((card) => (
             <article
-              className="surface raw-result-card"
+              className="raw-result-card"
               key={`${card.batch_id}:${card.item_id}`}
             >
               <button
@@ -1698,19 +1698,6 @@ export function CardsView({
                       : "No artwork yet"}
                   </span>
                 )}
-                <span className="raw-result-copy">
-                  <span>
-                    <strong>{card.source_label || "Untitled"}</strong>
-                    <span className={`status-chip ${card.status}`}>
-                      {card.status}
-                    </span>
-                  </span>
-                  <small>{card.batch_id}</small>
-                  <small>
-                    {card.pipeline_label} · attempt {card.attempt_number} ·{" "}
-                    {card.batch_created_at}
-                  </small>
-                </span>
               </button>
             </article>
           ))}

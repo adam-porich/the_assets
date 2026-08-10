@@ -1245,14 +1245,14 @@ summary {
   line-height: 1.5;
 }
 .raw-results-grid {
-  width: min(100%, 960px);
+  width: min(100%, 1080px);
   margin: 0 auto;
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 18px;
+  gap: 14px;
 }
 .cards-toolbar {
-  width: min(100%, 960px);
+  width: min(100%, 1080px);
   margin: 0 auto 18px;
   display: flex;
   align-items: center;
@@ -1281,7 +1281,6 @@ summary {
 .raw-result-card {
   position: relative;
   min-width: 0;
-  overflow: hidden;
 }
 .raw-result-card > .raw-result {
   width: 100%;
@@ -1323,11 +1322,11 @@ summary {
   overflow: hidden;
   color: #eee4d7;
   text-align: left;
-  border: 1px solid #493a2f;
-  background: #211b17;
+  border: 0;
+  background: transparent;
 }
 .raw-result:hover {
-  border-color: #bc7b35;
+  filter: brightness(1.06);
 }
 .raw-result > img,
 .raw-result > .preview-placeholder {
@@ -1529,31 +1528,6 @@ summary {
 }
 .card-text-editor .button {
   align-self: end;
-}
-.raw-result-copy {
-  display: grid;
-  gap: 5px;
-  padding: 12px;
-}
-.raw-result-copy > span {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-}
-.raw-result-copy strong {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.raw-result-copy small {
-  color: #96897d;
-  font-size: 9px;
-  overflow-wrap: anywhere;
-}
-.raw-result-copy .status-chip {
-  padding: 3px 6px;
-  font-size: 9px;
 }
 .raw-dialog {
   width: min(1320px, 100%);
