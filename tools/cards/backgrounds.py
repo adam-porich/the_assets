@@ -112,7 +112,10 @@ def foreground_layers(foreground: Image.Image, style: dict[str, Any], background
     offset_x = max(-1.0, min(1.0, float(framing.get("offset_x", 0.0))))
     offset_y = max(-1.0, min(1.0, float(framing.get("offset_y", 0.0))))
     x = round((size[0] - subject.width) / 2 + offset_x * size[0] * 0.2)
-    y = round((0 if touches_top else size[1] - subject.height) + offset_y * size[1] * 0.2)
+    # Anchor every extracted subject to the lower edge of the artwork window.
+    # A source touching its top edge describes an incomplete silhouette, not a
+    # reason to leave the portrait floating above the bottom of a wide crop.
+    y = round(size[1] - subject.height + offset_y * size[1] * 0.2)
     layer = Image.new("RGBA", size)
     layer.paste(subject, (x, y), subject)
     metadata = {"background_id": descriptor["id"], "background_label": descriptor.get("label", descriptor["id"]), "descriptor": {key: descriptor[key] for key in ("top", "bottom", "glow", "glow_strength") if key in descriptor}, "subject_bbox": list(box), "touching_edges": [edge for edge, touching in (("top", touches_top), ("left", touches_left), ("right", touches_right)) if touching], "placement": [x, y, subject.width, subject.height], "composite_size": list(size), "framing": {"zoom": zoom, "offset_x": offset_x, "offset_y": offset_y}}

@@ -185,7 +185,7 @@ def test_foreground_matte_and_backgrounds_are_independent() -> None:
         for y in range(120): top_cropped.putpixel((x, y), (170, 65, 35, 255))
     _, cropped_meta = composite_foreground(top_cropped, style, "warm-parchment")
     assert cropped_meta["touching_edges"] == ["top"]
-    assert cropped_meta["placement"][1] == 0
+    assert cropped_meta["placement"][1] + cropped_meta["placement"][3] == style["backgrounds"]["composite_size"][1]
     assert cropped_meta["placement"][3] <= style["backgrounds"]["composite_size"][1]
 
 
