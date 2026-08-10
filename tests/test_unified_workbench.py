@@ -148,7 +148,7 @@ def test_amiga_registered_engine_is_deterministic_and_matches_golden() -> None:
         historical_framing = {"mode": "legacy", "zoom": 1, "offset_x": 0, "offset_y": 0}
         first = registry.render(style, master, "stage reference", historical_framing)
         second = registry.render(style, master, "stage reference", historical_framing)
-    assert first.art.size == (336, 198)
+    assert first.art.size == (352, 198)
     assert first.art.tobytes() == second.art.tobytes()
     assert hashlib.sha256(first.art.tobytes()).hexdigest() == hashlib.sha256(second.art.tobytes()).hexdigest()
     assert first.metadata["artwork_kind"] == "rendered-art"

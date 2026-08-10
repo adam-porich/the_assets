@@ -56,7 +56,7 @@ function backgroundConfig(style?: PipelineStyle) {
   return (
     style?.backgrounds || {
       default_id: "warm-parchment",
-      composite_size: [336, 198] as [number, number],
+      composite_size: [352, 198] as [number, number],
       presets: [
         {
           id: "warm-parchment",

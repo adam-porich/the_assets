@@ -16,8 +16,8 @@ from PIL import Image, ImageDraw, ImageEnhance, ImageFilter, ImageOps
 
 
 
-REQUESTED_ART_RATIO = (56, 33)
-REQUESTED_ART_RATIO_LABEL = "56:33"
+REQUESTED_ART_RATIO = (16, 9)
+REQUESTED_ART_RATIO_LABEL = "16:9"
 OPENROUTER_MODELS_URL = "https://openrouter.ai/api/v1/images/models"
 SIMULATION_MODEL_ID = "fake/amiga-ocs-deterministic"
 DEFAULT_LIVE_MODEL_ID = "openai/gpt-image-1-mini"
@@ -330,7 +330,7 @@ class FakeGenerationAdapter:
         started = time.perf_counter()
         with Image.open(request.identity_image) as original:
             source = ImageOps.exif_transpose(original).convert("RGB")
-        width, height = (336, 198)
+        width, height = (352, 198)
         if request.effective_aspect_ratio == "5:4":
             width, height = (320, 256)
         elif request.effective_aspect_ratio == "3:2":
@@ -369,7 +369,7 @@ class SemanticFakeGenerationAdapter:
 
     def generate(self, request: GenerationRequest) -> GenerationResult:
         started = time.perf_counter()
-        width, height = (336, 198)
+        width, height = (352, 198)
         if request.effective_aspect_ratio == "5:4":
             width, height = (320, 256)
         elif request.effective_aspect_ratio == "3:2":
