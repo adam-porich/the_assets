@@ -150,7 +150,7 @@ figcaption, .muted { color: #aaa095; font-size: 12px; margin-top: 7px; }
 details { border-top: 1px solid #47392f; margin-top: 7px; padding-top: 8px; }
 summary { cursor: pointer; color: #cdb98e; }
 .form-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin: 15px 0; }
-.form-grid label, .framing-controls label { display: grid; gap: 7px; color: #c8baaa; font-size: 13px; }
+.form-grid label, .candidate-edit-controls label { display: grid; gap: 7px; color: #c8baaa; font-size: 13px; }
 .draft-summary { margin-top: 15px; color: #aea196; font-size: 12px; }
 .cohort-picker { display: flex; gap: 10px; overflow-x: auto; }
 .cohort-picker button { flex: 0 0 105px; width: 105px; padding: 0; background: #211b17; color: #eee4d7; border: 1px solid #564333; text-align: left; }
@@ -211,7 +211,7 @@ summary { cursor: pointer; color: #cdb98e; }
 .asset-stages img { display: block; width: 100%; aspect-ratio: 1; object-fit: cover; }
 .asset-stages .final-stage img { aspect-ratio: 420 / 600; object-fit: contain; }
 .asset-stages figcaption { color: #c0af9b; text-align: center; text-transform: uppercase; letter-spacing: .08em; font-size: 9px; }
-.framing-controls { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 16px; margin: 18px 0; }
+.candidate-edit-controls { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 16px; margin: 18px 0; }
 .details-content { color: #aca095; font-size: 12px; line-height: 1.5; }
 .collection-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 16px; }
 .collection-card { overflow: hidden; padding-bottom: 12px; }
@@ -242,7 +242,7 @@ summary { cursor: pointer; color: #cdb98e; }
   .pipeline-rail > button { padding: 10px; }
   .pipeline-rail button span { display: none; }
   .pipeline-rail strong { font-size: 12px; }
-  .reference-columns, .form-grid, .framing-controls { grid-template-columns: 1fr; }
+  .reference-columns, .form-grid, .candidate-edit-controls { grid-template-columns: 1fr; }
   .normalisation-preview { grid-template-columns: 1fr; }
   .normalisation-preview > span { transform: rotate(90deg); }
   .dialog-controls { grid-template-columns: 1fr; }

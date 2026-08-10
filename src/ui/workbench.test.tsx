@@ -158,6 +158,9 @@ describe("pipeline workbench", () => {
     expect(container.textContent).toContain("Warm parchment");
     expect(container.querySelector('img[alt="Candidate card"]')?.getAttribute("src")).toBe("/card.png");
     expect(container.textContent).toContain("Adaptive · 10 anchors + 22 image colours");
+    expect(container.textContent).not.toContain("Zoom");
+    expect(container.textContent).not.toContain("Horizontal");
+    expect(container.textContent).not.toContain("Vertical");
     expect(container.textContent).toContain("Preview changes");
     expect(container.textContent).toContain("Save changes");
     expect(container.textContent).toContain("Save to Collection");
