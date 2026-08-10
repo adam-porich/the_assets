@@ -262,11 +262,12 @@ class WorkbenchHandler(BaseHTTPRequestHandler):
                 self.send_json({"style": self.styles.add_draft_reference(filename.rsplit(".", 1)[0], filename, content, content_type)}); return
             if path == "/api/styles/draft/lock":
                 self.send_json({"style": self.styles.lock_draft()}); return
-            match = re.fullmatch(r"/api/production/([^/]+)/(retry|try-another|render|approve|bundle|accept)", path)
+            match = re.fullmatch(r"/api/production/([^/]+)/(retry|try-another|preview|render|approve|bundle|accept)", path)
             if match:
                 batch_id, action = match.groups(); payload = self._json()
                 if action == "retry": result = {"batch": self.manager.retry_failed(batch_id, consent=bool(payload.get("consent")))}
                 elif action == "try-another": result = {"batch": self.manager.try_another(batch_id, str(payload.get("source_id") or ""), consent=bool(payload.get("consent")))}
+                elif action == "preview": result = {"preview": self.manager.preview_render(batch_id, str(payload.get("item_id") or ""), dict(payload.get("framing") or {}), str(payload.get("palette_mode") or "") or None, str(payload.get("background_id") or "") or None)}
                 elif action == "render": result = {"batch": self.manager.rerender(batch_id, str(payload.get("item_id") or ""), dict(payload.get("framing") or {}), str(payload.get("palette_mode") or "") or None, str(payload.get("background_id") or "") or None)}
                 elif action == "accept": result = {"batch": self.manager.accept_candidate(batch_id, str(payload.get("item_id") or ""))}
                 elif action == "approve": result = {"approval": self.manager.approve(batch_id, str(payload.get("item_id") or ""))}

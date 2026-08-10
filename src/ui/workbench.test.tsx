@@ -158,7 +158,8 @@ describe("pipeline workbench", () => {
     expect(container.textContent).toContain("Warm parchment");
     expect(container.querySelector('img[alt="Candidate card"]')?.getAttribute("src")).toBe("/card.png");
     expect(container.textContent).toContain("Adaptive · 10 anchors + 22 image colours");
-    expect(container.textContent).toContain("Save composite · no generation");
+    expect(container.textContent).toContain("Preview changes");
+    expect(container.textContent).toContain("Save changes");
     expect(container.textContent).toContain("Save to Collection");
   });
 
@@ -169,6 +170,18 @@ describe("pipeline workbench", () => {
     expect(container.textContent).toContain("Foreground unavailable");
     expect(container.textContent).toContain("Composite unavailable");
     expect(container.textContent).toContain("Card unavailable");
+  });
+
+  it("previews candidate edits without saving them", async () => {
+    const card = produced({ foreground_url: "/foreground.png", background_id: "warm-parchment" });
+    vi.spyOn(api, "bootstrap").mockResolvedValue({ ...base, cards: [card] } as never);
+    vi.spyOn(api, "previewFraming").mockResolvedValue({ preview: { ...card, master_url: "/preview-composite.png", card_url: "/preview-card.png" } } as never);
+    await act(async () => { window.location.hash = "#candidates/batch-1/item-1"; root.render(<App />); });
+    const preview = [...container.querySelectorAll("button")].find((button) => button.textContent === "Preview changes");
+    await act(async () => preview?.dispatchEvent(new MouseEvent("click", { bubbles: true })));
+    expect(api.previewFraming).toHaveBeenCalled();
+    expect(container.querySelector('img[alt="Candidate card"]')?.getAttribute("src")).toBe("/preview-card.png");
+    expect(container.textContent).toContain("Preview card · unsaved");
   });
 
   it("starts candidate inspection from the accepted Input", async () => {

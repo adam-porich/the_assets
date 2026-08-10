@@ -301,6 +301,26 @@ def test_framing_rerenders_without_generation_and_approval_is_revisioned(tmp_pat
     manager.approve(batch["batch_id"], production_item["item_id"])
 
 
+def test_render_preview_does_not_change_stored_candidate(tmp_path: Path) -> None:
+    store = WorkspaceStore(tmp_path / "library")
+    styles = StyleStore(store)
+    style = styles.ensure_initial()
+    item_source = source(store)
+    manager = CardProductionManager(store, styles, lambda mode, capabilities: FakeGenerationAdapter(capabilities))
+    model = {**live_model(), "id": style["generation"]["model_id"]}
+    batch = wait_for(manager, manager.create([item_source["id"]], style, [model], consent=True)["batch_id"])
+    item = batch["items"][0]
+
+    preview = manager.preview_render(batch["batch_id"], item["item_id"], {"zoom": 1.2, "offset_x": 0.1, "offset_y": 0}, "fixed-house", "cool-slate")
+    stored = manager.get(batch["batch_id"])["items"][0]
+
+    assert preview["card_url"] != item["card_url"]
+    assert preview["background_id"] == "cool-slate"
+    assert stored["render_revision"] == item["render_revision"] == 1
+    assert stored["card_checksum_sha256"] == item["card_checksum_sha256"]
+    assert stored["background_id"] == item["background_id"] == "warm-parchment"
+
+
 def test_style_validation_rejects_target_only_and_bad_dimensions() -> None:
     style = load_checked_in_style()
     bad = {**style, "reference_pack": {**style["reference_pack"], "assets": [asset for asset in style["reference_pack"]["assets"] if asset["role"] == "target-example"]}}

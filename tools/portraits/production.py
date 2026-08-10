@@ -449,6 +449,20 @@ class CardProductionManager:
         self._render_item(record, item, resolved, palette_mode, background_id); item["status"] = "ready"; item["updated_at"] = now_iso(); self._write(record)
         return self.payload(record)
 
+    def preview_render(self, batch_id: str, item_id: str, framing: dict[str, float] | None, palette_mode: str | None = None, background_id: str | None = None) -> dict[str, Any]:
+        """Render an experiment without changing the stored candidate or its revision history."""
+        record = self._read(batch_id)
+        item_index = next((index for index, candidate in enumerate(record["items"]) if candidate.get("item_id") == item_id), None)
+        if item_index is None or record["items"][item_index].get("status") != "ready":
+            raise ValueError("only a ready card can be previewed")
+        preview_record = copy.deepcopy(record)
+        preview_record["batch_id"] = f"{batch_id}-preview"
+        preview_item = preview_record["items"][item_index]
+        style = preview_record["style_snapshot"]
+        resolved = {**style["composition"]["default_framing"], **(framing or {})}
+        self._render_item(preview_record, preview_item, resolved, palette_mode, background_id)
+        return self.payload(preview_record)["items"][item_index]
+
     def _approval_data(self) -> dict[str, Any]:
         return self.store.read_json(self.store.root / "approvals" / "approvals.json", {"version": 1, "history": [], "current": {}})
 
