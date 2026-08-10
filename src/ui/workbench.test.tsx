@@ -152,13 +152,23 @@ describe("pipeline workbench", () => {
     vi.spyOn(api, "bootstrap").mockResolvedValue({ ...base, cards: [produced({ foreground_url: "/foreground.png", background_id: "warm-parchment" })] } as never);
     await act(async () => { window.location.hash = "#candidates/batch-1/item-1"; root.render(<App />); });
     expect(container.textContent).toContain("Candidate details");
+    expect(container.querySelector('[role="dialog"][aria-modal="true"]')).toBeTruthy();
     expect(container.textContent).toContain("Foreground");
-    expect(container.textContent).toContain("Composite");
+    expect(container.textContent).toContain("Background composite");
     expect(container.textContent).toContain("Warm parchment");
-    expect(container.textContent).toContain("Rendered art");
+    expect(container.querySelector('img[alt="Candidate card"]')?.getAttribute("src")).toBe("/card.png");
     expect(container.textContent).toContain("Adaptive · 10 anchors + 22 image colours");
     expect(container.textContent).toContain("Save composite · no generation");
     expect(container.textContent).toContain("Save to Collection");
+  });
+
+  it("shows graceful placeholders for legacy candidate artifacts", async () => {
+    vi.spyOn(api, "bootstrap").mockResolvedValue({ ...base, cards: [produced({ source_url: undefined, foreground_url: undefined, master_url: undefined, card_url: undefined })] } as never);
+    await act(async () => { window.location.hash = "#candidates/batch-1/item-1"; root.render(<App />); });
+    expect(container.textContent).toContain("Input unavailable");
+    expect(container.textContent).toContain("Foreground unavailable");
+    expect(container.textContent).toContain("Composite unavailable");
+    expect(container.textContent).toContain("Card unavailable");
   });
 
   it("starts candidate inspection from the accepted Input", async () => {

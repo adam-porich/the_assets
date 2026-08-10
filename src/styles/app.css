@@ -202,7 +202,7 @@ summary { cursor: pointer; color: #cdb98e; }
 .pipeline-choice:hover { border-color: #d09242; background: #3a2a1e; }
 .pipeline-choice span { font-size: 12px; font-weight: 700; }
 .pipeline-choice small { color: #a99a89; font-size: 9px; }
-.result-inspector { margin-top: 20px; padding: 20px; scroll-margin-top: 20px; }
+.result-inspector { padding: 22px; }
 .result-inspector .panel-heading p:not(.eyebrow) { color: #a99c90; margin: 5px 0 0; }
 .asset-stages { display: flex; align-items: center; gap: 8px; padding: 18px; background: #181412; border: 1px solid #45372d; }
 .asset-stages figure { flex: 1; min-width: 0; margin: 0; }
