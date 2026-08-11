@@ -1,0 +1,211 @@
+{
+  "$schema": "https://raw.githubusercontent.com/adam-porich/the_assets/master/schemas/asset-v1.schema.json",
+  "adoption": {
+    "adopted_at": "2026-08-11T13:34:10Z",
+    "from_path": "production/batch_af7e3c8b79f1/renders/item_ff92e52203e7-r1-art.png",
+    "runtime_ids": {
+      "artifact": "art",
+      "batch_id": "batch_af7e3c8b79f1",
+      "item_id": "item_ff92e52203e7"
+    }
+  },
+  "description": "Rendered bucket crown hero artwork selected for The Estate Agent.",
+  "file": {
+    "bytes": 16048,
+    "dimensions": {
+      "height": 198,
+      "width": 352
+    },
+    "media_type": "image/png",
+    "path": "source.png",
+    "sha256": "b32163361e82129d104c42f64f23217cbd5f6462ac15af4a7ca4d78e581ca077"
+  },
+  "id": "estate-agent-article-bucket-crown",
+  "provenance": {
+    "created_at": "2026-08-11T12:05:51Z",
+    "derivation": {
+      "inputs": [
+        {
+          "role": "composite",
+          "runtime_id": "item_ff92e52203e7:composite",
+          "sha256": "b1effebacf95dc853845cb9b594db1e86a08cecaa6ebe1e9d5777917453d1ce5",
+          "source_path": "production/batch_af7e3c8b79f1/renders/item_ff92e52203e7-r1-composite.png"
+        }
+      ],
+      "parameters": {
+        "framing": {
+          "offset_x": 0.0,
+          "offset_y": 0.0,
+          "zoom": 1.0
+        },
+        "palette_mode": "adaptive-hybrid",
+        "render_metadata": {
+          "artwork_kind": "rendered-art",
+          "background_palette": [
+            "#ccbb88",
+            "#bbaa77",
+            "#bb9977",
+            "#ccaa88",
+            "#887755",
+            "#998866",
+            "#776644",
+            "#886644",
+            "#aa8866",
+            "#aa9977",
+            "#997755",
+            "#aa9966",
+            "#998855",
+            "#665533"
+          ],
+          "centering": [
+            0.5,
+            0.44
+          ],
+          "dither": {
+            "edge_threshold": 0.09,
+            "matrix": "bayer-4x4",
+            "strength": 0.62
+          },
+          "driver_id": "amiga-ocs",
+          "foreground_palette": [
+            "#111111",
+            "#221111",
+            "#888866",
+            "#222233",
+            "#666644",
+            "#112211",
+            "#443322",
+            "#554422",
+            "#000000",
+            "#444422",
+            "#333322",
+            "#222211",
+            "#445533",
+            "#223322",
+            "#996633",
+            "#555533",
+            "#eeddcc",
+            "#ffeedd",
+            "#777755",
+            "#cc9933",
+            "#eeddaa",
+            "#999966",
+            "#994433",
+            "#334433",
+            "#bbaa77",
+            "#885522",
+            "#553311",
+            "#332211",
+            "#556633",
+            "#998844",
+            "#884411",
+            "#776633"
+          ],
+          "framing": {
+            "requested": {
+              "offset_x": 0.0,
+              "offset_y": 0.0,
+              "zoom": 1.0
+            },
+            "resolved": {
+              "offset_x": 0.0,
+              "offset_y": 0.0,
+              "zoom": 1.0
+            }
+          },
+          "logical_art_size": [
+            176,
+            99
+          ],
+          "output_art_size": [
+            352,
+            198
+          ],
+          "output_scale": 2,
+          "palette_colours_used": 617,
+          "palette_limit": 48,
+          "palette_mode": "layered-adaptive",
+          "palette_space": "Amiga OCS 12-bit RGB",
+          "renderer_driver_version": 3,
+          "resolved_palette": [
+            "#111111",
+            "#221111",
+            "#888866",
+            "#222233",
+            "#666644",
+            "#112211",
+            "#443322",
+            "#554422",
+            "#000000",
+            "#444422",
+            "#333322",
+            "#222211",
+            "#445533",
+            "#223322",
+            "#996633",
+            "#555533",
+            "#eeddcc",
+            "#ffeedd",
+            "#777755",
+            "#cc9933",
+            "#eeddaa",
+            "#999966",
+            "#994433",
+            "#334433",
+            "#bbaa77",
+            "#885522",
+            "#553311",
+            "#332211",
+            "#556633",
+            "#998844",
+            "#884411",
+            "#776633"
+          ],
+          "style_checksum_sha256": "417f5b591cfd1b59219e962b3999c6c46d5a482a07b809aabdb99b70614cb889",
+          "style_id": "amiga-ocs-portrait",
+          "style_version": 13,
+          "style_version_id": "style_face_free_style_board_v13_69d8f07b8e"
+        },
+        "render_revision": 1
+      },
+      "process": "Render and enlarge the logical artwork using the recorded deterministic renderer settings.",
+      "tool": "amiga-ocs"
+    },
+    "generation": {
+      "generator": "openrouter",
+      "inputs": [
+        {
+          "role": "identity",
+          "runtime_id": "input_7440e165a787",
+          "sha256": "2dd6b15d5731a61c5162c63962428ce04e48e7b7f6231fafa86798762551bbae",
+          "source_path": "production/batch_af7e3c8b79f1/inputs/sources/input_7440e165a787.png"
+        },
+        {
+          "role": "generation-reference",
+          "runtime_id": "draft-reference-fccd878e468f",
+          "sha256": "b898df7ab12666bc6f409fddd45fbdd39847c754c02f57c20e1419eae2bc9354",
+          "source_path": "production/batch_af7e3c8b79f1/inputs/references/draft-reference-fccd878e468f.png"
+        }
+      ],
+      "model": "openai/gpt-image-1-mini",
+      "parameters": {
+        "content_direction": "A bucket crown from an underfunded infernal office: preserve the dented grey tin bucket body, crude cut points, rust marks, and absurd raised wire handle. It must remain cheap household metal pretending to be authority, with no jewels or wearer.\n\nActually drop the handle. and emphasize the bucket nature",
+        "effective_aspect_ratio": "1:1",
+        "quality": "medium",
+        "seed": 1839315882
+      },
+      "prompt": "Redraw the exact object from input 1 as a vivid, characterful late-1980s fantasy game illustration. Preserve the object category, complete silhouette, materials, colours, and defining details. Use the reference board only for rendering style. Never replace the object with a person, creature, face, or character.\n\nContent direction: A bucket crown from an underfunded infernal office: preserve the dented grey tin bucket body, crude cut points, rust marks, and absurd raised wire handle. It must remain cheap household metal pretending to be authority, with no jewels or wearer.\n\nActually drop the handle. and emphasize the bucket nature\n\nOutput the complete subject, centered and clearly recognizable, on a flat #00ff00 1:1 canvas. Preserve the subject's category and defining details. Leave clear space around it where practical. No scene, floor, cast shadow, text, or unrelated props."
+    },
+    "kind": "derived",
+    "original_filename": "item_ff92e52203e7-r1-art.png",
+    "provider": "openrouter",
+    "status": "complete"
+  },
+  "rights": {
+    "notes": "Generated-output rights must be reviewed against the recorded provider terms before external distribution.",
+    "review_required": true,
+    "status": "unknown"
+  },
+  "schema_version": 1,
+  "title": "Bucket crown"
+}

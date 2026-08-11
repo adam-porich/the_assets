@@ -1,0 +1,211 @@
+{
+  "$schema": "https://raw.githubusercontent.com/adam-porich/the_assets/master/schemas/asset-v1.schema.json",
+  "adoption": {
+    "adopted_at": "2026-08-11T13:34:12Z",
+    "from_path": "production/batch_6b1d9cecae73/renders/item_88d2e3b8a901-r1-art.png",
+    "runtime_ids": {
+      "artifact": "art",
+      "batch_id": "batch_6b1d9cecae73",
+      "item_id": "item_88d2e3b8a901"
+    }
+  },
+  "description": "Rendered audit knife hero artwork selected for The Estate Agent.",
+  "file": {
+    "bytes": 10604,
+    "dimensions": {
+      "height": 198,
+      "width": 352
+    },
+    "media_type": "image/png",
+    "path": "source.png",
+    "sha256": "e3cddbcee349321dcf2cfe610614d38835df0d80adbc97360f28f634c8c18834"
+  },
+  "id": "estate-agent-article-audit-knife",
+  "provenance": {
+    "created_at": "2026-08-11T11:46:12Z",
+    "derivation": {
+      "inputs": [
+        {
+          "role": "composite",
+          "runtime_id": "item_88d2e3b8a901:composite",
+          "sha256": "e4977f598f2935d5d21b6562bb965ab5bdc83ed0b0a83d33bc0a6dd69091b3e3",
+          "source_path": "production/batch_6b1d9cecae73/renders/item_88d2e3b8a901-r1-composite.png"
+        }
+      ],
+      "parameters": {
+        "framing": {
+          "offset_x": 0.0,
+          "offset_y": 0.0,
+          "zoom": 1.0
+        },
+        "palette_mode": "adaptive-hybrid",
+        "render_metadata": {
+          "artwork_kind": "rendered-art",
+          "background_palette": [
+            "#ccbb88",
+            "#bbaa77",
+            "#bb9977",
+            "#ccaa88",
+            "#887755",
+            "#998866",
+            "#776644",
+            "#886644",
+            "#aa8866",
+            "#aa9977",
+            "#997755",
+            "#aa9966",
+            "#998855",
+            "#665533"
+          ],
+          "centering": [
+            0.5,
+            0.44
+          ],
+          "dither": {
+            "edge_threshold": 0.09,
+            "matrix": "bayer-4x4",
+            "strength": 0.62
+          },
+          "driver_id": "amiga-ocs",
+          "foreground_palette": [
+            "#111111",
+            "#221111",
+            "#000000",
+            "#222233",
+            "#333333",
+            "#771111",
+            "#443322",
+            "#554422",
+            "#998855",
+            "#112222",
+            "#550000",
+            "#991111",
+            "#001111",
+            "#775544",
+            "#220000",
+            "#223333",
+            "#eeddcc",
+            "#ffeedd",
+            "#440000",
+            "#cc9933",
+            "#eeddaa",
+            "#554444",
+            "#994433",
+            "#661111",
+            "#222222",
+            "#330000",
+            "#444433",
+            "#443333",
+            "#661100",
+            "#000011",
+            "#110000",
+            "#442222"
+          ],
+          "framing": {
+            "requested": {
+              "offset_x": 0.0,
+              "offset_y": 0.0,
+              "zoom": 1.0
+            },
+            "resolved": {
+              "offset_x": 0.0,
+              "offset_y": 0.0,
+              "zoom": 1.0
+            }
+          },
+          "logical_art_size": [
+            176,
+            99
+          ],
+          "output_art_size": [
+            352,
+            198
+          ],
+          "output_scale": 2,
+          "palette_colours_used": 669,
+          "palette_limit": 48,
+          "palette_mode": "layered-adaptive",
+          "palette_space": "Amiga OCS 12-bit RGB",
+          "renderer_driver_version": 3,
+          "resolved_palette": [
+            "#111111",
+            "#221111",
+            "#000000",
+            "#222233",
+            "#333333",
+            "#771111",
+            "#443322",
+            "#554422",
+            "#998855",
+            "#112222",
+            "#550000",
+            "#991111",
+            "#001111",
+            "#775544",
+            "#220000",
+            "#223333",
+            "#eeddcc",
+            "#ffeedd",
+            "#440000",
+            "#cc9933",
+            "#eeddaa",
+            "#554444",
+            "#994433",
+            "#661111",
+            "#222222",
+            "#330000",
+            "#444433",
+            "#443333",
+            "#661100",
+            "#000011",
+            "#110000",
+            "#442222"
+          ],
+          "style_checksum_sha256": "417f5b591cfd1b59219e962b3999c6c46d5a482a07b809aabdb99b70614cb889",
+          "style_id": "amiga-ocs-portrait",
+          "style_version": 13,
+          "style_version_id": "style_face_free_style_board_v13_69d8f07b8e"
+        },
+        "render_revision": 1
+      },
+      "process": "Render and enlarge the logical artwork using the recorded deterministic renderer settings.",
+      "tool": "amiga-ocs"
+    },
+    "generation": {
+      "generator": "openrouter",
+      "inputs": [
+        {
+          "role": "identity",
+          "runtime_id": "input_08da849cb9f0",
+          "sha256": "a670f6867ce1319254deb9bd526bada80b619271038ed489881da22bdd901b7f",
+          "source_path": "production/batch_6b1d9cecae73/inputs/sources/input_08da849cb9f0.png"
+        },
+        {
+          "role": "generation-reference",
+          "runtime_id": "draft-reference-fccd878e468f",
+          "sha256": "b898df7ab12666bc6f409fddd45fbdd39847c754c02f57c20e1419eae2bc9354",
+          "source_path": "production/batch_6b1d9cecae73/inputs/references/draft-reference-fccd878e468f.png"
+        }
+      ],
+      "model": "openai/gpt-image-1-mini",
+      "parameters": {
+        "content_direction": "An audit knife from a procedural Hell: preserve the complete dark letter-opening blade, black handle, and deep red sealing cord. Make it severe and bureaucratic, not bloody or combat-worn.",
+        "effective_aspect_ratio": "1:1",
+        "quality": "medium",
+        "seed": 1585596533
+      },
+      "prompt": "Redraw the exact object from input 1 as a vivid, characterful late-1980s fantasy game illustration. Preserve the object category, complete silhouette, materials, colours, and defining details. Use the reference board only for rendering style. Never replace the object with a person, creature, face, or character.\n\nContent direction: An audit knife from a procedural Hell: preserve the complete dark letter-opening blade, black handle, and deep red sealing cord. Make it severe and bureaucratic, not bloody or combat-worn.\n\nOutput the complete subject, centered and clearly recognizable, on a flat #00ff00 1:1 canvas. Preserve the subject's category and defining details. Leave clear space around it where practical. No scene, floor, cast shadow, text, or unrelated props."
+    },
+    "kind": "derived",
+    "original_filename": "item_88d2e3b8a901-r1-art.png",
+    "provider": "openrouter",
+    "status": "complete"
+  },
+  "rights": {
+    "notes": "Generated-output rights must be reviewed against the recorded provider terms before external distribution.",
+    "review_required": true,
+    "status": "unknown"
+  },
+  "schema_version": 1,
+  "title": "Audit knife"
+}

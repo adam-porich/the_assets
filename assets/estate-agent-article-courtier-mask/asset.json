@@ -1,0 +1,211 @@
+{
+  "$schema": "https://raw.githubusercontent.com/adam-porich/the_assets/master/schemas/asset-v1.schema.json",
+  "adoption": {
+    "adopted_at": "2026-08-11T13:34:13Z",
+    "from_path": "production/batch_436a007fb386/renders/item_80d43257142f-r1-art.png",
+    "runtime_ids": {
+      "artifact": "art",
+      "batch_id": "batch_436a007fb386",
+      "item_id": "item_80d43257142f"
+    }
+  },
+  "description": "Rendered courtier mask hero artwork selected for The Estate Agent.",
+  "file": {
+    "bytes": 15603,
+    "dimensions": {
+      "height": 198,
+      "width": 352
+    },
+    "media_type": "image/png",
+    "path": "source.png",
+    "sha256": "74dd249477ad921cf8b0f9803d7a1437b38c47e054437e2f78c5f647cffe97ee"
+  },
+  "id": "estate-agent-article-courtier-mask",
+  "provenance": {
+    "created_at": "2026-08-11T11:15:01Z",
+    "derivation": {
+      "inputs": [
+        {
+          "role": "composite",
+          "runtime_id": "item_80d43257142f:composite",
+          "sha256": "8bb1b7cc16ca5b0e9d7a82514f093152358080665d018a361aa284b2ee724f4c",
+          "source_path": "production/batch_436a007fb386/renders/item_80d43257142f-r1-composite.png"
+        }
+      ],
+      "parameters": {
+        "framing": {
+          "offset_x": 0.0,
+          "offset_y": 0.0,
+          "zoom": 1.0
+        },
+        "palette_mode": "adaptive-hybrid",
+        "render_metadata": {
+          "artwork_kind": "rendered-art",
+          "background_palette": [
+            "#ccbb88",
+            "#bbaa77",
+            "#bb9977",
+            "#ccaa88",
+            "#887755",
+            "#998866",
+            "#776644",
+            "#886644",
+            "#aa8866",
+            "#aa9977",
+            "#997755",
+            "#aa9966",
+            "#998855",
+            "#665533"
+          ],
+          "centering": [
+            0.5,
+            0.44
+          ],
+          "dither": {
+            "edge_threshold": 0.09,
+            "matrix": "bayer-4x4",
+            "strength": 0.62
+          },
+          "driver_id": "amiga-ocs",
+          "foreground_palette": [
+            "#111111",
+            "#221111",
+            "#bb6611",
+            "#222233",
+            "#000000",
+            "#ffbb33",
+            "#443322",
+            "#554422",
+            "#ffdd44",
+            "#eeaa22",
+            "#332211",
+            "#cc7711",
+            "#995511",
+            "#553311",
+            "#774411",
+            "#aa6611",
+            "#eeddcc",
+            "#ffeedd",
+            "#ffcc33",
+            "#cc9933",
+            "#eeddaa",
+            "#112222",
+            "#994433",
+            "#dd8822",
+            "#885511",
+            "#ffcc44",
+            "#ffee66",
+            "#bb7711",
+            "#ffdd55",
+            "#664411",
+            "#443311",
+            "#dd7711"
+          ],
+          "framing": {
+            "requested": {
+              "offset_x": 0.0,
+              "offset_y": 0.0,
+              "zoom": 1.0
+            },
+            "resolved": {
+              "offset_x": 0.0,
+              "offset_y": 0.0,
+              "zoom": 1.0
+            }
+          },
+          "logical_art_size": [
+            176,
+            99
+          ],
+          "output_art_size": [
+            352,
+            198
+          ],
+          "output_scale": 2,
+          "palette_colours_used": 729,
+          "palette_limit": 48,
+          "palette_mode": "layered-adaptive",
+          "palette_space": "Amiga OCS 12-bit RGB",
+          "renderer_driver_version": 3,
+          "resolved_palette": [
+            "#111111",
+            "#221111",
+            "#bb6611",
+            "#222233",
+            "#000000",
+            "#ffbb33",
+            "#443322",
+            "#554422",
+            "#ffdd44",
+            "#eeaa22",
+            "#332211",
+            "#cc7711",
+            "#995511",
+            "#553311",
+            "#774411",
+            "#aa6611",
+            "#eeddcc",
+            "#ffeedd",
+            "#ffcc33",
+            "#cc9933",
+            "#eeddaa",
+            "#112222",
+            "#994433",
+            "#dd8822",
+            "#885511",
+            "#ffcc44",
+            "#ffee66",
+            "#bb7711",
+            "#ffdd55",
+            "#664411",
+            "#443311",
+            "#dd7711"
+          ],
+          "style_checksum_sha256": "417f5b591cfd1b59219e962b3999c6c46d5a482a07b809aabdb99b70614cb889",
+          "style_id": "amiga-ocs-portrait",
+          "style_version": 13,
+          "style_version_id": "style_face_free_style_board_v13_69d8f07b8e"
+        },
+        "render_revision": 1
+      },
+      "process": "Render and enlarge the logical artwork using the recorded deterministic renderer settings.",
+      "tool": "amiga-ocs"
+    },
+    "generation": {
+      "generator": "openrouter",
+      "inputs": [
+        {
+          "role": "identity",
+          "runtime_id": "input_a24a5efdf0f3",
+          "sha256": "04d9ecb2470d9267a3216c6d2ca21a6974eb4c45cc2d4fa0e3657afb4cc54b41",
+          "source_path": "production/batch_436a007fb386/inputs/sources/input_a24a5efdf0f3.png"
+        },
+        {
+          "role": "generation-reference",
+          "runtime_id": "draft-reference-fccd878e468f",
+          "sha256": "b898df7ab12666bc6f409fddd45fbdd39847c754c02f57c20e1419eae2bc9354",
+          "source_path": "production/batch_436a007fb386/inputs/references/draft-reference-fccd878e468f.png"
+        }
+      ],
+      "model": "openai/gpt-image-1-mini",
+      "parameters": {
+        "content_direction": "An empty ceremonial courtier mask in an estate inventory: preserve hollow black eye openings, ivory-gold surface, coiled side ornaments, red jewel, and loose black ties. It is an unworn object, not a living face or person.",
+        "effective_aspect_ratio": "1:1",
+        "quality": "medium",
+        "seed": 590741737
+      },
+      "prompt": "Redraw the exact object from input 1 as a vivid, characterful late-1980s fantasy game illustration. Preserve the object category, silhouette, materials, colours, and defining details. Use the reference board only for rendering style. Never replace the object with a person, creature, face, or character.\n\nContent direction: An empty ceremonial courtier mask in an estate inventory: preserve hollow black eye openings, ivory-gold surface, coiled side ornaments, red jewel, and loose black ties. It is an unworn object, not a living face or person.\n\nOutput the complete subject, centered and clearly recognizable, on a flat #00ff00 1:1 canvas. Preserve the subject's category and defining details. Leave clear space around it where practical. No scene, floor, cast shadow, text, or unrelated props."
+    },
+    "kind": "derived",
+    "original_filename": "item_80d43257142f-r1-art.png",
+    "provider": "openrouter",
+    "status": "complete"
+  },
+  "rights": {
+    "notes": "Generated-output rights must be reviewed against the recorded provider terms before external distribution.",
+    "review_required": true,
+    "status": "unknown"
+  },
+  "schema_version": 1,
+  "title": "Courtier mask"
+}
