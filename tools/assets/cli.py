@@ -4,11 +4,15 @@ import argparse
 import hashlib
 import json
 import mimetypes
+import shutil
+import sys
 from pathlib import Path
 from typing import Any, Iterable
 
 from jsonschema import Draft202012Validator, FormatChecker
 from PIL import Image
+
+from .production import ARTIFACT_FIELDS, adopt_production_asset, catalog
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -109,34 +113,79 @@ def validate_assets(paths: Iterable[str] = ()) -> list[str]:
 
     for asset_id, (manifest, record) in records.items():
         provenance = record.get("provenance") or {}
-        lineage = provenance.get("generation") or provenance.get("derivation") or {}
-        for index, item in enumerate(lineage.get("inputs") or []):
-            target_id = item.get("asset_id")
-            if target_id not in records:
-                errors.append(f"{_label(manifest)}: lineage input {index} refers to unknown asset {target_id!r}")
-                continue
-            expected = records[target_id][1].get("file", {}).get("sha256")
-            if item.get("sha256") != expected:
-                errors.append(f"{_label(manifest)}: lineage input {index} checksum does not match {target_id!r}")
-        if asset_id in {item.get("asset_id") for item in lineage.get("inputs") or []}:
-            errors.append(f"{_label(manifest)}: asset cannot list itself as a lineage input")
+        for lineage_name in ("generation", "derivation"):
+            lineage = provenance.get(lineage_name) or {}
+            for index, item in enumerate(lineage.get("inputs") or []):
+                target_id = item.get("asset_id")
+                if not target_id:
+                    continue
+                if target_id not in records:
+                    errors.append(f"{_label(manifest)}: {lineage_name} input {index} refers to unknown asset {target_id!r}")
+                    continue
+                expected = records[target_id][1].get("file", {}).get("sha256")
+                if item.get("sha256") != expected:
+                    errors.append(f"{_label(manifest)}: {lineage_name} input {index} checksum does not match {target_id!r}")
+            if asset_id in {item.get("asset_id") for item in lineage.get("inputs") or [] if item.get("asset_id")}:
+                errors.append(f"{_label(manifest)}: asset cannot list itself as a {lineage_name} input")
     return errors
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="Validate canonical adopted assets")
+    parser = argparse.ArgumentParser(description="Discover, adopt, and validate canonical assets")
     subparsers = parser.add_subparsers(dest="command", required=True)
     validate = subparsers.add_parser("validate", help="validate manifests, source files, and lineage")
     validate.add_argument("paths", nargs="*", help="asset.json files or asset directories; defaults to all assets")
+    inventory = subparsers.add_parser("catalog", help="list generated workbench items and their available artifacts")
+    inventory.add_argument("--library", type=Path, default=Path("portrait-library"), help="workbench library directory")
+    inventory.add_argument("--favorites", action="store_true", help="show only items in Collection")
+    inventory.add_argument("--json", action="store_true", help="emit machine-readable JSON")
+    adopt = subparsers.add_parser("adopt-production", help="promote one workbench artifact into a canonical asset folder")
+    adopt.add_argument("--library", type=Path, default=Path("portrait-library"), help="workbench library directory")
+    adopt.add_argument("--output-root", type=Path, default=Path("assets"), help="destination containing canonical asset directories")
+    adopt.add_argument("--batch", required=True, help="production batch ID")
+    adopt.add_argument("--item", required=True, help="production item ID")
+    adopt.add_argument("--artifact", required=True, choices=sorted(ARTIFACT_FIELDS), help="artifact representation to adopt")
+    adopt.add_argument("--id", required=True, help="stable lowercase kebab-case canonical asset ID")
+    adopt.add_argument("--title", required=True, help="human-readable asset title")
+    adopt.add_argument("--description", required=True, help="why this exact artifact is being retained")
     return parser
 
 
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
-    errors = validate_assets(args.paths)
-    if errors:
-        for error in errors:
-            print(f"ERROR: {error}")
+    try:
+        if args.command == "catalog":
+            records = catalog(args.library, favorites_only=args.favorites)
+            if args.json:
+                print(json.dumps(records, indent=2, sort_keys=True))
+            else:
+                for record in records:
+                    flags = ", ".join(flag for flag, enabled in (("favorite", record["favorite"]), ("accepted", record["accepted"])) if enabled) or "uncurated"
+                    print(f"{record['batch_id']} {record['item_id']} [{flags}]")
+                    print(f"  source: {record.get('source_label') or '-'}")
+                    print(f"  direction: {record.get('content_direction') or '-'}")
+                    print(f"  artifacts: {', '.join(sorted(record['artifacts']))}")
+            print(f"Found {len(records)} production items", file=sys.stderr if args.json else sys.stdout)
+            return 0
+        if args.command == "adopt-production":
+            destination = adopt_production_asset(
+                args.library, args.output_root,
+                batch_id=args.batch, item_id=args.item, artifact=args.artifact,
+                asset_id=args.id, title=args.title, description=args.description,
+            )
+            errors = validate_assets([str(destination)])
+            if errors:
+                shutil.rmtree(destination, ignore_errors=True)
+                raise ValueError("generated manifest failed validation:\n" + "\n".join(errors))
+            print(f"Adopted {args.id} at {destination}")
+            return 0
+        errors = validate_assets(args.paths)
+        if errors:
+            for error in errors:
+                print(f"ERROR: {error}")
+            return 1
+        print(f"Validated {len(discover_manifests(args.paths))} canonical assets")
+        return 0
+    except ValueError as exc:
+        print(f"ERROR: {exc}")
         return 1
-    print(f"Validated {len(discover_manifests(args.paths))} canonical assets")
-    return 0

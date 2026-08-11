@@ -31,6 +31,50 @@ When asked to adopt an asset:
 
 Never invent missing provenance. Use `status: "incomplete"` when some history is known or `status: "unknown"` when it is not. Unknown rights are permitted for internal work only when visibly marked for review.
 
+## Adopting Asset Workbench output
+
+The ignored `portrait-library/` is the working catalog. Start with Collection because favorites are the current human-curated candidates:
+
+```bash
+uv run python -m tools.assets catalog --favorites
+```
+
+This inventory is machine-local because `portrait-library/` is intentionally not stored in Git. If the command reports that the production catalog is unavailable, the agent needs access to the Asset Workbench machine or an already adopted canonical asset; it must not regenerate a substitute silently.
+
+Use `--json` when selecting programmatically. Each result supplies the stable batch and item IDs, content direction, source label, and available representations.
+
+| Artifact | What it contains | Typical use |
+| --- | --- | --- |
+| `source-input` | Accepted normalized Input snapshot | Regeneration or identity reference |
+| `generated` | Raw model output, normally on a chroma-key field | Generation audit or reprocessing |
+| `foreground` | Full-resolution extracted alpha foreground | New layouts or renderers |
+| `composite` | Full-resolution foreground plus deterministic background | Alternate downstream processing |
+| `logical-art` | Native logical-pixel artwork | Exact low-resolution data |
+| `art` | Integer-enlarged rendered artwork without card chrome | Recommended for another game's own UI or card frame |
+| `card` | Complete assembled card image | Use only when the baked Asset Workbench frame is wanted |
+
+Promote the selected representation with its workbench provenance:
+
+```bash
+uv run python -m tools.assets adopt-production \
+  --batch batch_91a4df48e70a \
+  --item item_43a94789d906 \
+  --artifact art \
+  --id friendly-wizard-portrait \
+  --title "Friendly wizard portrait" \
+  --description "Rendered claimant artwork selected for The Estate Agent."
+```
+
+The command refuses to overwrite an existing asset, copies the exact bytes into `assets/<id>/`, reconstructs generation and deterministic-render provenance from `batch.json`, and validates the result. It makes no provider call.
+
+To consume the result from another repository such as `the_estate_agent`, copy the whole canonical folder—not only the PNG—into that repository's chosen asset location and then update its application references. The portable manifest keeps the source-repository batch/item IDs and can still be checked from this repository:
+
+```bash
+uv run python -m tools.assets validate /home/gimo/dev/the_estate_agent/<asset-directory>/<id>
+```
+
+Selection is intentionally separate from adoption: an agent may inventory and inspect anything without writing files, but must be told which candidate and representation are relevant to the consuming product.
+
 ## Complete generated example
 
 ```json

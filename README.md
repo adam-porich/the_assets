@@ -22,6 +22,21 @@ the canonical `asset.json` plus `source.<ext>` contract documented in
 [docs/asset-adoption.md](docs/asset-adoption.md). Validate them with
 `uv run python -m tools.assets validate`.
 
+### For agents adopting generated work
+
+List the current human-curated Collection, including every available artifact
+representation and its stable batch/item IDs:
+
+```bash
+uv run python -m tools.assets catalog --favorites
+```
+
+Then follow the [workbench adoption procedure](docs/asset-adoption.md#adopting-asset-workbench-output)
+to promote the chosen `foreground`, `art`, `card`, or other representation with
+its full generation lineage. For `the_estate_agent`, `art` is the normal choice
+when its own UI supplies the frame; copy the resulting complete asset folder so
+the provenance manifest travels with the image.
+
 ## Workflow
 
 ### Inputs
