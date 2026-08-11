@@ -1,0 +1,211 @@
+{
+  "$schema": "https://raw.githubusercontent.com/adam-porich/the_assets/master/schemas/asset-v1.schema.json",
+  "adoption": {
+    "adopted_at": "2026-08-11T15:06:16Z",
+    "from_path": "production/batch_cb292486a30d/renders/item_2f8c52ab0239-r1-art.png",
+    "runtime_ids": {
+      "artifact": "art",
+      "batch_id": "batch_cb292486a30d",
+      "item_id": "item_2f8c52ab0239"
+    }
+  },
+  "description": "Rendered Seizure Clause hero artwork selected for The Estate Agent.",
+  "file": {
+    "bytes": 11515,
+    "dimensions": {
+      "height": 198,
+      "width": 352
+    },
+    "media_type": "image/png",
+    "path": "source.png",
+    "sha256": "06aa533b238672823b9c6c300eb1aef82d40a1224c695fbbf2940490476d97df"
+  },
+  "id": "estate-agent-article-seizure-clause",
+  "provenance": {
+    "created_at": "2026-08-11T14:48:41Z",
+    "derivation": {
+      "inputs": [
+        {
+          "role": "composite",
+          "runtime_id": "item_2f8c52ab0239:composite",
+          "sha256": "b4789250cd9a0b2cd2ca4266932b4d22f0677c56288a81efa5a37c50fe4e239f",
+          "source_path": "production/batch_cb292486a30d/renders/item_2f8c52ab0239-r1-composite.png"
+        }
+      ],
+      "parameters": {
+        "framing": {
+          "offset_x": 0.0,
+          "offset_y": 0.0,
+          "zoom": 1.0
+        },
+        "palette_mode": "adaptive-hybrid",
+        "render_metadata": {
+          "artwork_kind": "rendered-art",
+          "background_palette": [
+            "#ccbb88",
+            "#bbaa77",
+            "#bb9977",
+            "#ccaa88",
+            "#887755",
+            "#998866",
+            "#776644",
+            "#886644",
+            "#aa8866",
+            "#aa9977",
+            "#997755",
+            "#aa9966",
+            "#998855",
+            "#665533"
+          ],
+          "centering": [
+            0.5,
+            0.44
+          ],
+          "dither": {
+            "edge_threshold": 0.09,
+            "matrix": "bayer-4x4",
+            "strength": 0.62
+          },
+          "driver_id": "amiga-ocs",
+          "foreground_palette": [
+            "#111111",
+            "#221111",
+            "#ffdd77",
+            "#222233",
+            "#eebb55",
+            "#ffdd88",
+            "#443322",
+            "#554422",
+            "#ffcc66",
+            "#997722",
+            "#990000",
+            "#eeaa44",
+            "#dd7722",
+            "#bb0000",
+            "#eeaa33",
+            "#aa0000",
+            "#eeddcc",
+            "#ffeedd",
+            "#ffcc77",
+            "#cc9933",
+            "#eeddaa",
+            "#bb8844",
+            "#994433",
+            "#550000",
+            "#ee9922",
+            "#eecc66",
+            "#ddbb66",
+            "#cc9955",
+            "#ffee88",
+            "#eebb44",
+            "#eecc55",
+            "#332211"
+          ],
+          "framing": {
+            "requested": {
+              "offset_x": 0.0,
+              "offset_y": 0.0,
+              "zoom": 1.0
+            },
+            "resolved": {
+              "offset_x": 0.0,
+              "offset_y": 0.0,
+              "zoom": 1.0
+            }
+          },
+          "logical_art_size": [
+            176,
+            99
+          ],
+          "output_art_size": [
+            352,
+            198
+          ],
+          "output_scale": 2,
+          "palette_colours_used": 516,
+          "palette_limit": 48,
+          "palette_mode": "layered-adaptive",
+          "palette_space": "Amiga OCS 12-bit RGB",
+          "renderer_driver_version": 3,
+          "resolved_palette": [
+            "#111111",
+            "#221111",
+            "#ffdd77",
+            "#222233",
+            "#eebb55",
+            "#ffdd88",
+            "#443322",
+            "#554422",
+            "#ffcc66",
+            "#997722",
+            "#990000",
+            "#eeaa44",
+            "#dd7722",
+            "#bb0000",
+            "#eeaa33",
+            "#aa0000",
+            "#eeddcc",
+            "#ffeedd",
+            "#ffcc77",
+            "#cc9933",
+            "#eeddaa",
+            "#bb8844",
+            "#994433",
+            "#550000",
+            "#ee9922",
+            "#eecc66",
+            "#ddbb66",
+            "#cc9955",
+            "#ffee88",
+            "#eebb44",
+            "#eecc55",
+            "#332211"
+          ],
+          "style_checksum_sha256": "417f5b591cfd1b59219e962b3999c6c46d5a482a07b809aabdb99b70614cb889",
+          "style_id": "amiga-ocs-portrait",
+          "style_version": 13,
+          "style_version_id": "style_face_free_style_board_v13_69d8f07b8e"
+        },
+        "render_revision": 1
+      },
+      "process": "Render and enlarge the logical artwork using the recorded deterministic renderer settings.",
+      "tool": "amiga-ocs"
+    },
+    "generation": {
+      "generator": "openrouter",
+      "inputs": [
+        {
+          "role": "identity",
+          "runtime_id": "input_a6fd4d0155de",
+          "sha256": "e898e3d925908b33ab62575cb8523a109b16e1510e4c2948d2953671926094df",
+          "source_path": "production/batch_cb292486a30d/inputs/sources/input_a6fd4d0155de.png"
+        },
+        {
+          "role": "generation-reference",
+          "runtime_id": "draft-reference-fccd878e468f",
+          "sha256": "b898df7ab12666bc6f409fddd45fbdd39847c754c02f57c20e1419eae2bc9354",
+          "source_path": "production/batch_cb292486a30d/inputs/references/draft-reference-fccd878e468f.png"
+        }
+      ],
+      "model": "openai/gpt-image-1-mini",
+      "parameters": {
+        "content_direction": "A seizure clause from infernal estate law: preserve one complete narrow parchment sheet, deckled edges, abstract rule lines, initials-like marks, and one deep red wax seal. Give the margin a restrained tooth-like notching motif without literal teeth. No readable writing, extra papers, hands, or scenery. Strong cream, brown, and sealing-wax red separation.",
+        "effective_aspect_ratio": "1:1",
+        "quality": "medium",
+        "seed": 586032858
+      },
+      "prompt": "Redraw the exact subject from input 1 in a vivid, characterful fantasy style. Preserve whether the subject is a person, animal, object, book, jewellery, scroll, furniture, or another category. Use the reference board only for rendering style; never replace the subject with a person or character.\n\nContent direction: A seizure clause from infernal estate law: preserve one complete narrow parchment sheet, deckled edges, abstract rule lines, initials-like marks, and one deep red wax seal. Give the margin a restrained tooth-like notching motif without literal teeth. No readable writing, extra papers, hands, or scenery. Strong cream, brown, and sealing-wax red separation.\n\nOutput the complete subject, centered and clearly recognizable, on a flat #00ff00 1:1 canvas. Preserve the subject's category and defining details. Leave clear space around it where practical. No scene, floor, cast shadow, text, or unrelated props."
+    },
+    "kind": "derived",
+    "original_filename": "item_2f8c52ab0239-r1-art.png",
+    "provider": "openrouter",
+    "status": "complete"
+  },
+  "rights": {
+    "notes": "Generated-output rights must be reviewed against the recorded provider terms before external distribution.",
+    "review_required": true,
+    "status": "unknown"
+  },
+  "schema_version": 1,
+  "title": "Seizure Clause"
+}

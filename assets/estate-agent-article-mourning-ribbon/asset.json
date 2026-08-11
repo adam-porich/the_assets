@@ -1,0 +1,206 @@
+{
+  "$schema": "https://raw.githubusercontent.com/adam-porich/the_assets/master/schemas/asset-v1.schema.json",
+  "adoption": {
+    "adopted_at": "2026-08-11T15:06:16Z",
+    "from_path": "production/batch_86d7f2dc675b/renders/item_409dccd38566-r1-art.png",
+    "runtime_ids": {
+      "artifact": "art",
+      "batch_id": "batch_86d7f2dc675b",
+      "item_id": "item_409dccd38566"
+    }
+  },
+  "description": "Rendered Mourning Ribbon hero artwork selected for The Estate Agent.",
+  "file": {
+    "bytes": 10381,
+    "dimensions": {
+      "height": 198,
+      "width": 352
+    },
+    "media_type": "image/png",
+    "path": "source.png",
+    "sha256": "5e66b0629788abdde710cbeeee83767d4284fd6b5c16668c880edd24a318aa22"
+  },
+  "id": "estate-agent-article-mourning-ribbon",
+  "provenance": {
+    "created_at": "2026-08-11T14:49:40Z",
+    "derivation": {
+      "inputs": [
+        {
+          "role": "composite",
+          "runtime_id": "item_409dccd38566:composite",
+          "sha256": "c56eaafb6b3e8019661895bfa347f3f3452798c0e2c58064be0be0db0c4cd084",
+          "source_path": "production/batch_86d7f2dc675b/renders/item_409dccd38566-r1-composite.png"
+        }
+      ],
+      "parameters": {
+        "framing": {
+          "offset_x": 0.0,
+          "offset_y": 0.0,
+          "zoom": 1.0
+        },
+        "palette_mode": "adaptive-hybrid",
+        "render_metadata": {
+          "artwork_kind": "rendered-art",
+          "background_palette": [
+            "#556666",
+            "#445555",
+            "#334444",
+            "#223333",
+            "#667777",
+            "#556677",
+            "#445566",
+            "#444455",
+            "#333344"
+          ],
+          "centering": [
+            0.5,
+            0.44
+          ],
+          "dither": {
+            "edge_threshold": 0.09,
+            "matrix": "bayer-4x4",
+            "strength": 0.62
+          },
+          "driver_id": "amiga-ocs",
+          "foreground_palette": [
+            "#111111",
+            "#221111",
+            "#001122",
+            "#222233",
+            "#002233",
+            "#335577",
+            "#443322",
+            "#554422",
+            "#112244",
+            "#112233",
+            "#113355",
+            "#002211",
+            "#113344",
+            "#001111",
+            "#002222",
+            "#224466",
+            "#eeddcc",
+            "#ffeedd",
+            "#000000",
+            "#cc9933",
+            "#eeddaa",
+            "#223366",
+            "#994433",
+            "#001133",
+            "#000033",
+            "#111122",
+            "#333333",
+            "#332211",
+            "#663322",
+            "#775544",
+            "#886644",
+            "#aa6644"
+          ],
+          "framing": {
+            "requested": {
+              "offset_x": 0.0,
+              "offset_y": 0.0,
+              "zoom": 1.0
+            },
+            "resolved": {
+              "offset_x": 0.0,
+              "offset_y": 0.0,
+              "zoom": 1.0
+            }
+          },
+          "logical_art_size": [
+            176,
+            99
+          ],
+          "output_art_size": [
+            352,
+            198
+          ],
+          "output_scale": 2,
+          "palette_colours_used": 577,
+          "palette_limit": 48,
+          "palette_mode": "layered-adaptive",
+          "palette_space": "Amiga OCS 12-bit RGB",
+          "renderer_driver_version": 3,
+          "resolved_palette": [
+            "#111111",
+            "#221111",
+            "#001122",
+            "#222233",
+            "#002233",
+            "#335577",
+            "#443322",
+            "#554422",
+            "#112244",
+            "#112233",
+            "#113355",
+            "#002211",
+            "#113344",
+            "#001111",
+            "#002222",
+            "#224466",
+            "#eeddcc",
+            "#ffeedd",
+            "#000000",
+            "#cc9933",
+            "#eeddaa",
+            "#223366",
+            "#994433",
+            "#001133",
+            "#000033",
+            "#111122",
+            "#333333",
+            "#332211",
+            "#663322",
+            "#775544",
+            "#886644",
+            "#aa6644"
+          ],
+          "style_checksum_sha256": "417f5b591cfd1b59219e962b3999c6c46d5a482a07b809aabdb99b70614cb889",
+          "style_id": "amiga-ocs-portrait",
+          "style_version": 13,
+          "style_version_id": "style_face_free_style_board_v13_69d8f07b8e"
+        },
+        "render_revision": 1
+      },
+      "process": "Render and enlarge the logical artwork using the recorded deterministic renderer settings.",
+      "tool": "amiga-ocs"
+    },
+    "generation": {
+      "generator": "openrouter",
+      "inputs": [
+        {
+          "role": "identity",
+          "runtime_id": "input_98c23a62e3a4",
+          "sha256": "bc6bb1b05d9da3c29a2418565ec11f983080441b094fc7d0a904d055d56ffc45",
+          "source_path": "production/batch_86d7f2dc675b/inputs/sources/input_98c23a62e3a4.png"
+        },
+        {
+          "role": "generation-reference",
+          "runtime_id": "draft-reference-fccd878e468f",
+          "sha256": "b898df7ab12666bc6f409fddd45fbdd39847c754c02f57c20e1419eae2bc9354",
+          "source_path": "production/batch_86d7f2dc675b/inputs/references/draft-reference-fccd878e468f.png"
+        }
+      ],
+      "model": "openai/gpt-image-1-mini",
+      "parameters": {
+        "content_direction": "A single mourning ribbon: preserve the complete flat black satin loop and two tails. Add only subtle cold blue-violet satin highlights and a tiny pattern of pinholes; no emblem, text, person, garment, or extra ribbon. Keep black material readable through broad charcoal midtones.",
+        "effective_aspect_ratio": "1:1",
+        "quality": "medium",
+        "seed": 1900205815
+      },
+      "prompt": "Redraw the exact subject from input 1 in a vivid, characterful fantasy style. Preserve whether the subject is a person, animal, object, book, jewellery, scroll, furniture, or another category. Use the reference board only for rendering style; never replace the subject with a person or character.\n\nContent direction: A single mourning ribbon: preserve the complete flat black satin loop and two tails. Add only subtle cold blue-violet satin highlights and a tiny pattern of pinholes; no emblem, text, person, garment, or extra ribbon. Keep black material readable through broad charcoal midtones.\n\nOutput the complete subject, centered and clearly recognizable, on a flat #00ff00 1:1 canvas. Preserve the subject's category and defining details. Leave clear space around it where practical. No scene, floor, cast shadow, text, or unrelated props."
+    },
+    "kind": "derived",
+    "original_filename": "item_409dccd38566-r1-art.png",
+    "provider": "openrouter",
+    "status": "complete"
+  },
+  "rights": {
+    "notes": "Generated-output rights must be reviewed against the recorded provider terms before external distribution.",
+    "review_required": true,
+    "status": "unknown"
+  },
+  "schema_version": 1,
+  "title": "Mourning Ribbon"
+}

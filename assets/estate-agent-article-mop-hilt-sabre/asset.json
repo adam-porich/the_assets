@@ -1,0 +1,206 @@
+{
+  "$schema": "https://raw.githubusercontent.com/adam-porich/the_assets/master/schemas/asset-v1.schema.json",
+  "adoption": {
+    "adopted_at": "2026-08-11T15:06:23Z",
+    "from_path": "production/batch_2fb1c232d1b2/renders/item_36ef9909e1ed-r1-art.png",
+    "runtime_ids": {
+      "artifact": "art",
+      "batch_id": "batch_2fb1c232d1b2",
+      "item_id": "item_36ef9909e1ed"
+    }
+  },
+  "description": "Rendered Mop-hilt Sabre hero artwork selected for The Estate Agent.",
+  "file": {
+    "bytes": 9711,
+    "dimensions": {
+      "height": 198,
+      "width": 352
+    },
+    "media_type": "image/png",
+    "path": "source.png",
+    "sha256": "d6d1c98dfc5fab85ee4f63c113234c1a986773f1ebd4ac98edbf74ee0689fc26"
+  },
+  "id": "estate-agent-article-mop-hilt-sabre",
+  "provenance": {
+    "created_at": "2026-08-11T14:58:22Z",
+    "derivation": {
+      "inputs": [
+        {
+          "role": "composite",
+          "runtime_id": "item_36ef9909e1ed:composite",
+          "sha256": "8e750a7772e9ad1e7d6922ef833851df5718dcb05a97d0c9e8ee6e1bb739ca5e",
+          "source_path": "production/batch_2fb1c232d1b2/renders/item_36ef9909e1ed-r1-composite.png"
+        }
+      ],
+      "parameters": {
+        "framing": {
+          "offset_x": 0.0,
+          "offset_y": 0.0,
+          "zoom": 1.0
+        },
+        "palette_mode": "adaptive-hybrid",
+        "render_metadata": {
+          "artwork_kind": "rendered-art",
+          "background_palette": [
+            "#556666",
+            "#445555",
+            "#334444",
+            "#223333",
+            "#667777",
+            "#556677",
+            "#445566",
+            "#444455",
+            "#333344"
+          ],
+          "centering": [
+            0.5,
+            0.44
+          ],
+          "dither": {
+            "edge_threshold": 0.09,
+            "matrix": "bayer-4x4",
+            "strength": 0.62
+          },
+          "driver_id": "amiga-ocs",
+          "foreground_palette": [
+            "#111111",
+            "#221111",
+            "#227788",
+            "#222233",
+            "#669999",
+            "#115555",
+            "#443322",
+            "#554422",
+            "#226677",
+            "#772211",
+            "#aa5522",
+            "#228899",
+            "#226688",
+            "#114444",
+            "#116666",
+            "#884422",
+            "#eeddcc",
+            "#ffeedd",
+            "#557777",
+            "#cc9933",
+            "#eeddaa",
+            "#225566",
+            "#994433",
+            "#334455",
+            "#442222",
+            "#337799",
+            "#222211",
+            "#aa2222",
+            "#994422",
+            "#663322",
+            "#337788",
+            "#662211"
+          ],
+          "framing": {
+            "requested": {
+              "offset_x": 0.0,
+              "offset_y": 0.0,
+              "zoom": 1.0
+            },
+            "resolved": {
+              "offset_x": 0.0,
+              "offset_y": 0.0,
+              "zoom": 1.0
+            }
+          },
+          "logical_art_size": [
+            176,
+            99
+          ],
+          "output_art_size": [
+            352,
+            198
+          ],
+          "output_scale": 2,
+          "palette_colours_used": 729,
+          "palette_limit": 48,
+          "palette_mode": "layered-adaptive",
+          "palette_space": "Amiga OCS 12-bit RGB",
+          "renderer_driver_version": 3,
+          "resolved_palette": [
+            "#111111",
+            "#221111",
+            "#227788",
+            "#222233",
+            "#669999",
+            "#115555",
+            "#443322",
+            "#554422",
+            "#226677",
+            "#772211",
+            "#aa5522",
+            "#228899",
+            "#226688",
+            "#114444",
+            "#116666",
+            "#884422",
+            "#eeddcc",
+            "#ffeedd",
+            "#557777",
+            "#cc9933",
+            "#eeddaa",
+            "#225566",
+            "#994433",
+            "#334455",
+            "#442222",
+            "#337799",
+            "#222211",
+            "#aa2222",
+            "#994422",
+            "#663322",
+            "#337788",
+            "#662211"
+          ],
+          "style_checksum_sha256": "417f5b591cfd1b59219e962b3999c6c46d5a482a07b809aabdb99b70614cb889",
+          "style_id": "amiga-ocs-portrait",
+          "style_version": 13,
+          "style_version_id": "style_face_free_style_board_v13_69d8f07b8e"
+        },
+        "render_revision": 1
+      },
+      "process": "Render and enlarge the logical artwork using the recorded deterministic renderer settings.",
+      "tool": "amiga-ocs"
+    },
+    "generation": {
+      "generator": "openrouter",
+      "inputs": [
+        {
+          "role": "identity",
+          "runtime_id": "input_ac39f1e0419c",
+          "sha256": "39365ab55dcf53dde5526412ef72c31f52be80f416e2367c7b87f64d4b18dcbc",
+          "source_path": "production/batch_2fb1c232d1b2/inputs/sources/input_ac39f1e0419c.png"
+        },
+        {
+          "role": "generation-reference",
+          "runtime_id": "draft-reference-fccd878e468f",
+          "sha256": "b898df7ab12666bc6f409fddd45fbdd39847c754c02f57c20e1419eae2bc9354",
+          "source_path": "production/batch_2fb1c232d1b2/inputs/references/draft-reference-fccd878e468f.png"
+        }
+      ],
+      "model": "openai/gpt-image-1-mini",
+      "parameters": {
+        "content_direction": "A single mop-hilt sabre: preserve the complete curved steel blade, brass guard, and worn wooden mop-hilt grip, shown diagonally tip to pommel. Add restrained institutional binding and one dark red inventory cord at the hilt. No person, scabbard, blood, other weapon, text, or scenery.",
+        "effective_aspect_ratio": "1:1",
+        "quality": "medium",
+        "seed": 676148826
+      },
+      "prompt": "Redraw the exact subject from input 1 in a vivid, characterful fantasy style. Preserve whether the subject is a person, animal, object, book, jewellery, scroll, furniture, or another category. Use the reference board only for rendering style; never replace the subject with a person or character.\n\nContent direction: A single mop-hilt sabre: preserve the complete curved steel blade, brass guard, and worn wooden mop-hilt grip, shown diagonally tip to pommel. Add restrained institutional binding and one dark red inventory cord at the hilt. No person, scabbard, blood, other weapon, text, or scenery.\n\nOutput the complete subject, centered and clearly recognizable, on a flat #00ff00 1:1 canvas. Preserve the subject's category and defining details. Leave clear space around it where practical. No scene, floor, cast shadow, text, or unrelated props."
+    },
+    "kind": "derived",
+    "original_filename": "item_36ef9909e1ed-r1-art.png",
+    "provider": "openrouter",
+    "status": "complete"
+  },
+  "rights": {
+    "notes": "Generated-output rights must be reviewed against the recorded provider terms before external distribution.",
+    "review_required": true,
+    "status": "unknown"
+  },
+  "schema_version": 1,
+  "title": "Mop-hilt Sabre"
+}

@@ -1,0 +1,206 @@
+{
+  "$schema": "https://raw.githubusercontent.com/adam-porich/the_assets/master/schemas/asset-v1.schema.json",
+  "adoption": {
+    "adopted_at": "2026-08-11T15:06:18Z",
+    "from_path": "production/batch_58fd19c16400/renders/item_ae05e7ad1b82-r1-art.png",
+    "runtime_ids": {
+      "artifact": "art",
+      "batch_id": "batch_58fd19c16400",
+      "item_id": "item_ae05e7ad1b82"
+    }
+  },
+  "description": "Rendered Brass Counter hero artwork selected for The Estate Agent.",
+  "file": {
+    "bytes": 12090,
+    "dimensions": {
+      "height": 198,
+      "width": 352
+    },
+    "media_type": "image/png",
+    "path": "source.png",
+    "sha256": "da4b438be1d30bc6dd31741c5e1a34346b341bfc96cc23d25ce278cac3114704"
+  },
+  "id": "estate-agent-article-brass-counter",
+  "provenance": {
+    "created_at": "2026-08-11T14:55:00Z",
+    "derivation": {
+      "inputs": [
+        {
+          "role": "composite",
+          "runtime_id": "item_ae05e7ad1b82:composite",
+          "sha256": "fe7f3d6d2f14ddc29308f899c9c94e2741c25a9b26f2e0b221780d65655fda9f",
+          "source_path": "production/batch_58fd19c16400/renders/item_ae05e7ad1b82-r1-composite.png"
+        }
+      ],
+      "parameters": {
+        "framing": {
+          "offset_x": 0.0,
+          "offset_y": 0.0,
+          "zoom": 1.0
+        },
+        "palette_mode": "adaptive-hybrid",
+        "render_metadata": {
+          "artwork_kind": "rendered-art",
+          "background_palette": [
+            "#556666",
+            "#445555",
+            "#334444",
+            "#223333",
+            "#667777",
+            "#556677",
+            "#445566",
+            "#444455",
+            "#333344"
+          ],
+          "centering": [
+            0.5,
+            0.44
+          ],
+          "dither": {
+            "edge_threshold": 0.09,
+            "matrix": "bayer-4x4",
+            "strength": 0.62
+          },
+          "driver_id": "amiga-ocs",
+          "foreground_palette": [
+            "#111111",
+            "#221111",
+            "#bb5500",
+            "#222233",
+            "#004433",
+            "#551100",
+            "#443322",
+            "#554422",
+            "#772200",
+            "#dd6600",
+            "#883300",
+            "#003322",
+            "#994400",
+            "#cc6600",
+            "#002211",
+            "#eeaa11",
+            "#eeddcc",
+            "#ffeedd",
+            "#556633",
+            "#cc9933",
+            "#eeddaa",
+            "#aa4400",
+            "#994433",
+            "#ee7700",
+            "#332211",
+            "#663311",
+            "#443311",
+            "#884400",
+            "#003333",
+            "#331100",
+            "#dd8811",
+            "#bb6611"
+          ],
+          "framing": {
+            "requested": {
+              "offset_x": 0.0,
+              "offset_y": 0.0,
+              "zoom": 1.0
+            },
+            "resolved": {
+              "offset_x": 0.0,
+              "offset_y": 0.0,
+              "zoom": 1.0
+            }
+          },
+          "logical_art_size": [
+            176,
+            99
+          ],
+          "output_art_size": [
+            352,
+            198
+          ],
+          "output_scale": 2,
+          "palette_colours_used": 775,
+          "palette_limit": 48,
+          "palette_mode": "layered-adaptive",
+          "palette_space": "Amiga OCS 12-bit RGB",
+          "renderer_driver_version": 3,
+          "resolved_palette": [
+            "#111111",
+            "#221111",
+            "#bb5500",
+            "#222233",
+            "#004433",
+            "#551100",
+            "#443322",
+            "#554422",
+            "#772200",
+            "#dd6600",
+            "#883300",
+            "#003322",
+            "#994400",
+            "#cc6600",
+            "#002211",
+            "#eeaa11",
+            "#eeddcc",
+            "#ffeedd",
+            "#556633",
+            "#cc9933",
+            "#eeddaa",
+            "#aa4400",
+            "#994433",
+            "#ee7700",
+            "#332211",
+            "#663311",
+            "#443311",
+            "#884400",
+            "#003333",
+            "#331100",
+            "#dd8811",
+            "#bb6611"
+          ],
+          "style_checksum_sha256": "417f5b591cfd1b59219e962b3999c6c46d5a482a07b809aabdb99b70614cb889",
+          "style_id": "amiga-ocs-portrait",
+          "style_version": 13,
+          "style_version_id": "style_face_free_style_board_v13_69d8f07b8e"
+        },
+        "render_revision": 1
+      },
+      "process": "Render and enlarge the logical artwork using the recorded deterministic renderer settings.",
+      "tool": "amiga-ocs"
+    },
+    "generation": {
+      "generator": "openrouter",
+      "inputs": [
+        {
+          "role": "identity",
+          "runtime_id": "input_f201e939a2a8",
+          "sha256": "ad6966ee9d4cd4cabb1819984686ae7f89353052801515c21158f2ee4dbe706e",
+          "source_path": "production/batch_58fd19c16400/inputs/sources/input_f201e939a2a8.png"
+        },
+        {
+          "role": "generation-reference",
+          "runtime_id": "draft-reference-fccd878e468f",
+          "sha256": "b898df7ab12666bc6f409fddd45fbdd39847c754c02f57c20e1419eae2bc9354",
+          "source_path": "production/batch_58fd19c16400/inputs/references/draft-reference-fccd878e468f.png"
+        }
+      ],
+      "model": "openai/gpt-image-1-mini",
+      "parameters": {
+        "content_direction": "A single brass mechanical tally counter: preserve the complete rounded brass case, top finger ring, side thumb lever, and dark number window with unreadable rollers. Add restrained red enamel registration dots and fine bureaucratic wear. No readable digits, hand, desk, trinkets, or extra objects.",
+        "effective_aspect_ratio": "1:1",
+        "quality": "medium",
+        "seed": 2065468356
+      },
+      "prompt": "Redraw the exact subject from input 1 in a vivid, characterful fantasy style. Preserve whether the subject is a person, animal, object, book, jewellery, scroll, furniture, or another category. Use the reference board only for rendering style; never replace the subject with a person or character.\n\nContent direction: A single brass mechanical tally counter: preserve the complete rounded brass case, top finger ring, side thumb lever, and dark number window with unreadable rollers. Add restrained red enamel registration dots and fine bureaucratic wear. No readable digits, hand, desk, trinkets, or extra objects.\n\nOutput the complete subject, centered and clearly recognizable, on a flat #00ff00 1:1 canvas. Preserve the subject's category and defining details. Leave clear space around it where practical. No scene, floor, cast shadow, text, or unrelated props."
+    },
+    "kind": "derived",
+    "original_filename": "item_ae05e7ad1b82-r1-art.png",
+    "provider": "openrouter",
+    "status": "complete"
+  },
+  "rights": {
+    "notes": "Generated-output rights must be reviewed against the recorded provider terms before external distribution.",
+    "review_required": true,
+    "status": "unknown"
+  },
+  "schema_version": 1,
+  "title": "Brass Counter"
+}
