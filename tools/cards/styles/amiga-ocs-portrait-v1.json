@@ -24,17 +24,19 @@
       {
         "id": "generation-reference-04",
         "asset_key": "generation-reference-04.png",
+        "canonical_asset_id": "amiga-ocs-generation-reference-04",
         "role": "generation-reference",
         "label": "Amiga OCS foreground rendering board",
-        "checked_in_path": "tools/cards/assets/amiga-ocs-portrait-v1/generation-reference-04.png",
+        "checked_in_path": "assets/amiga-ocs-generation-reference-04/source.png",
         "checksum_sha256": "b898df7ab12666bc6f409fddd45fbdd39847c754c02f57c20e1419eae2bc9354"
       },
       {
         "id": "target-example-01",
         "asset_key": "target-example-01.png",
+        "canonical_asset_id": "amiga-ocs-target-example-01",
         "role": "target-example",
         "label": "Amiga OCS target example · review only",
-        "checked_in_path": "tools/cards/assets/amiga-ocs-portrait-v1/target-example-01.png",
+        "checked_in_path": "assets/amiga-ocs-target-example-01/source.png",
         "checksum_sha256": "27b3e8a7eec537fe78ea7ad160ed9044b7c478356a477be63638736b46a55045"
       }
     ]

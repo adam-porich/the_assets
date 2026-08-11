@@ -1,0 +1,11 @@
+{
+  "$schema": "../../schemas/asset-v1.schema.json",
+  "schema_version": 1,
+  "id": "amiga-ocs-target-example-01",
+  "title": "Amiga OCS target example 01",
+  "description": "Review-only renderer proof that is structurally excluded from image-generation requests.",
+  "file": {"path": "source.png", "media_type": "image/png", "bytes": 18720, "sha256": "27b3e8a7eec537fe78ea7ad160ed9044b7c478356a477be63638736b46a55045", "dimensions": {"width": 336, "height": 276}},
+  "provenance": {"kind": "unknown", "status": "unknown", "original_filename": "target-example-01.png", "notes": "The repository identifies this as a deterministic renderer proof, but its exact parent file, renderer invocation, and creation time were not retained in canonical form."},
+  "rights": {"status": "unknown", "review_required": true, "notes": "The historical record does not contain an explicit rights determination."},
+  "adoption": {"adopted_at": "2026-08-11T00:00:00Z", "from_path": "tools/cards/assets/amiga-ocs-portrait-v1/target-example-01.png"}
+}

@@ -1,0 +1,137 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://the-assets.local/schemas/asset-v1.schema.json",
+  "title": "Canonical adopted asset",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "id", "title", "description", "file", "provenance", "rights", "adoption"],
+  "properties": {
+    "$schema": {"type": "string"},
+    "schema_version": {"const": 1},
+    "id": {"type": "string", "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"},
+    "title": {"type": "string", "minLength": 1},
+    "description": {"type": "string", "minLength": 1},
+    "file": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "media_type", "bytes", "sha256"],
+      "properties": {
+        "path": {"type": "string", "pattern": "^source\\.[A-Za-z0-9]+$"},
+        "media_type": {"type": "string", "pattern": "^[^/]+/[^/]+$"},
+        "bytes": {"type": "integer", "minimum": 1},
+        "sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+        "dimensions": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["width", "height"],
+          "properties": {
+            "width": {"type": "integer", "minimum": 1},
+            "height": {"type": "integer", "minimum": 1}
+          }
+        }
+      },
+      "allOf": [
+        {
+          "if": {"properties": {"media_type": {"pattern": "^image/"}}, "required": ["media_type"]},
+          "then": {"required": ["dimensions"]}
+        }
+      ]
+    },
+    "provenance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "status", "original_filename"],
+      "properties": {
+        "kind": {"enum": ["authored", "acquired", "generated", "derived", "unknown"]},
+        "status": {"enum": ["complete", "incomplete", "unknown"]},
+        "original_filename": {"type": "string", "minLength": 1},
+        "creator": {"type": "string", "minLength": 1},
+        "provider": {"type": "string", "minLength": 1},
+        "external_id": {"type": "string", "minLength": 1},
+        "source_url": {"type": "string", "format": "uri"},
+        "created_at": {"type": "string", "format": "date-time"},
+        "acquired_at": {"type": "string", "format": "date-time"},
+        "notes": {"type": "string", "minLength": 1},
+        "generation": {"$ref": "#/$defs/generation"},
+        "derivation": {"$ref": "#/$defs/derivation"}
+      },
+      "allOf": [
+        {
+          "if": {"properties": {"status": {"enum": ["incomplete", "unknown"]}}, "required": ["status"]},
+          "then": {"required": ["notes"]}
+        },
+        {
+          "if": {"properties": {"kind": {"const": "generated"}, "status": {"const": "complete"}}, "required": ["kind", "status"]},
+          "then": {"required": ["created_at", "generation"]}
+        },
+        {
+          "if": {"properties": {"kind": {"const": "derived"}, "status": {"const": "complete"}}, "required": ["kind", "status"]},
+          "then": {"required": ["created_at", "derivation"]}
+        }
+      ]
+    },
+    "rights": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status", "review_required", "notes"],
+      "properties": {
+        "status": {"enum": ["known", "unknown"]},
+        "review_required": {"type": "boolean"},
+        "license": {"type": "string", "minLength": 1},
+        "license_url": {"type": "string", "format": "uri"},
+        "attribution": {"type": "string", "minLength": 1},
+        "notes": {"type": "string", "minLength": 1}
+      },
+      "allOf": [
+        {
+          "if": {"properties": {"status": {"const": "unknown"}}, "required": ["status"]},
+          "then": {"properties": {"review_required": {"const": true}}}
+        }
+      ]
+    },
+    "adoption": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["adopted_at", "from_path"],
+      "properties": {
+        "adopted_at": {"type": "string", "format": "date-time"},
+        "from_path": {"type": "string", "minLength": 1},
+        "runtime_ids": {"type": "object", "additionalProperties": {"type": "string", "minLength": 1}}
+      }
+    }
+  },
+  "$defs": {
+    "input": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["asset_id", "sha256", "role"],
+      "properties": {
+        "asset_id": {"type": "string", "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"},
+        "sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+        "role": {"type": "string", "minLength": 1}
+      }
+    },
+    "generation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["generator", "model", "prompt", "parameters", "inputs"],
+      "properties": {
+        "generator": {"type": "string", "minLength": 1},
+        "model": {"type": "string", "minLength": 1},
+        "prompt": {"type": "string", "minLength": 1},
+        "parameters": {"type": "object"},
+        "inputs": {"type": "array", "items": {"$ref": "#/$defs/input"}}
+      }
+    },
+    "derivation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["tool", "process", "inputs"],
+      "properties": {
+        "tool": {"type": "string", "minLength": 1},
+        "process": {"type": "string", "minLength": 1},
+        "inputs": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/input"}}
+      }
+    }
+  }
+}

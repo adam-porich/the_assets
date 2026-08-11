@@ -21,10 +21,9 @@ DEFAULT_WORKSPACE = {
   "inputs": [],
   "references": [],
 }
-BUNDLED_REFERENCE_DIR = Path(__file__).parent / "assets" / "estate-card-v1"
 BUNDLED_REFERENCES = (
-    ("reference_estate_card_v1_firelit", "Estate card · firelit hooded portrait", "9ff3c44f945f.png"),
-    ("reference_estate_card_v1_armoured", "Estate card · armoured claimant", "eba013818158.png"),
+    ("reference_estate_card_v1_firelit", "Estate card · firelit hooded portrait", Path("assets/estate-card-firelit-reference/source.png"), "9ff3c44f945f.png"),
+    ("reference_estate_card_v1_armoured", "Estate card · armoured claimant", Path("assets/estate-card-armoured-reference/source.png"), "eba013818158.png"),
 )
 
 
@@ -184,8 +183,9 @@ class WorkspaceStore:
             data = self.read()
             known = {str(item.get("id")): item for item in data["references"]}
             changed = False
-            for position, (reference_id, label, filename) in enumerate(BUNDLED_REFERENCES):
-                source = BUNDLED_REFERENCE_DIR / filename
+            repository_root = Path(__file__).resolve().parents[2]
+            for position, (reference_id, label, checked_in_path, original_filename) in enumerate(BUNDLED_REFERENCES):
+                source = repository_root / checked_in_path
                 if not source.is_file():
                     raise WorkspaceError(f"bundled starter reference is missing: {source}")
                 relative = Path("references") / f"{reference_id}.png"
@@ -200,19 +200,20 @@ class WorkspaceStore:
                         "relative_path": relative.as_posix(),
                         "dimensions": dimensions,
                         "created_at": now_iso(),
-                        "original_filename": filename,
+                        "original_filename": original_filename,
                         "checksum_sha256": checksum(destination),
                         "position": position,
                         "provenance": {
                             "kind": "bundled",
                             "style_pack": "estate-card-v1",
-                            "historical_path": f"portrait-review/styles/{filename}",
+                            "historical_path": f"portrait-review/styles/{original_filename}",
+                            "canonical_asset_path": checked_in_path.parent.as_posix(),
                         },
                     })
                     changed = True
             if changed:
                 self._atomic_json(self.workspace_path, self._validate(data))
-            return [reference_id for reference_id, _, _ in BUNDLED_REFERENCES]
+            return [reference_id for reference_id, _, _, _ in BUNDLED_REFERENCES]
 
     def add_image_record(self, kind: str, label: str, original_name: str, content: bytes, content_type: str | None = None) -> dict[str, Any]:
         if kind not in {"input", "reference"}:

@@ -4,21 +4,23 @@
   "purpose": "Foreground-only rendering vocabulary and renderer proof for the genlocked-background Amiga OCS house style.",
   "generation_references": [
     {
-      "path": "generation-reference-04.png",
+      "path": "../../../../assets/amiga-ocs-generation-reference-04/source.png",
+      "asset_id": "amiga-ocs-generation-reference-04",
       "role": "vibrant subject-neutral foreground rendering vocabulary for pre-quantisation masters",
       "checksum_sha256": "b898df7ab12666bc6f409fddd45fbdd39847c754c02f57c20e1419eae2bc9354",
       "provenance": {
         "kind": "generated",
         "generator": "Codex built-in image generation",
         "created_at": "2026-08-10",
-        "derived_from": "generation-reference-03.png",
+        "derived_from": "amiga-ocs-generation-reference-03",
         "direction": "Broader chromatic midtones, saturated material families, narrow black anchors, and reduced olive/brown dominance."
       }
     }
   ],
   "target_examples": [
     {
-      "path": "target-example-01.png",
+      "path": "../../../../assets/amiga-ocs-target-example-01/source.png",
+      "asset_id": "amiga-ocs-target-example-01",
       "role": "human review target; never sent to img2img",
       "checksum_sha256": "27b3e8a7eec537fe78ea7ad160ed9044b7c478356a477be63638736b46a55045"
     }

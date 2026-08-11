@@ -12,7 +12,7 @@ from tools.portraits.workspace import WorkspaceError, WorkspaceStore, checksum, 
 
 
 STYLE_DEFINITION_PATH = Path(__file__).parent / "styles" / "amiga-ocs-portrait-v1.json"
-ASSET_ROOT = Path(__file__).parent / "assets" / "amiga-ocs-portrait-v1"
+REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
 STYLE_FAMILY_ID = "amiga-ocs-portrait"
 FACE_FREE_PIPELINE_ID = "face-free-style-board"
 PORTRAIT_REFERENCE_PIPELINE_ID = "portrait-style-reference"
@@ -320,8 +320,10 @@ class StyleStore:
             "assets": [{
                 "id": "generation-reference-01",
                 "asset_key": "generation-reference-01.png",
+                "canonical_asset_id": "amiga-ocs-generation-reference-01",
                 "role": "generation-reference",
                 "label": "Original portrait style reference",
+                "checked_in_path": "assets/amiga-ocs-generation-reference-01/source.png",
                 "checksum_sha256": PORTRAIT_REFERENCE_CHECKSUM,
             }, *target_assets],
         }
@@ -342,10 +344,13 @@ class StyleStore:
         version_dir = self._style_path(version_id).parent
         version_dir.mkdir(parents=True, exist_ok=True)
         for asset in style["reference_pack"]["assets"]:
-            source = ASSET_ROOT / str(asset["asset_key"])
+            checked_in_path = Path(str(asset.get("checked_in_path") or ""))
+            if checked_in_path.is_absolute() or ".." in checked_in_path.parts:
+                raise WorkspaceError(f"invalid checked-in style asset path: {checked_in_path}")
+            source = REPOSITORY_ROOT / checked_in_path
             if not source.is_file():
                 raise WorkspaceError(f"checked-in style asset is missing: {source}")
-            destination = version_dir / "references" / source.name
+            destination = version_dir / "references" / str(asset["asset_key"])
             destination.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(source, destination)
             if checksum(destination) != asset["checksum_sha256"]:

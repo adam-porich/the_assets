@@ -36,11 +36,11 @@ from tools.portraits.workspace import WorkspaceError, WorkspaceStore
 
 
 ROOT = Path(__file__).parents[1]
-ASSETS = ROOT / "tools/cards/assets/amiga-ocs-portrait-v1"
+SOURCE_REFERENCE = ROOT / "assets/amiga-ocs-generation-reference-01/source.png"
 
 
 def source(store: WorkspaceStore, name: str = "portrait") -> dict:
-    path = ROOT / "tools/cards/assets/amiga-ocs-portrait-v1/generation-reference-01.png"
+    path = SOURCE_REFERENCE
     if name == "portrait":
         content = path.read_bytes()
     else:
@@ -64,7 +64,7 @@ def simulation_trial_style(styles: StyleStore) -> dict:
 
 def test_input_normalisation_requires_preview_then_accepts_it(tmp_path: Path) -> None:
     store = WorkspaceStore(tmp_path / "library")
-    content = (ASSETS / "generation-reference-01.png").read_bytes()
+    content = SOURCE_REFERENCE.read_bytes()
     pending = store.add_image_record("input", "Book", "book.png", content, "image/png")
     manager = InputNormalisationManager(store, lambda mode, capabilities: FakeGenerationAdapter(capabilities))
     started = manager.start(pending["id"], "Preserve the exact object.", "low", simulation_model(), consent=False)
@@ -154,7 +154,7 @@ def test_one_universal_pipeline_uses_the_subject_neutral_reference(tmp_path: Pat
 def test_amiga_registered_engine_is_deterministic_and_matches_golden() -> None:
     style = load_checked_in_style()
     style["renderer"]["palette_mode"] = "fixed-house"
-    with Image.open(ASSETS / "generation-reference-01.png") as master:
+    with Image.open(SOURCE_REFERENCE) as master:
         historical_framing = {"mode": "legacy", "zoom": 1, "offset_x": 0, "offset_y": 0}
         first = registry.render(style, master, "stage reference", historical_framing)
         second = registry.render(style, master, "stage reference", historical_framing)

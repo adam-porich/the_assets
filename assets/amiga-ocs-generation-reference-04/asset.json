@@ -1,0 +1,11 @@
+{
+  "$schema": "../../schemas/asset-v1.schema.json",
+  "schema_version": 1,
+  "id": "amiga-ocs-generation-reference-04",
+  "title": "Amiga OCS generation reference 04",
+  "description": "Subject-neutral foreground rendering vocabulary used by the active Amiga OCS style pipeline.",
+  "file": {"path": "source.png", "media_type": "image/png", "bytes": 2390478, "sha256": "b898df7ab12666bc6f409fddd45fbdd39847c754c02f57c20e1419eae2bc9354", "dimensions": {"width": 1254, "height": 1254}},
+  "provenance": {"kind": "generated", "status": "incomplete", "original_filename": "generation-reference-04.png", "provider": "OpenAI", "created_at": "2026-08-10T00:00:00Z", "notes": "Created with Codex built-in image generation from reference 03 to broaden chromatic midtones and reduce olive/brown dominance. The exact model, complete prompt, and parameters were not retained."},
+  "rights": {"status": "unknown", "review_required": true, "notes": "Provider provenance is known, but an explicit project rights review was not recorded."},
+  "adoption": {"adopted_at": "2026-08-11T00:00:00Z", "from_path": "tools/cards/assets/amiga-ocs-portrait-v1/generation-reference-04.png"}
+}

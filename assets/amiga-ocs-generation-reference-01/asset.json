@@ -1,0 +1,11 @@
+{
+  "$schema": "../../schemas/asset-v1.schema.json",
+  "schema_version": 1,
+  "id": "amiga-ocs-generation-reference-01",
+  "title": "Amiga OCS generation reference 01",
+  "description": "Historical foreground style reference retained for pipeline lineage and comparison.",
+  "file": {"path": "source.png", "media_type": "image/png", "bytes": 1794974, "sha256": "68ca995a8d308963278a2047863886b382adc8cd1230d05952c017b659838efe", "dimensions": {"width": 1254, "height": 1254}},
+  "provenance": {"kind": "generated", "status": "incomplete", "original_filename": "generation-reference-01.png", "notes": "Historical generated reference. The original generator, model, prompt, parameters, and creation time were not retained."},
+  "rights": {"status": "unknown", "review_required": true, "notes": "The historical record does not contain an explicit rights determination."},
+  "adoption": {"adopted_at": "2026-08-11T00:00:00Z", "from_path": "tools/cards/assets/amiga-ocs-portrait-v1/generation-reference-01.png"}
+}

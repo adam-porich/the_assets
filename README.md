@@ -17,6 +17,11 @@ npm run dev
 Set `PEXELS_API_KEY` to enable image search and `OPENROUTER_API_KEY` for live
 image generation. Runtime data is stored in the ignored `portrait-library/`.
 
+Files promoted from runtime experiments into durable repository assets follow
+the canonical `asset.json` plus `source.<ext>` contract documented in
+[docs/asset-adoption.md](docs/asset-adoption.md). Validate them with
+`uv run python -m tools.assets validate`.
+
 ## Workflow
 
 ### Inputs
