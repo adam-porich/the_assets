@@ -264,6 +264,79 @@ afterEach(() => {
 });
 
 describe("pipeline workbench", () => {
+  it("uses image-first search results and prepares only after previewing", async () => {
+    const result = {
+      id: "pexels-42",
+      label: "Mountain portrait",
+      preview_url: "/mountain-small.jpg",
+      selected_image_url: "/mountain-large.jpg",
+      photographer: "Hidden Artist",
+    };
+    vi.spyOn(api, "bootstrap").mockResolvedValue(base as never);
+    vi.spyOn(api, "searchInputs").mockResolvedValue({
+      results: [result],
+      page: 1,
+      has_more: false,
+    });
+    vi.spyOn(api, "importInput").mockResolvedValue({
+      workspace: base.workspace,
+      input: {
+        id: "pending-42",
+        label: "Mountain portrait",
+        status: "pending",
+        original_url: "/mountain-large.jpg",
+      },
+    } as never);
+
+    await act(async () => {
+      window.location.hash = "#inputs";
+      root.render(<App />);
+    });
+    const searchInput = container.querySelector(
+      'input[aria-label="Search input images"]',
+    ) as HTMLInputElement;
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(
+        HTMLInputElement.prototype,
+        "value",
+      )?.set?.call(searchInput, "mountain");
+      searchInput.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    await act(async () => {
+      searchInput.closest("form")?.dispatchEvent(
+        new Event("submit", { bubbles: true, cancelable: true }),
+      );
+    });
+
+    expect(container.querySelectorAll(".search-result")).toHaveLength(1);
+    expect(container.textContent).not.toContain("Hidden Artist");
+    expect(
+      [...container.querySelectorAll("button")].some(
+        (button) => button.textContent === "Prepare",
+      ),
+    ).toBe(false);
+
+    await act(async () =>
+      (container.querySelector(".search-result") as HTMLButtonElement).click(),
+    );
+    const dialog = container.querySelector(".search-result-dialog");
+    expect(dialog?.textContent).toContain("Prepare");
+    expect(dialog?.querySelector("img")?.getAttribute("src")).toBe(
+      "/mountain-large.jpg",
+    );
+
+    await act(async () =>
+      [...dialog!.querySelectorAll("button")]
+        .find((button) => button.textContent === "Prepare")
+        ?.click(),
+    );
+    expect(api.importInput).toHaveBeenCalledWith(result);
+    expect(container.querySelector(".search-result-dialog")).toBeNull();
+    expect(container.querySelector("#input-dialog-title")?.textContent).toBe(
+      "Mountain portrait",
+    );
+  });
+
   it("uses one Cards route and redirects the retired views", () => {
     window.location.hash = "#cards/batch-1/item-1";
     expect(readRoute()).toEqual({

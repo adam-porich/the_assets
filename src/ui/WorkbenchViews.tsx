@@ -74,6 +74,7 @@ function backgroundConfig(style?: PipelineStyle) {
 export function InputsView({ bootstrap, refresh, notify }: Shared) {
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<SearchResult[]>([]);
+  const [selectedResult, setSelectedResult] = useState<SearchResult>();
   const [busy, setBusy] = useState("");
   const [editing, setEditing] = useState<InputAsset>();
   const [prompt, setPrompt] = useState(bootstrap.normalisation.default_prompt);
@@ -143,6 +144,7 @@ export function InputsView({ bootstrap, refresh, notify }: Shared) {
     setBusy(`import-${result.id}`);
     try {
       const response = await api.importInput(result);
+      setSelectedResult(undefined);
       open(response.input);
     } catch (error) {
       notify((error as Error).message, "error");
@@ -246,23 +248,18 @@ export function InputsView({ bootstrap, refresh, notify }: Shared) {
         {results.length > 0 && (
           <div className="search-results">
             {results.map((result) => (
-              <article key={result.pexels_photo_id || result.id}>
+              <button
+                type="button"
+                className="search-result"
+                key={result.pexels_photo_id || result.id}
+                aria-label={`View ${result.label || "search result"}`}
+                onClick={() => setSelectedResult(result)}
+              >
                 <img
                   src={result.preview_url || result.selected_image_url}
-                  alt={result.label || result.photographer || "Search result"}
+                  alt=""
                 />
-                <div>
-                  <strong>{result.photographer || "Image source"}</strong>
-                  <button
-                    type="button"
-                    className="button secondary"
-                    disabled={Boolean(busy)}
-                    onClick={() => void chooseResult(result)}
-                  >
-                    Prepare
-                  </button>
-                </div>
-              </article>
+              </button>
             ))}
           </div>
         )}
@@ -308,6 +305,50 @@ export function InputsView({ bootstrap, refresh, notify }: Shared) {
           </div>
         )}
       </section>
+      {selectedResult && (
+        <div className="dialog-backdrop" role="presentation">
+          <section
+            className="surface search-result-dialog"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="search-result-dialog-title"
+          >
+            <div className="panel-heading">
+              <div>
+                <p className="eyebrow">Image preview</p>
+                <h3 id="search-result-dialog-title">Prepare this image?</h3>
+              </div>
+              <button
+                type="button"
+                className="button secondary"
+                disabled={Boolean(busy)}
+                onClick={() => setSelectedResult(undefined)}
+              >
+                Cancel
+              </button>
+            </div>
+            <img
+              src={
+                selectedResult.selected_image_url || selectedResult.preview_url
+              }
+              alt="Selected search result"
+            />
+            <div className="search-result-dialog-actions">
+              <p>You’ll choose the preparation settings in the next step.</p>
+              <button
+                type="button"
+                className="button primary large"
+                disabled={Boolean(busy)}
+                onClick={() => void chooseResult(selectedResult)}
+              >
+                {busy === `import-${selectedResult.id}`
+                  ? "Importing…"
+                  : "Prepare"}
+              </button>
+            </div>
+          </section>
+        </div>
+      )}
       {editing && (
         <div className="dialog-backdrop" role="presentation">
           <section
