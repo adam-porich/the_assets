@@ -1,6 +1,6 @@
 # systemd --user unit for the Portrait Workbench app (Vite + HMR).
 #
-# nginx reverse-proxies /butler/assets/ to this server on 127.0.0.1:5182.
+# Tailscale Serve reverse-proxies /assets/ to this server on 127.0.0.1:5182.
 #
 # Install:
 #   cp deploy/the-assets-review-app.service ~/.config/systemd/user/

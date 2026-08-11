@@ -122,3 +122,8 @@ git diff --check
 ```
 
 The detailed contract is in [docs/portrait-workbench.md](docs/portrait-workbench.md).
+
+## Hosting
+
+The workbench is served at `/assets/`. Its app binds to `127.0.0.1:5182`, its API
+binds to `127.0.0.1:8765`, and Tailscale Serve maps the app path to the frontend.

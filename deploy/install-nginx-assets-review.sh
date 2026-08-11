@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Adds /butler/assets/ reverse-proxy locations to the existing finance nginx
+# Adds /assets/ reverse-proxy locations to the existing finance nginx
 # server block, proxying the Vite app to 127.0.0.1:5182 and the review API/
 # asset routes to 127.0.0.1:8765.
 #
@@ -21,8 +21,8 @@ if [[ ! -f "$CONF" ]]; then
   exit 1
 fi
 
-if grep -q "location /butler/assets/" "$CONF"; then
-  echo "/butler/assets/ location already present in $CONF - nothing to do."
+if grep -q "location /assets/" "$CONF"; then
+  echo "/assets/ location already present in $CONF - nothing to do."
   exit 0
 fi
 
@@ -32,24 +32,24 @@ echo "Backed up $CONF -> $BACKUP"
 
 read -r -d '' BLOCK <<'EOF' || true
     # --- Portrait Workbench (Vite on 127.0.0.1:5182, API on 127.0.0.1:8765) ---
-    location = /butler/assets {
-        return 301 /butler/assets/;
+    location = /assets {
+        return 301 /assets/;
     }
-    location /butler/assets/api/ {
-        rewrite ^/butler/assets(/api/.*)$ $1 break;
+    location /assets/api/ {
+        rewrite ^/assets(/api/.*)$ $1 break;
         proxy_pass http://127.0.0.1:8765;
         proxy_http_version 1.1;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
     }
-    location /butler/assets/asset/ {
-        rewrite ^/butler/assets(/asset/.*)$ $1 break;
+    location /assets/asset/ {
+        rewrite ^/assets(/asset/.*)$ $1 break;
         proxy_pass http://127.0.0.1:8765;
         proxy_http_version 1.1;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
     }
-    location /butler/assets/ {
+    location /assets/ {
         proxy_pass http://127.0.0.1:5182;
         proxy_http_version 1.1;
         proxy_set_header Host $host;
@@ -66,7 +66,7 @@ awk -v block="$BLOCK" '
   { print }
 ' "$CONF" > "$TMP"
 
-if ! grep -q "location /butler/assets/" "$TMP"; then
+if ! grep -q "location /assets/" "$TMP"; then
   echo "Could not find a 'location / {' anchor in $CONF to insert before." >&2
   rm -f "$TMP"
   exit 1
@@ -74,7 +74,7 @@ fi
 
 cp "$TMP" "$CONF"
 rm -f "$TMP"
-echo "Inserted /butler/assets/ proxy block into $CONF"
+echo "Inserted /assets/ proxy block into $CONF"
 
 if ! nginx -t; then
   echo "nginx -t FAILED - restoring backup." >&2
@@ -85,4 +85,4 @@ fi
 systemctl reload nginx
 echo
 echo "Done. Portrait Workbench is now at:"
-echo "  https://desktop-g62m1s8.taild55c40.ts.net/butler/assets/"
+echo "  https://desktop-g62m1s8.taild55c40.ts.net/assets/"
