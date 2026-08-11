@@ -1,3 +1,4 @@
+import { memo } from "react";
 import type { ProducedCard, ProductionItem } from "./types";
 
 const GLYPHS: Record<string, string[]> = {
@@ -43,7 +44,7 @@ const GLYPHS: Record<string, string[]> = {
 };
 const UNKNOWN = ["11111", "00001", "00010", "00100", "00100", "00000", "00100"];
 
-export function PixelText({
+export const PixelText = memo(function PixelText({
   children,
   className = "",
 }: {
@@ -76,9 +77,9 @@ export function PixelText({
       ))}
     </span>
   );
-}
+});
 
-export function DynamicCard({
+export const DynamicCard = memo(function DynamicCard({
   item,
   artUrl,
   text,
@@ -130,4 +131,4 @@ export function DynamicCard({
       </div>
     </article>
   );
-}
+});
