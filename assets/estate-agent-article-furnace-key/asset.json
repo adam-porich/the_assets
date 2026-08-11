@@ -1,0 +1,211 @@
+{
+  "$schema": "https://raw.githubusercontent.com/adam-porich/the_assets/master/schemas/asset-v1.schema.json",
+  "adoption": {
+    "adopted_at": "2026-08-11T13:34:12Z",
+    "from_path": "production/batch_f7a22b90962c/renders/item_22bf7eb05a87-r1-art.png",
+    "runtime_ids": {
+      "artifact": "art",
+      "batch_id": "batch_f7a22b90962c",
+      "item_id": "item_22bf7eb05a87"
+    }
+  },
+  "description": "Rendered furnace key hero artwork selected for The Estate Agent.",
+  "file": {
+    "bytes": 11082,
+    "dimensions": {
+      "height": 198,
+      "width": 352
+    },
+    "media_type": "image/png",
+    "path": "source.png",
+    "sha256": "14b01ef4a2dbb7b72d0d752f9ace0d6af62872ead924f6ade3f6ace7f13a915f"
+  },
+  "id": "estate-agent-article-furnace-key",
+  "provenance": {
+    "created_at": "2026-08-11T11:18:55Z",
+    "derivation": {
+      "inputs": [
+        {
+          "role": "composite",
+          "runtime_id": "item_22bf7eb05a87:composite",
+          "sha256": "9ffc9bd087bb3f8f546e8f056f23ae5b057d3aec1b18b872d6a95620052d49ab",
+          "source_path": "production/batch_f7a22b90962c/renders/item_22bf7eb05a87-r1-composite.png"
+        }
+      ],
+      "parameters": {
+        "framing": {
+          "offset_x": 0.0,
+          "offset_y": 0.0,
+          "zoom": 1.0
+        },
+        "palette_mode": "adaptive-hybrid",
+        "render_metadata": {
+          "artwork_kind": "rendered-art",
+          "background_palette": [
+            "#ccbb88",
+            "#bbaa77",
+            "#bb9977",
+            "#ccaa88",
+            "#887755",
+            "#998866",
+            "#776644",
+            "#886644",
+            "#aa8866",
+            "#aa9977",
+            "#997755",
+            "#aa9966",
+            "#998855",
+            "#665533"
+          ],
+          "centering": [
+            0.5,
+            0.44
+          ],
+          "dither": {
+            "edge_threshold": 0.09,
+            "matrix": "bayer-4x4",
+            "strength": 0.62
+          },
+          "driver_id": "amiga-ocs",
+          "foreground_palette": [
+            "#111111",
+            "#221111",
+            "#000000",
+            "#222233",
+            "#333333",
+            "#222222",
+            "#443322",
+            "#554422",
+            "#550000",
+            "#663322",
+            "#331100",
+            "#774422",
+            "#333322",
+            "#221100",
+            "#112211",
+            "#444433",
+            "#eeddcc",
+            "#ffeedd",
+            "#773311",
+            "#cc9933",
+            "#eeddaa",
+            "#442211",
+            "#994433",
+            "#aa4411",
+            "#552211",
+            "#441100",
+            "#332222",
+            "#664433",
+            "#771100",
+            "#664422",
+            "#993311",
+            "#111100"
+          ],
+          "framing": {
+            "requested": {
+              "offset_x": 0.0,
+              "offset_y": 0.0,
+              "zoom": 1.0
+            },
+            "resolved": {
+              "offset_x": 0.0,
+              "offset_y": 0.0,
+              "zoom": 1.0
+            }
+          },
+          "logical_art_size": [
+            176,
+            99
+          ],
+          "output_art_size": [
+            352,
+            198
+          ],
+          "output_scale": 2,
+          "palette_colours_used": 669,
+          "palette_limit": 48,
+          "palette_mode": "layered-adaptive",
+          "palette_space": "Amiga OCS 12-bit RGB",
+          "renderer_driver_version": 3,
+          "resolved_palette": [
+            "#111111",
+            "#221111",
+            "#000000",
+            "#222233",
+            "#333333",
+            "#222222",
+            "#443322",
+            "#554422",
+            "#550000",
+            "#663322",
+            "#331100",
+            "#774422",
+            "#333322",
+            "#221100",
+            "#112211",
+            "#444433",
+            "#eeddcc",
+            "#ffeedd",
+            "#773311",
+            "#cc9933",
+            "#eeddaa",
+            "#442211",
+            "#994433",
+            "#aa4411",
+            "#552211",
+            "#441100",
+            "#332222",
+            "#664433",
+            "#771100",
+            "#664422",
+            "#993311",
+            "#111100"
+          ],
+          "style_checksum_sha256": "417f5b591cfd1b59219e962b3999c6c46d5a482a07b809aabdb99b70614cb889",
+          "style_id": "amiga-ocs-portrait",
+          "style_version": 13,
+          "style_version_id": "style_face_free_style_board_v13_69d8f07b8e"
+        },
+        "render_revision": 1
+      },
+      "process": "Render and enlarge the logical artwork using the recorded deterministic renderer settings.",
+      "tool": "amiga-ocs"
+    },
+    "generation": {
+      "generator": "openrouter",
+      "inputs": [
+        {
+          "role": "identity",
+          "runtime_id": "input_ea373306ab9d",
+          "sha256": "bf4a91e47c305d0a35da241b2308e7327f489c592a0970a9343cd0ca43fb2f52",
+          "source_path": "production/batch_f7a22b90962c/inputs/sources/input_ea373306ab9d.png"
+        },
+        {
+          "role": "generation-reference",
+          "runtime_id": "draft-reference-fccd878e468f",
+          "sha256": "b898df7ab12666bc6f409fddd45fbdd39847c754c02f57c20e1419eae2bc9354",
+          "source_path": "production/batch_f7a22b90962c/inputs/references/draft-reference-fccd878e468f.png"
+        }
+      ],
+      "model": "openai/gpt-image-1-mini",
+      "parameters": {
+        "content_direction": "A heavy furnace key in an estate inventory: preserve the blackened iron, circular bow, long shaft, forked teeth, and complete diagonal silhouette. Add restrained ember-red heat at the teeth and a few iron filings; no readable numerals.",
+        "effective_aspect_ratio": "1:1",
+        "quality": "medium",
+        "seed": 226018880
+      },
+      "prompt": "Redraw the exact object from input 1 as a vivid, characterful late-1980s fantasy game illustration. Preserve the object category, silhouette, materials, colours, and defining details. Use the reference board only for rendering style. Never replace the object with a person, creature, face, or character.\n\nContent direction: A heavy furnace key in an estate inventory: preserve the blackened iron, circular bow, long shaft, forked teeth, and complete diagonal silhouette. Add restrained ember-red heat at the teeth and a few iron filings; no readable numerals.\n\nOutput the complete subject, centered and clearly recognizable, on a flat #00ff00 1:1 canvas. Preserve the subject's category and defining details. Leave clear space around it where practical. No scene, floor, cast shadow, text, or unrelated props."
+    },
+    "kind": "derived",
+    "original_filename": "item_22bf7eb05a87-r1-art.png",
+    "provider": "openrouter",
+    "status": "complete"
+  },
+  "rights": {
+    "notes": "Generated-output rights must be reviewed against the recorded provider terms before external distribution.",
+    "review_required": true,
+    "status": "unknown"
+  },
+  "schema_version": 1,
+  "title": "Furnace key"
+}

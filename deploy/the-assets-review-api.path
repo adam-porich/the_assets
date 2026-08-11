@@ -1,0 +1,20 @@
+# Lightweight development watcher for the review API. Vite handles frontend
+# source changes itself; this unit only restarts the Python API when its code
+# or dependency metadata changes.
+#
+# Install with the two matching .service files:
+#   cp deploy/the-assets-review-api{,-reload}.service deploy/the-assets-review-api.path ~/.config/systemd/user/
+#   systemctl --user daemon-reload
+#   systemctl --user enable --now the-assets-review-api.service the-assets-review-api.path
+
+[Unit]
+Description=Watch Portrait Workbench API source
+
+[Path]
+PathModified=%h/dev/the_assets/tools/portraits
+PathModified=%h/dev/the_assets/tools/cards
+PathChanged=%h/dev/the_assets/pyproject.toml
+Unit=the-assets-review-api-reload.service
+
+[Install]
+WantedBy=default.target

@@ -7,10 +7,25 @@ from typing import Any
 
 import requests
 
-from .manifest import LICENSE_PAGE, deterministic_source_filename, utc_now_iso
+LICENSE_PAGE = "https://www.pexels.com/license/"
+
+
+def deterministic_source_filename(photo_id: int) -> str:
+    return f"pexels-{photo_id}-original.jpg"
+
+
+def utc_now_iso() -> str:
+    from datetime import datetime, timezone
+    return datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
 
 
 API_URL = "https://api.pexels.com/v1/search"
+PHOTO_URL = "https://api.pexels.com/v1/photos/{photo_id}"
+STARTER_PHOTO_IDS = (11013487, 14468344, 23024613, 9009504, 14650121, 35918726)
+
+
+def has_pexels_api_key() -> bool:
+    return bool(os.environ.get("PEXELS_API_KEY", "").strip())
 
 
 def parse_photo(photo: dict[str, Any], query: str) -> dict[str, Any]:
@@ -61,6 +76,15 @@ def search_pexels(
     return parse_search_response(response.json(), query)[:count]
 
 
+def get_pexels_photo(photo_id: int, api_key: str | None = None) -> dict[str, Any]:
+    key = api_key or os.environ.get("PEXELS_API_KEY")
+    if not key:
+        raise RuntimeError("PEXELS_API_KEY is not set")
+    response = requests.get(PHOTO_URL.format(photo_id=int(photo_id)), headers={"Authorization": key}, timeout=30)
+    response.raise_for_status()
+    return parse_photo(response.json(), "starter source images")
+
+
 def is_plausible_portrait(candidate: dict[str, Any]) -> bool:
     width = int(candidate.get("original_width") or 0)
     height = int(candidate.get("original_height") or 0)
@@ -96,4 +120,3 @@ def download_candidate(candidate: dict[str, Any], source_dir: Path) -> dict[str,
         }
     )
     return enriched
-

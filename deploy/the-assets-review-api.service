@@ -1,0 +1,23 @@
+# systemd --user unit for the Portrait Workbench API.
+#
+# Install:
+#   cp deploy/the-assets-review-api.service ~/.config/systemd/user/
+#   cp deploy/the-assets-review-api-reload.service deploy/the-assets-review-api.path ~/.config/systemd/user/
+#   systemctl --user daemon-reload
+#   systemctl --user enable --now the-assets-review-api.service the-assets-review-api.path
+
+[Unit]
+Description=Portrait Workbench API
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=%h/dev/the_assets
+Environment=PATH=%h/.local/bin:/usr/local/bin:/usr/bin:/bin
+EnvironmentFile=-%h/.env
+ExecStart=%h/.local/bin/uv run python -m tools.portraits workbench-server
+Restart=on-failure
+RestartSec=2
+
+[Install]
+WantedBy=default.target

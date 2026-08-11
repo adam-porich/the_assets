@@ -1,0 +1,217 @@
+{
+  "$schema": "https://raw.githubusercontent.com/adam-porich/the_assets/master/schemas/asset-v1.schema.json",
+  "adoption": {
+    "adopted_at": "2026-08-11T13:34:10Z",
+    "from_path": "production/batch_c4944756694f/renders/item_39e0e7f6419e-r1-art.png",
+    "runtime_ids": {
+      "artifact": "art",
+      "batch_id": "batch_c4944756694f",
+      "item_id": "item_39e0e7f6419e"
+    }
+  },
+  "description": "Rendered grimoire artwork selected as the ash ledger hero for The Estate Agent.",
+  "file": {
+    "bytes": 16297,
+    "dimensions": {
+      "height": 276,
+      "width": 336
+    },
+    "media_type": "image/png",
+    "path": "source.png",
+    "sha256": "465a30f0914ae5e2ff5fa4a1f6ed6cf225cfefc3d9773531ddc1a1ed7413928d"
+  },
+  "id": "estate-agent-article-ash-ledger",
+  "provenance": {
+    "created_at": "2026-08-10T11:29:29Z",
+    "derivation": {
+      "inputs": [
+        {
+          "role": "composite",
+          "runtime_id": "item_39e0e7f6419e:composite",
+          "sha256": "72758ad9c969dad0aa80b76149ad317d75b84c3978a2e457e80d472e22ae1fc6",
+          "source_path": "production/batch_c4944756694f/renders/item_39e0e7f6419e-r1-composite.png"
+        }
+      ],
+      "parameters": {
+        "framing": {
+          "offset_x": 0.0,
+          "offset_y": 0.0,
+          "zoom": 1.0
+        },
+        "palette_mode": "adaptive-hybrid",
+        "render_metadata": {
+          "background_palette": [
+            "#ccbb88",
+            "#bbaa77",
+            "#aa9977",
+            "#ccbb99",
+            "#997766",
+            "#aa8866",
+            "#886655",
+            "#775544",
+            "#998866",
+            "#776644",
+            "#887755",
+            "#bbaa88",
+            "#665533"
+          ],
+          "centering": [
+            0.5,
+            0.44
+          ],
+          "dither": {
+            "edge_threshold": 0.09,
+            "matrix": "bayer-4x4",
+            "strength": 0.62
+          },
+          "driver_id": "amiga-ocs",
+          "foreground_palette": [
+            "#111111",
+            "#221111",
+            "#330000",
+            "#222233",
+            "#441111",
+            "#330011",
+            "#443322",
+            "#554422",
+            "#220000",
+            "#bb0000",
+            "#331111",
+            "#663311",
+            "#661122",
+            "#885511",
+            "#990000",
+            "#221100",
+            "#eeddcc",
+            "#ffeedd",
+            "#774411",
+            "#cc9933",
+            "#eeddaa",
+            "#884411",
+            "#994433",
+            "#aa6622",
+            "#770000",
+            "#552211",
+            "#550000",
+            "#331100",
+            "#551111",
+            "#881111",
+            "#000000",
+            "#773322"
+          ],
+          "framing": {
+            "requested": {
+              "offset_x": 0.0,
+              "offset_y": 0.0,
+              "zoom": 1.0
+            },
+            "resolved": {
+              "offset_x": 0.0,
+              "offset_y": 0.0,
+              "zoom": 1.0
+            }
+          },
+          "logical_art_size": [
+            168,
+            138
+          ],
+          "logical_card_size": [
+            210,
+            300
+          ],
+          "output_art_size": [
+            336,
+            276
+          ],
+          "output_card_size": [
+            420,
+            600
+          ],
+          "output_scale": 2,
+          "palette_colours_used": 604,
+          "palette_limit": 48,
+          "palette_mode": "layered-adaptive",
+          "palette_space": "Amiga OCS 12-bit RGB",
+          "renderer_driver_version": 3,
+          "resolved_palette": [
+            "#111111",
+            "#221111",
+            "#330000",
+            "#222233",
+            "#441111",
+            "#330011",
+            "#443322",
+            "#554422",
+            "#220000",
+            "#bb0000",
+            "#331111",
+            "#663311",
+            "#661122",
+            "#885511",
+            "#990000",
+            "#221100",
+            "#eeddcc",
+            "#ffeedd",
+            "#774411",
+            "#cc9933",
+            "#eeddaa",
+            "#884411",
+            "#994433",
+            "#aa6622",
+            "#770000",
+            "#552211",
+            "#550000",
+            "#331100",
+            "#551111",
+            "#881111",
+            "#000000",
+            "#773322"
+          ],
+          "style_checksum_sha256": "855c891c4c604d8d4f4fd7963da5c7fdf42f1546a4491ebc7836d142ff5f6ade",
+          "style_id": "amiga-ocs-portrait",
+          "style_version": 10,
+          "style_version_id": "style_amiga_ocs_portrait_v10_43b170a162"
+        },
+        "render_revision": 1
+      },
+      "process": "Render and enlarge the logical artwork using the recorded deterministic renderer settings.",
+      "tool": "amiga-ocs"
+    },
+    "generation": {
+      "generator": "openrouter",
+      "inputs": [
+        {
+          "role": "identity",
+          "runtime_id": "input_7d3997d7eee1",
+          "sha256": "04583712ca565db6ad01a90f8e6af4893d23121256f08c0a368d47bb666417fb",
+          "source_path": "production/batch_c4944756694f/inputs/sources/input_7d3997d7eee1.png"
+        },
+        {
+          "role": "generation-reference",
+          "runtime_id": "generation-reference-03",
+          "sha256": "6d4dbdd6d031678d83468122d6b8201266b5e2f3272f8628ebfd3af0dd871823",
+          "source_path": "production/batch_c4944756694f/inputs/references/generation-reference-03.png"
+        }
+      ],
+      "model": "openai/gpt-image-1-mini",
+      "parameters": {
+        "content_direction": "Remove the wand and beads. Preserve a dark evil grimoire. Use a controlled but vivid material palette: deep burgundy leather, brighter crimson occult inlay, aged brass clasps, warm ivory page edges, and subtle cool blue-violet reflected highlights in the black recesses. Reserve neutral black for the narrowest shadows. Keep broad midtones, strong local colour contrast, and clean highlight steps suitable for 32-colour reduction; ominous but richly coloured.",
+        "effective_aspect_ratio": "1:1",
+        "quality": "medium",
+        "seed": 8136942
+      },
+      "prompt": "Input image 1 is the sole source of content and structure. Use the reference board only for foreground rendering vocabulary: connected matte tonal planes, deliberate edges, material ramps, local colour contrast, and controlled texture. Preserve the subject's category, count, silhouette, proportions, viewpoint, materials, markings, colours, and human identity where applicable. Make the foreground subject dominant and readable through clear midtones, highlights, rim light, and local contrast. Use a lively but controlled full colour range suited to later Amiga OCS reduction; retain dark anchors without forcing the subject into brown or olive. Never copy shapes or arrangements from the board or invent a person, face, object, text, or narrative element. Produce a clean foreground master without visible pixels, dithering, scanlines, borders, card frames, UI, scenery, or environmental background elements.\n\nAdditional content direction from the user: Remove the wand and beads. Preserve a dark evil grimoire. Use a controlled but vivid material palette: deep burgundy leather, brighter crimson occult inlay, aged brass clasps, warm ivory page edges, and subtle cool blue-violet reflected highlights in the black recesses. Reserve neutral black for the narrowest shadows. Keep broad midtones, strong local colour contrast, and clean highlight steps suitable for 32-colour reduction; ominous but richly coloured.\n\nForeground isolation contract: output only the subject against a perfectly flat solid #00ff00 chroma-key background. Keep the complete subject silhouette inside the frame with clear padding. The key background must have no texture, gradient, vignette, scenery, floor, shadow, halo, or reflected key colour. Do not use #00ff00 on the subject."
+    },
+    "kind": "derived",
+    "original_filename": "item_39e0e7f6419e-r1-art.png",
+    "provider": "openrouter",
+    "status": "complete"
+  },
+  "rights": {
+    "notes": "Generated-output rights must be reviewed against the recorded provider terms before external distribution.",
+    "review_required": true,
+    "status": "unknown"
+  },
+  "schema_version": 1,
+  "title": "Ash ledger"
+}

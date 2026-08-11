@@ -1,0 +1,355 @@
+{
+  "style": {
+    "id": "amiga-ocs-portrait-v1",
+    "version": 1,
+    "label": "Amiga OCS Portrait v1",
+    "reference_pack": "tools/cards/assets/amiga-ocs-portrait-v1/pack.json",
+    "logical_art_size": [
+      168,
+      138
+    ],
+    "logical_card_size": [
+      210,
+      300
+    ],
+    "output_scale": 2,
+    "palette_space": "Amiga OCS 12-bit RGB",
+    "dither": {
+      "matrix": "bayer-4x4",
+      "strength": 0.62,
+      "edge_threshold": 0.09
+    },
+    "palette": [
+      "#111111",
+      "#221111",
+      "#111122",
+      "#222233",
+      "#333333",
+      "#332211",
+      "#443322",
+      "#554422",
+      "#663322",
+      "#775544",
+      "#886644",
+      "#aa6644",
+      "#bb7755",
+      "#cc8866",
+      "#ddaa88",
+      "#eeccbb",
+      "#eeddcc",
+      "#ffeedd",
+      "#aa7722",
+      "#cc9933",
+      "#eeddaa",
+      "#772211",
+      "#994433",
+      "#bb5522",
+      "#551122",
+      "#223322",
+      "#445544",
+      "#668877",
+      "#113344",
+      "#445566",
+      "#778899",
+      "#665544"
+    ]
+  },
+  "items": [
+    {
+      "label": "Stage reference",
+      "master_path": "tools/cards/assets/amiga-ocs-portrait-v1/generation-reference-01.png",
+      "master_checksum_sha256": "68ca995a8d308963278a2047863886b382adc8cd1230d05952c017b659838efe",
+      "logical_path": "stage-reference-logical.png",
+      "art_path": "stage-reference-art-2x.png",
+      "card_path": "stage-reference-card-2x.png",
+      "metadata": {
+        "style_id": "amiga-ocs-portrait-v1",
+        "style_version": 1,
+        "logical_art_size": [
+          168,
+          138
+        ],
+        "output_art_size": [
+          336,
+          276
+        ],
+        "output_scale": 2,
+        "palette_space": "Amiga OCS 12-bit RGB",
+        "palette_limit": 32,
+        "palette_colours_used": 27,
+        "palette_sha256": "80fc1f8ca8b0e0c6c6fb7ec92000ddd5edc5aab7acd3c85758e58662701dd6c9",
+        "dither": {
+          "matrix": "bayer-4x4",
+          "strength": 0.62,
+          "edge_threshold": 0.09
+        },
+        "centering": [
+          0.5,
+          0.44
+        ],
+        "logical_card_size": [
+          210,
+          300
+        ],
+        "output_card_size": [
+          420,
+          600
+        ]
+      }
+    },
+    {
+      "label": "Evelyn Carvajal",
+      "master_path": "portrait-library/runs/run_59c947b99f90/item_7d1e240db971.png",
+      "master_checksum_sha256": "22c858429bd06babdf59899fc83d3d0f9537ce42167aa6b75692ed7855ec99a2",
+      "logical_path": "evelyn-carvajal-logical.png",
+      "art_path": "evelyn-carvajal-art-2x.png",
+      "card_path": "evelyn-carvajal-card-2x.png",
+      "metadata": {
+        "style_id": "amiga-ocs-portrait-v1",
+        "style_version": 1,
+        "logical_art_size": [
+          168,
+          138
+        ],
+        "output_art_size": [
+          336,
+          276
+        ],
+        "output_scale": 2,
+        "palette_space": "Amiga OCS 12-bit RGB",
+        "palette_limit": 32,
+        "palette_colours_used": 27,
+        "palette_sha256": "80fc1f8ca8b0e0c6c6fb7ec92000ddd5edc5aab7acd3c85758e58662701dd6c9",
+        "dither": {
+          "matrix": "bayer-4x4",
+          "strength": 0.62,
+          "edge_threshold": 0.09
+        },
+        "centering": [
+          0.5,
+          0.44
+        ],
+        "logical_card_size": [
+          210,
+          300
+        ],
+        "output_card_size": [
+          420,
+          600
+        ]
+      }
+    },
+    {
+      "label": "Arian Fernandez",
+      "master_path": "portrait-library/runs/run_59c947b99f90/item_c0857ddeced9.png",
+      "master_checksum_sha256": "660fa69bcd6c9d54f766971105b1698f489b9a3c03988144c1ceeb691ca44e93",
+      "logical_path": "arian-fernandez-logical.png",
+      "art_path": "arian-fernandez-art-2x.png",
+      "card_path": "arian-fernandez-card-2x.png",
+      "metadata": {
+        "style_id": "amiga-ocs-portrait-v1",
+        "style_version": 1,
+        "logical_art_size": [
+          168,
+          138
+        ],
+        "output_art_size": [
+          336,
+          276
+        ],
+        "output_scale": 2,
+        "palette_space": "Amiga OCS 12-bit RGB",
+        "palette_limit": 32,
+        "palette_colours_used": 22,
+        "palette_sha256": "80fc1f8ca8b0e0c6c6fb7ec92000ddd5edc5aab7acd3c85758e58662701dd6c9",
+        "dither": {
+          "matrix": "bayer-4x4",
+          "strength": 0.62,
+          "edge_threshold": 0.09
+        },
+        "centering": [
+          0.5,
+          0.44
+        ],
+        "logical_card_size": [
+          210,
+          300
+        ],
+        "output_card_size": [
+          420,
+          600
+        ]
+      }
+    },
+    {
+      "label": "Eduardo Lopez",
+      "master_path": "portrait-library/runs/run_59c947b99f90/item_4715f4873061.png",
+      "master_checksum_sha256": "09587b89912cf574f050c6edaa5b0e6a08ea3c4cba7a89ebec736f3708040ab6",
+      "logical_path": "eduardo-lopez-logical.png",
+      "art_path": "eduardo-lopez-art-2x.png",
+      "card_path": "eduardo-lopez-card-2x.png",
+      "metadata": {
+        "style_id": "amiga-ocs-portrait-v1",
+        "style_version": 1,
+        "logical_art_size": [
+          168,
+          138
+        ],
+        "output_art_size": [
+          336,
+          276
+        ],
+        "output_scale": 2,
+        "palette_space": "Amiga OCS 12-bit RGB",
+        "palette_limit": 32,
+        "palette_colours_used": 25,
+        "palette_sha256": "80fc1f8ca8b0e0c6c6fb7ec92000ddd5edc5aab7acd3c85758e58662701dd6c9",
+        "dither": {
+          "matrix": "bayer-4x4",
+          "strength": 0.62,
+          "edge_threshold": 0.09
+        },
+        "centering": [
+          0.5,
+          0.44
+        ],
+        "logical_card_size": [
+          210,
+          300
+        ],
+        "output_card_size": [
+          420,
+          600
+        ]
+      }
+    },
+    {
+      "label": "Yan Krukau",
+      "master_path": "portrait-library/runs/run_59c947b99f90/item_2ae6affb60f7.png",
+      "master_checksum_sha256": "4d3ea64ef7778938ae3014bfbe297ab4755f5b32560a422033a851b27827d1a1",
+      "logical_path": "yan-krukau-logical.png",
+      "art_path": "yan-krukau-art-2x.png",
+      "card_path": "yan-krukau-card-2x.png",
+      "metadata": {
+        "style_id": "amiga-ocs-portrait-v1",
+        "style_version": 1,
+        "logical_art_size": [
+          168,
+          138
+        ],
+        "output_art_size": [
+          336,
+          276
+        ],
+        "output_scale": 2,
+        "palette_space": "Amiga OCS 12-bit RGB",
+        "palette_limit": 32,
+        "palette_colours_used": 25,
+        "palette_sha256": "80fc1f8ca8b0e0c6c6fb7ec92000ddd5edc5aab7acd3c85758e58662701dd6c9",
+        "dither": {
+          "matrix": "bayer-4x4",
+          "strength": 0.62,
+          "edge_threshold": 0.09
+        },
+        "centering": [
+          0.5,
+          0.44
+        ],
+        "logical_card_size": [
+          210,
+          300
+        ],
+        "output_card_size": [
+          420,
+          600
+        ]
+      }
+    },
+    {
+      "label": "sudelermii",
+      "master_path": "portrait-library/runs/run_59c947b99f90/item_cd41ba15804a.png",
+      "master_checksum_sha256": "c7aca663059a33140d1e26c09da2fcbc827b9f6ede08298b0be157f289c6b51f",
+      "logical_path": "sudelermii-logical.png",
+      "art_path": "sudelermii-art-2x.png",
+      "card_path": "sudelermii-card-2x.png",
+      "metadata": {
+        "style_id": "amiga-ocs-portrait-v1",
+        "style_version": 1,
+        "logical_art_size": [
+          168,
+          138
+        ],
+        "output_art_size": [
+          336,
+          276
+        ],
+        "output_scale": 2,
+        "palette_space": "Amiga OCS 12-bit RGB",
+        "palette_limit": 32,
+        "palette_colours_used": 23,
+        "palette_sha256": "80fc1f8ca8b0e0c6c6fb7ec92000ddd5edc5aab7acd3c85758e58662701dd6c9",
+        "dither": {
+          "matrix": "bayer-4x4",
+          "strength": 0.62,
+          "edge_threshold": 0.09
+        },
+        "centering": [
+          0.5,
+          0.44
+        ],
+        "logical_card_size": [
+          210,
+          300
+        ],
+        "output_card_size": [
+          420,
+          600
+        ]
+      }
+    },
+    {
+      "label": "John Eric Garcia",
+      "master_path": "portrait-library/runs/run_59c947b99f90/item_1312499c9d9d.png",
+      "master_checksum_sha256": "c0704fd5f2223462963cf80ce50381fe92222a6fc6984010dc024f67abf45df2",
+      "logical_path": "john-eric-garcia-logical.png",
+      "art_path": "john-eric-garcia-art-2x.png",
+      "card_path": "john-eric-garcia-card-2x.png",
+      "metadata": {
+        "style_id": "amiga-ocs-portrait-v1",
+        "style_version": 1,
+        "logical_art_size": [
+          168,
+          138
+        ],
+        "output_art_size": [
+          336,
+          276
+        ],
+        "output_scale": 2,
+        "palette_space": "Amiga OCS 12-bit RGB",
+        "palette_limit": 32,
+        "palette_colours_used": 23,
+        "palette_sha256": "80fc1f8ca8b0e0c6c6fb7ec92000ddd5edc5aab7acd3c85758e58662701dd6c9",
+        "dither": {
+          "matrix": "bayer-4x4",
+          "strength": 0.62,
+          "edge_threshold": 0.09
+        },
+        "centering": [
+          0.5,
+          0.44
+        ],
+        "logical_card_size": [
+          210,
+          300
+        ],
+        "output_card_size": [
+          420,
+          600
+        ]
+      }
+    }
+  ],
+  "pipeline_review_sheet": "amiga-ocs-v1-pipeline-sheet.png",
+  "card_set_review_sheet": "amiga-ocs-v1-card-set.png"
+}

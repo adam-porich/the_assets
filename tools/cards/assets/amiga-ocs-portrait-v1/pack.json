@@ -1,0 +1,36 @@
+{
+  "id": "amiga-ocs-portrait-v1-reference-pack",
+  "version": 5,
+  "purpose": "Foreground-only rendering vocabulary and renderer proof for the genlocked-background Amiga OCS house style.",
+  "generation_references": [
+    {
+      "path": "../../../../assets/amiga-ocs-generation-reference-04/source.png",
+      "asset_id": "amiga-ocs-generation-reference-04",
+      "role": "vibrant subject-neutral foreground rendering vocabulary for pre-quantisation masters",
+      "checksum_sha256": "b898df7ab12666bc6f409fddd45fbdd39847c754c02f57c20e1419eae2bc9354",
+      "provenance": {
+        "kind": "generated",
+        "generator": "Codex built-in image generation",
+        "created_at": "2026-08-10",
+        "derived_from": "amiga-ocs-generation-reference-03",
+        "direction": "Broader chromatic midtones, saturated material families, narrow black anchors, and reduced olive/brown dominance."
+      }
+    }
+  ],
+  "target_examples": [
+    {
+      "path": "../../../../assets/amiga-ocs-target-example-01/source.png",
+      "asset_id": "amiga-ocs-target-example-01",
+      "role": "human review target; never sent to img2img",
+      "checksum_sha256": "27b3e8a7eec537fe78ea7ad160ed9044b7c478356a477be63638736b46a55045"
+    }
+  ],
+  "generation_prompt": {
+    "intent": "Create a clean pre-quantisation portrait master for later reduction through the deterministic OCS renderer.",
+    "composition": "Keep the source viewpoint and complete silhouette, make its primary foreground subject dominant, and leave clear padding for matte extraction.",
+    "rendering": "Broad connected tonal shapes, deliberate edges, readable material ramps, and controlled microtexture concentrated in the foreground.",
+    "lighting": "Broad readable midtones and crisp highlights with warm/cool separation chosen to suit the source rather than a fixed scene; dark moods must not crush material detail.",
+    "palette_direction": "Rich controlled OCS-friendly colour with distinct material families, chromatic shadow midtones, narrow neutral-black anchors, vivid accents, and clean highlight steps.",
+    "avoid": "Global underexposure or desaturation, muddy near-black masses, brown/olive casts, generated scenery or backgrounds, copied board arrangements, visible pixels, dithering, checker patterns, scanlines, CRT effects, text, borders, card frames, UI, props, and invented narrative elements."
+  }
+}

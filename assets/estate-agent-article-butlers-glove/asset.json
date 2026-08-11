@@ -1,0 +1,206 @@
+{
+  "$schema": "https://raw.githubusercontent.com/adam-porich/the_assets/master/schemas/asset-v1.schema.json",
+  "adoption": {
+    "adopted_at": "2026-08-11T15:06:24Z",
+    "from_path": "production/batch_206c62dfa070/renders/item_494f43aa4b64-r1-art.png",
+    "runtime_ids": {
+      "artifact": "art",
+      "batch_id": "batch_206c62dfa070",
+      "item_id": "item_494f43aa4b64"
+    }
+  },
+  "description": "Rendered Butler's Glove hero artwork selected for The Estate Agent.",
+  "file": {
+    "bytes": 15202,
+    "dimensions": {
+      "height": 198,
+      "width": 352
+    },
+    "media_type": "image/png",
+    "path": "source.png",
+    "sha256": "cfce731a3a83c87e335b084c60c41127e2836e5874abc66ab294fc0af9273599"
+  },
+  "id": "estate-agent-article-butlers-glove",
+  "provenance": {
+    "created_at": "2026-08-11T15:00:50Z",
+    "derivation": {
+      "inputs": [
+        {
+          "role": "composite",
+          "runtime_id": "item_494f43aa4b64:composite",
+          "sha256": "bf882b4b52075eb1665fad94368e265db60b1cbfc10f48ad4a7b05e850081655",
+          "source_path": "production/batch_206c62dfa070/renders/item_494f43aa4b64-r1-composite.png"
+        }
+      ],
+      "parameters": {
+        "framing": {
+          "offset_x": 0.0,
+          "offset_y": 0.0,
+          "zoom": 1.0
+        },
+        "palette_mode": "adaptive-hybrid",
+        "render_metadata": {
+          "artwork_kind": "rendered-art",
+          "background_palette": [
+            "#556666",
+            "#445555",
+            "#334444",
+            "#223333",
+            "#667777",
+            "#556677",
+            "#445566",
+            "#444455",
+            "#333344"
+          ],
+          "centering": [
+            0.5,
+            0.44
+          ],
+          "dither": {
+            "edge_threshold": 0.09,
+            "matrix": "bayer-4x4",
+            "strength": 0.62
+          },
+          "driver_id": "amiga-ocs",
+          "foreground_palette": [
+            "#111111",
+            "#221111",
+            "#778866",
+            "#222233",
+            "#aabb77",
+            "#556655",
+            "#443322",
+            "#554422",
+            "#dddd88",
+            "#99aa77",
+            "#bbbb77",
+            "#112222",
+            "#667766",
+            "#cccc77",
+            "#334444",
+            "#445544",
+            "#eeddcc",
+            "#ffeedd",
+            "#bbbb88",
+            "#cc9933",
+            "#eeddaa",
+            "#003322",
+            "#994433",
+            "#aaaa77",
+            "#cccc88",
+            "#889966",
+            "#446655",
+            "#eeee99",
+            "#113333",
+            "#ddcc77",
+            "#999966",
+            "#777766"
+          ],
+          "framing": {
+            "requested": {
+              "offset_x": 0.0,
+              "offset_y": 0.0,
+              "zoom": 1.0
+            },
+            "resolved": {
+              "offset_x": 0.0,
+              "offset_y": 0.0,
+              "zoom": 1.0
+            }
+          },
+          "logical_art_size": [
+            176,
+            99
+          ],
+          "output_art_size": [
+            352,
+            198
+          ],
+          "output_scale": 2,
+          "palette_colours_used": 1305,
+          "palette_limit": 48,
+          "palette_mode": "layered-adaptive",
+          "palette_space": "Amiga OCS 12-bit RGB",
+          "renderer_driver_version": 3,
+          "resolved_palette": [
+            "#111111",
+            "#221111",
+            "#778866",
+            "#222233",
+            "#aabb77",
+            "#556655",
+            "#443322",
+            "#554422",
+            "#dddd88",
+            "#99aa77",
+            "#bbbb77",
+            "#112222",
+            "#667766",
+            "#cccc77",
+            "#334444",
+            "#445544",
+            "#eeddcc",
+            "#ffeedd",
+            "#bbbb88",
+            "#cc9933",
+            "#eeddaa",
+            "#003322",
+            "#994433",
+            "#aaaa77",
+            "#cccc88",
+            "#889966",
+            "#446655",
+            "#eeee99",
+            "#113333",
+            "#ddcc77",
+            "#999966",
+            "#777766"
+          ],
+          "style_checksum_sha256": "417f5b591cfd1b59219e962b3999c6c46d5a482a07b809aabdb99b70614cb889",
+          "style_id": "amiga-ocs-portrait",
+          "style_version": 13,
+          "style_version_id": "style_face_free_style_board_v13_69d8f07b8e"
+        },
+        "render_revision": 1
+      },
+      "process": "Render and enlarge the logical artwork using the recorded deterministic renderer settings.",
+      "tool": "amiga-ocs"
+    },
+    "generation": {
+      "generator": "openrouter",
+      "inputs": [
+        {
+          "role": "identity",
+          "runtime_id": "input_16ddefa04b16",
+          "sha256": "185b4aa05eac5a3a0b739239769dfe1a72dda07dc4df110e2be64e7eed6bd6a1",
+          "source_path": "production/batch_206c62dfa070/inputs/sources/input_16ddefa04b16.png"
+        },
+        {
+          "role": "generation-reference",
+          "runtime_id": "draft-reference-fccd878e468f",
+          "sha256": "b898df7ab12666bc6f409fddd45fbdd39847c754c02f57c20e1419eae2bc9354",
+          "source_path": "production/batch_206c62dfa070/inputs/references/draft-reference-fccd878e468f.png"
+        }
+      ],
+      "model": "openai/gpt-image-1-mini",
+      "parameters": {
+        "content_direction": "A single white cotton butler left glove: preserve the complete unworn glove laid flat with five fingers and a clearly visible neatly darned thumb patch. Use warm ivory, cool grey, and muted blue shadow steps for readable cotton. Add one restrained dark red repair stitch. No hand inside, arm, second glove, tools, text, or scenery.",
+        "effective_aspect_ratio": "1:1",
+        "quality": "medium",
+        "seed": 1692599203
+      },
+      "prompt": "Redraw the exact subject from input 1 in a vivid, characterful fantasy style. Preserve whether the subject is a person, animal, object, book, jewellery, scroll, furniture, or another category. Use the reference board only for rendering style; never replace the subject with a person or character.\n\nContent direction: A single white cotton butler left glove: preserve the complete unworn glove laid flat with five fingers and a clearly visible neatly darned thumb patch. Use warm ivory, cool grey, and muted blue shadow steps for readable cotton. Add one restrained dark red repair stitch. No hand inside, arm, second glove, tools, text, or scenery.\n\nOutput the complete subject, centered and clearly recognizable, on a flat #00ff00 1:1 canvas. Preserve the subject's category and defining details. Leave clear space around it where practical. No scene, floor, cast shadow, text, or unrelated props."
+    },
+    "kind": "derived",
+    "original_filename": "item_494f43aa4b64-r1-art.png",
+    "provider": "openrouter",
+    "status": "complete"
+  },
+  "rights": {
+    "notes": "Generated-output rights must be reviewed against the recorded provider terms before external distribution.",
+    "review_required": true,
+    "status": "unknown"
+  },
+  "schema_version": 1,
+  "title": "Butler's Glove"
+}

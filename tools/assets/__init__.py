@@ -1,0 +1,1 @@
+"""Canonical repository asset validation."""

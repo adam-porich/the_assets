@@ -1,0 +1,71 @@
+# 00 — Restore neutral portrait style transfer
+
+## Goal
+
+- [x] Keep the normal product path as **Sources → Cards**.
+- [x] Make every selected source pass through a real image-generation step
+  before deterministic Amiga rendering and card assembly.
+- [x] Treat the source as identity evidence, not as a pose, expression,
+  lighting, background, or photographic-composition template.
+- [x] Produce a canonical neutral portrait master with the same visual intent
+  as the face-free `generation-reference-02.png` style board: frontal
+  head-and-shoulders composition,
+  calm expression, direct gaze, broad connected tonal planes, restrained
+  background, and no narrative action.
+- [x] Render that master through the existing Amiga OCS driver so the 336×276
+  art resembles `target-example-01.png`, then assemble the card.
+- [x] Keep the generated master and Amiga art as inspectable provenance; keep
+  the finished card as the everyday review and approval object.
+
+## Pipeline contract
+
+- [x] Make the production order explicit and executable:
+
+  ```text
+  source image
+    → generative neutralisation/style transfer
+    → immutable canonical portrait master
+    → deterministic Amiga OCS render
+    → 336×276 Amiga art
+    → card assembly
+    → 420×600 finished card
+  ```
+
+- [x] Use the face-free `generation-reference-02.png` as the generation-stage
+  style and composition reference; retain the face-bearing image only as
+  historical renderer-proof input.
+- [x] Use `target-example-01.png` only as the expected post-render appearance
+  and review/golden-test target; never send it to the generation provider.
+- [x] Preserve recognizable facial structure, apparent age, hair silhouette,
+  and distinguishing features while deliberately reducing source-specific
+  pose, expression, gesture, camera perspective, scene, and mood.
+- [x] Do not promise exact identity preservation: the stage is intentionally
+  interpretive, and reviewers approve the final card rather than a biometric
+  likeness.
+
+## Product decisions
+
+- [x] Do not add a mandatory intermediate workflow page or approval gate.
+- [x] Do not allow production to silently use the deterministic simulation as
+  if it were generated art.
+- [x] Keep simulation available for free engineering tests, visibly labelled
+  as a non-generative preview only.
+- [x] Require an explicit user action before paid generation and show the
+  selected live model, call count, and estimated/known cost.
+- [x] Keep one generation attempt per source by default; **Try another** makes
+  a new immutable neutral master and card for that source.
+- [x] Keep framing changes deterministic and free: they rerender the selected
+  master without another generation call.
+
+## Definition of done
+
+- [x] A fresh configured workspace can select sources and produce cards using
+  a live img2img-capable model through the normal Sources action.
+- [x] The produced masters visibly converge on the neutral reference pose and
+  treatment instead of copying arbitrary source pose and emotion.
+- [x] Every final card is traceable to its source, generation request,
+  generated master, Amiga render, and style version.
+- [x] The current Sources/Cards UI remains the primary workflow and retains its
+  present visual design.
+- [x] Automated tests, a small visual cohort, documentation, plan archival,
+  commit, and push are complete.
