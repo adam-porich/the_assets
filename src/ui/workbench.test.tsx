@@ -408,6 +408,14 @@ describe("pipeline workbench", () => {
     expect(
       container.querySelector('[aria-labelledby="candidate-dialog-title"]'),
     ).toBeTruthy();
+    expect(container.querySelector(".generation-prompt-details")).toBeTruthy();
+    expect(
+      (
+        container.querySelector(
+          ".generation-prompt-details textarea",
+        ) as HTMLTextAreaElement
+      ).value,
+    ).toBe("Apply only the visual language.");
     await act(async () =>
       [...container.querySelectorAll("button")]
         .find((button) => button.textContent === "Generate")
@@ -419,6 +427,7 @@ describe("pipeline workbench", () => {
       true,
       "",
       "warm-parchment",
+      "Apply only the visual language.",
     );
     expect(container.textContent).not.toContain("Add to pack");
   });

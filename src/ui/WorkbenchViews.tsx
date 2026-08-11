@@ -40,6 +40,14 @@ function shortChecksum(value: string) {
 function selectedSources(bootstrap: Bootstrap) {
   return bootstrap.inputs;
 }
+const legacyPortraitPrompt =
+  "Redraw input 1 as a vivid, characterful fantasy portrait. Use the reference board only for rendering style.";
+const neutralSubjectPrompt =
+  "Redraw the exact subject from input 1 in a vivid, characterful fantasy style. Preserve whether the subject is a person, animal, object, book, jewellery, scroll, furniture, or another category. Use the reference board only for rendering style; never replace the subject with a person or character.";
+function editableGenerationPrompt(style?: PipelineStyle) {
+  const prompt = style?.generation.prompt || "";
+  return prompt.trim() === legacyPortraitPrompt ? neutralSubjectPrompt : prompt;
+}
 function resolvedCardText(card?: ProducedCard) {
   return (
     card?.card_text || {
@@ -1458,6 +1466,9 @@ export function CardsView({
     bootstrap.style.active_pipeline_id,
   );
   const [contentDirection, setContentDirection] = useState("");
+  const [generationPrompt, setGenerationPrompt] = useState(
+    editableGenerationPrompt(bootstrap.style.active),
+  );
   const [generationBackgroundId, setGenerationBackgroundId] = useState(
     backgroundConfig(bootstrap.style.active).default_id,
   );
@@ -1514,12 +1525,16 @@ export function CardsView({
     pipelineId = bootstrap.style.active_pipeline_id,
     direction?: string | null,
     selectedBackground?: string | null,
+    promptOverride?: string | null,
   ) {
     const pipeline =
       pipelines.find((item) => item.pipeline_id === pipelineId) || pipelines[0];
     setGenerationSource(source);
     setGenerationPipelineId(pipeline?.pipeline_id || "");
     setContentDirection(direction || "");
+    setGenerationPrompt(
+      promptOverride || editableGenerationPrompt(pipeline?.style),
+    );
     setGenerationBackgroundId(
       selectedBackground || backgroundConfig(pipeline?.style).default_id,
     );
@@ -1539,6 +1554,7 @@ export function CardsView({
         pipeline?.style.generation.execution_mode === "live",
         contentDirection,
         generationBackgroundId,
+        generationPrompt,
       );
       setPreviewBatch(response.batch);
       notify("Candidate preview started");
@@ -1556,8 +1572,9 @@ export function CardsView({
       openGeneration(
         source,
         card.pipeline_id,
-        card.content_direction || card.prompt_override,
+        card.content_direction,
         card.background_id,
+        card.prompt_override,
       );
     }
   }
@@ -1879,6 +1896,7 @@ export function CardsView({
                     (item) => item.pipeline_id === event.target.value,
                   );
                   setGenerationPipelineId(event.target.value);
+                  setGenerationPrompt(editableGenerationPrompt(pipeline?.style));
                   setGenerationBackgroundId(
                     pipeline?.style.backgrounds.default_id || "warm-parchment",
                   );
@@ -1922,6 +1940,21 @@ export function CardsView({
                 onChange={(event) => setContentDirection(event.target.value)}
               />
             </label>
+            <details className="generation-prompt-details">
+              <summary>Advanced prompt</summary>
+              <label className="prompt-field">
+                Underlying generation instruction
+                <textarea
+                  value={generationPrompt}
+                  disabled={Boolean(previewBatch)}
+                  onChange={(event) => setGenerationPrompt(event.target.value)}
+                />
+              </label>
+              <small>
+                This replaces the pipeline’s base instruction for this run.
+                Background isolation constraints are added automatically.
+              </small>
+            </details>
             <p className="validation-note">
               The generated foreground and deterministic card background remain
               separate.

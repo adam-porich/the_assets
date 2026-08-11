@@ -484,6 +484,21 @@ textarea {
   color: #c8baaa;
   font-size: 13px;
 }
+.generation-prompt-details {
+  margin-top: 16px;
+  padding: 12px 14px;
+  border: 1px solid #4b3c31;
+  border-radius: 6px;
+  background: #211b17;
+}
+.generation-prompt-details .prompt-field {
+  margin-top: 12px;
+}
+.generation-prompt-details > small {
+  display: block;
+  margin-top: 8px;
+  color: #9d9185;
+}
 .dialog-controls {
   display: grid;
   grid-template-columns: 150px 1fr;

@@ -72,6 +72,19 @@ def generation_instruction(direction: dict[str, Any]) -> str:
     )
 
 
+LEGACY_PORTRAIT_PROMPT = "Redraw input 1 as a vivid, characterful fantasy portrait. Use the reference board only for rendering style."
+NEUTRAL_SUBJECT_PROMPT = "Redraw the exact subject from input 1 in a vivid, characterful fantasy style. Preserve whether the subject is a person, animal, object, book, jewellery, scroll, furniture, or another category. Use the reference board only for rendering style; never replace the subject with a person or character."
+
+
+def neutralize_legacy_prompt(prompt: str) -> str:
+    """Upgrade the retired portrait-only default without changing custom prompts."""
+    return NEUTRAL_SUBJECT_PROMPT if prompt.strip() == LEGACY_PORTRAIT_PROMPT else prompt
+
+
+def foreground_output_instruction(provider_ratio: str, chroma_hex: str) -> str:
+    return f"Output the complete subject, centered and clearly recognizable, on a flat {chroma_hex} {provider_ratio} canvas. Preserve the subject's category and defining details. Leave clear space around it where practical. No scene, floor, cast shadow, text, or unrelated props."
+
+
 class CardProductionManager:
     """The one worker used by card production and complete style trials."""
 
@@ -278,7 +291,7 @@ class CardProductionManager:
                         final = item["generation_stages"][-1]["result"]
                         item.update({"generation_request": item["generation_stages"][-1]["request"], "master_path": master_relative.as_posix(), "master_checksum_sha256": checksum(self.store.absolute_path(master_relative)), "generation": {**final, "elapsed_seconds": elapsed, "stages": 2, "cost_usd": sum(costs) if costs else None}, "usage": usage, "cost_usd": sum(costs) if costs else None})
                     else:
-                        base_instruction = str(item.get("prompt_override") or generation["prompt"])
+                        base_instruction = neutralize_legacy_prompt(str(item.get("prompt_override") or generation["prompt"]))
                         direction = str(item.get("content_direction") or "").strip()
                         instruction = f"{base_instruction}\n\nContent direction: {direction}" if direction else base_instruction
                         foreground_pipeline = int(record["style_snapshot"].get("renderer", {}).get("driver_version", 1)) >= 3
@@ -289,7 +302,7 @@ class CardProductionManager:
                                 chroma_name, chroma = choose_chroma_key(opened)
                             item["chroma_key"] = {"name": chroma_name, "hex": "#%02x%02x%02x" % chroma}
                             provider_ratio = str(record["backend_mapping"]["effective_aspect_ratio"])
-                            instruction += f"\n\nOutput a close {provider_ratio} portrait on flat {item['chroma_key']['hex']}. The torso may crop at the bottom. No scene, floor, shadow, text, or props."
+                            instruction += f"\n\n{foreground_output_instruction(provider_ratio, item['chroma_key']['hex'])}"
                         identity_reference = source_path
                         if foreground_pipeline and str(record["backend_mapping"]["effective_aspect_ratio"]) == "16:9":
                             identity_relative = Path("production") / batch_id / "inputs" / "generation-guides" / f"{item['item_id']}.png"

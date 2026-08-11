@@ -20,7 +20,7 @@ export const api = {
   normaliseInput: (id: string, prompt: string, quality: string, consent = false) => request<{ input: InputAsset }>(`/inputs/${id}/normalisations`, json("POST", { prompt, quality, consent })),
   acceptInput: (id: string, attempt_id: string) => request<{ workspace: Bootstrap["workspace"]; input: InputAsset }>(`/inputs/${id}/accept`, json("POST", { attempt_id })),
   deleteInput: (id: string) => request<{ workspace: Bootstrap["workspace"] }>(`/inputs/${id}`, json("DELETE", { confirm: true })),
-  createProduction: (source_ids: string[], pipeline_id: string, consent = false, content_direction?: string, background_id?: string) => request<{ batch: ProductionBatch }>("/production", json("POST", { source_ids, pipeline_id, consent, content_direction, background_id })),
+  createProduction: (source_ids: string[], pipeline_id: string, consent = false, content_direction?: string, background_id?: string, prompt_override?: string) => request<{ batch: ProductionBatch }>("/production", json("POST", { source_ids, pipeline_id, consent, content_direction, background_id, prompt_override })),
   listProduction: () => request<{ batches: Bootstrap["batches"] }>("/production"),
   getProduction: (id: string) => request<{ batch: ProductionBatch }>(`/production/${id}`),
   retryFailed: (id: string, consent = false) => request<{ batch: ProductionBatch }>(`/production/${id}/retry`, json("POST", { consent })),

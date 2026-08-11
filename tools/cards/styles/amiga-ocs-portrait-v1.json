@@ -12,7 +12,7 @@
     "model_id": "openai/gpt-image-1-mini",
     "execution_mode": "live",
     "quality": "medium",
-    "prompt": "Redraw input 1 as a vivid, characterful fantasy portrait. Use the reference board only for rendering style.",
+    "prompt": "Redraw the exact subject from input 1 in a vivid, characterful fantasy style. Preserve whether the subject is a person, animal, object, book, jewellery, scroll, furniture, or another category. Use the reference board only for rendering style; never replace the subject with a person or character.",
     "requested_aspect_policy": "1:1",
     "provider_aspect_ratio": "1:1",
     "reference_limit": 9

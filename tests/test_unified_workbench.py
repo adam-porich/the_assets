@@ -30,7 +30,7 @@ from tools.portraits.generation import (
     unavailable_live_model,
     validate_request,
 )
-from tools.portraits.production import CardProductionManager, prepare_wide_identity_reference
+from tools.portraits.production import CardProductionManager, LEGACY_PORTRAIT_PROMPT, NEUTRAL_SUBJECT_PROMPT, foreground_output_instruction, neutralize_legacy_prompt, prepare_wide_identity_reference
 from tools.portraits.normalisation import InputNormalisationManager
 from tools.portraits.workspace import WorkspaceError, WorkspaceStore
 
@@ -88,7 +88,8 @@ def test_style_schema_checksum_store_and_asset_snapshots(tmp_path: Path) -> None
     assert active["schema_version"] == 3
     prompt = active["generation"]["prompt"].lower()
     assert "head-and-shoulders" not in prompt and "redraw the person" not in prompt
-    assert prompt == "redraw input 1 as a vivid, characterful fantasy portrait. use the reference board only for rendering style."
+    assert "exact subject" in prompt
+    assert "never replace the subject with a person" in prompt
     assert active["identity"]["style_version_id"]
     assert active["identity"]["state"] == "locked"
     assert style_checksum(active) == active["checksums"]["style_sha256"]
@@ -113,6 +114,15 @@ def test_style_schema_checksum_store_and_asset_snapshots(tmp_path: Path) -> None
     assert version["execution_mode"] == "live"
     assert version["reference_count"] == 1
     assert version["renderer_id"] == "amiga-ocs"
+
+
+def test_only_the_retired_portrait_default_is_neutralized() -> None:
+    assert neutralize_legacy_prompt(LEGACY_PORTRAIT_PROMPT) == NEUTRAL_SUBJECT_PROMPT
+    assert "portrait" not in neutralize_legacy_prompt(LEGACY_PORTRAIT_PROMPT).lower()
+    assert neutralize_legacy_prompt("Keep this custom instruction.") == "Keep this custom instruction."
+    output_instruction = foreground_output_instruction("1:1", "#00ff00").lower()
+    assert "complete subject" in output_instruction
+    assert "portrait" not in output_instruction and "torso" not in output_instruction
 
 
 def test_legacy_simulation_style_is_migrated_to_current_locked_version(tmp_path: Path) -> None:
